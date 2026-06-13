@@ -1,4 +1,4 @@
-import type { User } from './types'
+import type { Channel, User } from './types'
 
 interface AuthResponse {
   token: string
@@ -23,3 +23,20 @@ export const register = (username: string, password: string) =>
 
 export const login = (username: string, password: string) =>
   postAuth('/api/auth/login', { username, password })
+
+export async function fetchChannels(token: string): Promise<Channel[]> {
+  const res = await fetch('/api/channels', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error('could not load channels')
+  return res.json()
+}
+
+export async function createChannel(token: string, name: string): Promise<Channel> {
+  const res = await fetch('/api/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
+  return data as Channel
+}

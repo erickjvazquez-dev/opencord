@@ -3,8 +3,15 @@ export interface User {
   username: string
 }
 
+export interface Channel {
+  id: number
+  name: string
+  createdAt: string
+}
+
 export interface Message {
   id: number
+  channelId: number
   userId: number
   username: string
   body: string
