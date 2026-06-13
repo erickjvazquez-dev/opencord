@@ -1,0 +1,87 @@
+# /self-improve-opencord — Autonomous Self-Improvement Loop (Opencord only)
+
+Local, self-paced self-improvement loop scoped to **Opencord and nothing else**.
+Config-driven via `.ccf/project.env`. Mirrors the Claude Code Framework
+self-improve structure (health → QA → improve → ship), but is fully isolated:
+it NEVER runs ContextForge/Railway commands and NEVER touches any other repo.
+
+## Scope guard — read FIRST, every tick (hard stop if violated)
+
+- Work ONLY inside `CCF_PROJECT_DIR` (`~/Opencord`). Load config:
+  `cd ~/Opencord && set -a && . .ccf/project.env && set +a`.
+- If `CCF_PROJECT_NAME` != `opencord`, **STOP immediately** — wrong project.
+- Do NOT `cd ~/contextforge`, read its deploy/CI state, run `pytest`, hit any
+  Railway URL, or push to any repo other than `origin` of this one. Use the
+  Homebrew toolchain: `export PATH="/opt/homebrew/bin:$PATH"`.
+
+## Each tick
+
+0. **Backoff guard** — if the previous tick hit a transient AI/API error, widen
+   the next sleep instead of hammering.
+
+1. **Build / health gate (fix-first).**
+   - `export PATH="/opt/homebrew/bin:$PATH"; cd "$CCF_PROJECT_DIR"`
+   - `go build ./...` · `go vet ./...` · `eval "$CCF_TEST_CMD"` (go test).
+   - If `CCF_LIVE_URL` is non-empty, curl `"${CCF_LIVE_URL}${CCF_HEALTH_PATH}"`
+     (blank here → skip live health).
+   - Any red = a P0. Fix it THIS tick before doing anything else.
+
+2. **Track 0 — QA & gaps (do this MOST).** Grow Opencord's autonomous test
+   suite toward the north star: pick ONE real coverage/quality gap and close it
+   with a Go test or scripted E2E — an untested endpoint, a WebSocket edge case
+   (reconnect, oversized/garbage frame), or a Rule 15 adversarial probe
+   (auth bypass, JWT tampering, injection, oversized body). Two-client WS flows
+   count. Prefer tests that need no human interaction.
+
+3. **Track 1/2 — improve.** Advance the highest unchecked item in `GOAL.md`
+   "## Now", then "## Next". Spec-first (append to `SPEC.md`) for any >3-file or
+   new-user-facing-flow change (Rule 6). Build the minimal thing; for new input
+   surfaces do an adversarial pass (Rule 15).
+
+4. **Verify before "done" (Rule 14).** `go build`/`vet`/`test` green is the floor.
+   For user-facing changes, boot the stack (`docker compose up -d db` + run the
+   server) and exercise it for real (e.g. the two-client WebSocket check) — never
+   claim done on green tests alone. Tear the stack back down.
+
+5. **Ship.** If something real changed: ONE surgical Conventional-Commits commit,
+   then `git push origin main`. If `CCF_DEPLOY_CMD` is non-empty, run it (blank
+   here → never deploy). If nothing changed, log green and make **no commit**
+   (anti-churn, Rule 10).
+
+6. **Heartbeat (always, even on a green no-op tick)** — so the statusline shows
+   this loop as `/self-improve opencord`, distinct from other projects' loops:
+   ```bash
+   mkdir -p ~/.claude/loops
+   python3 - "$SHIPPED" "$OPEN_P0" <<'PY'
+   import json, os, sys, time
+   shipped = (sys.argv[1] if len(sys.argv) > 1 else "0") == "1"
+   open_p0 = (sys.argv[2] if len(sys.argv) > 2 else "0") == "1"
+   p = os.path.expanduser("~/.claude/loops/opencord.json")
+   try: d = json.load(open(p))
+   except Exception: d = {"count": 0, "idle_streak": 0}
+   d["label"] = "/self-improve opencord"
+   d["last_at"] = time.time()
+   d["count"] = d.get("count", 0) + 1
+   d["idle_streak"] = 0 if (shipped or open_p0) else d.get("idle_streak", 0) + 1
+   json.dump(d, open(p, "w"))
+   print("idle_streak", d["idle_streak"])
+   PY
+   ```
+   Write ONLY this file — never the global `~/.claude/loop-iterations.json` /
+   `loop-state.json` (those belong to other projects' loops).
+
+7. **Self-pace (the loop).** This runs under `/loop` dynamic mode: set the next
+   `ScheduleWakeup` from the idle-backoff ladder, re-firing prompt
+   `/self-improve-opencord`:
+   | tick outcome | next sleep |
+   |---|---|
+   | shipped a fix, OR an unchecked P0/P1 remains in GOAL.md | 1800s (~30m) |
+   | 1 consecutive green tick | 2700s (~45m) |
+   | 2+ consecutive green ticks | 3600s (~60m, ceiling) |
+
+## Never
+
+- Touch ContextForge or any repo other than `~/Opencord`.
+- Manufacture churn (commit on a no-change tick).
+- Claim a fix/feature done without build+vet+test green and, for user-facing
+  changes, a real end-to-end check in the running app (Rule 14).
