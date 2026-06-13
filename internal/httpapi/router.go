@@ -29,7 +29,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.CORSOrigin},
-		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -106,10 +106,72 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(m)
 			})
+			// React to a message (add emoji) → broadcast updated counts to the channel.
+			r.Put("/messages/{id}/reactions", func(w http.ResponseWriter, r *http.Request) {
+				u, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid message id"}`, http.StatusBadRequest)
+					return
+				}
+				var in struct {
+					Emoji string `json:"emoji"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				chID, err := store.AddReaction(r.Context(), id, u.ID, in.Emoji)
+				if errors.Is(err, chat.ErrInvalidEmoji) {
+					http.Error(w, `{"error":"invalid emoji"}`, http.StatusBadRequest)
+					return
+				}
+				if errors.Is(err, chat.ErrMessageNotFound) {
+					http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
+					return
+				}
+				if err != nil {
+					http.Error(w, `{"error":"could not add reaction"}`, http.StatusInternalServerError)
+					return
+				}
+				broadcastReactions(w, r, store, hub, id, chID)
+			})
+			// Remove your reaction (emoji) from a message.
+			r.Delete("/messages/{id}/reactions/{emoji}", func(w http.ResponseWriter, r *http.Request) {
+				u, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid message id"}`, http.StatusBadRequest)
+					return
+				}
+				chID, err := store.RemoveReaction(r.Context(), id, u.ID, chi.URLParam(r, "emoji"))
+				if errors.Is(err, chat.ErrMessageNotFound) {
+					http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
+					return
+				}
+				if err != nil {
+					http.Error(w, `{"error":"could not remove reaction"}`, http.StatusInternalServerError)
+					return
+				}
+				broadcastReactions(w, r, store, hub, id, chID)
+			})
 		})
 	})
 
 	r.Get("/ws", ws.ServeWS(hub, authsvc, store))
 
 	return r
+}
+
+// broadcastReactions recomputes a message's reaction summary (count-only),
+// broadcasts it to the channel as a "reaction" event, and returns it to the caller.
+func broadcastReactions(w http.ResponseWriter, r *http.Request, store *chat.Store, hub *ws.Hub, msgID, channelID int64) {
+	sums, err := store.ReactionsForMessage(r.Context(), msgID, 0)
+	if err != nil {
+		http.Error(w, `{"error":"could not load reactions"}`, http.StatusInternalServerError)
+		return
+	}
+	hub.BroadcastEvent(ws.Event{Type: "reaction", Message: &chat.Message{ID: msgID, ChannelID: channelID, Reactions: sums}})
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"messageId": msgID, "reactions": sums})
 }

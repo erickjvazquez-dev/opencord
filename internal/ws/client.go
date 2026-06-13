@@ -74,7 +74,7 @@ func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFun
 		}
 		hub.register <- c
 
-		if msgs, err := store.Recent(r.Context(), channelID, 50); err == nil {
+		if msgs, err := store.Recent(r.Context(), channelID, user.ID, 50); err == nil {
 			if data, err := json.Marshal(Event{Type: "history", History: msgs}); err == nil {
 				c.send <- data
 			}

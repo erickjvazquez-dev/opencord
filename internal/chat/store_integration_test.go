@@ -104,7 +104,7 @@ func TestMessageChannelScopingIntegration(t *testing.T) {
 		t.Fatalf("save B: %v", err)
 	}
 
-	recentA, err := store.Recent(ctx, a.ID, 50)
+	recentA, err := store.Recent(ctx, a.ID, u.ID, 50)
 	if err != nil {
 		t.Fatalf("recent A: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestMessageChannelScopingIntegration(t *testing.T) {
 		t.Fatalf("channel A history wrong (isolation broken?): %+v", recentA)
 	}
 
-	recentB, err := store.Recent(ctx, b.ID, 50)
+	recentB, err := store.Recent(ctx, b.ID, u.ID, 50)
 	if err != nil {
 		t.Fatalf("recent B: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestDeleteMessageIntegration(t *testing.T) {
 	}
 
 	// History renders it as deleted.
-	recent, _ := store.Recent(ctx, ch.ID, 50)
+	recent, _ := store.Recent(ctx, ch.ID, u.ID, 50)
 	var found bool
 	for _, x := range recent {
 		if x.ID == m.ID {
@@ -190,4 +190,61 @@ func TestDeleteMessageIntegration(t *testing.T) {
 	if !found {
 		t.Fatal("deleted message missing from history")
 	}
+}
+
+func TestReactionsIntegration(t *testing.T) {
+	store, u := setup(t)
+	ctx := context.Background()
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+	m, err := store.Save(ctx, ch.ID, u.ID, u.Username, "react to me")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	chID, err := store.AddReaction(ctx, m.ID, u.ID, "👍")
+	if err != nil || chID != ch.ID {
+		t.Fatalf("add reaction: chID=%d err=%v", chID, err)
+	}
+	// Adding the same reaction again is idempotent.
+	if _, err := store.AddReaction(ctx, m.ID, u.ID, "👍"); err != nil {
+		t.Fatalf("idempotent add: %v", err)
+	}
+
+	mine := reactionOf(t, store, ctx, ch.ID, u.ID, m.ID)
+	if len(mine) != 1 || mine[0].Emoji != "👍" || mine[0].Count != 1 || !mine[0].Mine {
+		t.Fatalf("reactor's view wrong: %+v", mine)
+	}
+	other := reactionOf(t, store, ctx, ch.ID, u.ID+99999, m.ID)
+	if len(other) != 1 || other[0].Count != 1 || other[0].Mine {
+		t.Fatalf("non-reactor's view wrong: %+v", other)
+	}
+
+	if _, err := store.RemoveReaction(ctx, m.ID, u.ID, "👍"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if got := reactionOf(t, store, ctx, ch.ID, u.ID, m.ID); len(got) != 0 {
+		t.Fatalf("expected no reactions after remove, got %+v", got)
+	}
+
+	if _, err := store.AddReaction(ctx, m.ID, u.ID, ""); !errors.Is(err, chat.ErrInvalidEmoji) {
+		t.Fatalf("empty emoji err = %v, want ErrInvalidEmoji", err)
+	}
+	if _, err := store.AddReaction(ctx, 1<<40, u.ID, "👍"); !errors.Is(err, chat.ErrMessageNotFound) {
+		t.Fatalf("missing-message err = %v, want ErrMessageNotFound", err)
+	}
+}
+
+func reactionOf(t *testing.T, store *chat.Store, ctx context.Context, channelID, viewerID, msgID int64) []chat.ReactionSummary {
+	t.Helper()
+	msgs, err := store.Recent(ctx, channelID, viewerID, 50)
+	if err != nil {
+		t.Fatalf("recent: %v", err)
+	}
+	for _, m := range msgs {
+		if m.ID == msgID {
+			return m.Reactions
+		}
+	}
+	t.Fatalf("message %d not in history", msgID)
+	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/erickjvazquez-dev/opencord/internal/auth"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,9 +31,18 @@ type Message struct {
 	UserID    int64     `json:"userId"`
 	Username  string    `json:"username"`
 	Body      string     `json:"body"`
-	CreatedAt time.Time  `json:"createdAt"`
-	EditedAt  *time.Time `json:"editedAt,omitempty"`
-	Deleted   bool       `json:"deleted,omitempty"`
+	CreatedAt time.Time         `json:"createdAt"`
+	EditedAt  *time.Time        `json:"editedAt,omitempty"`
+	Deleted   bool              `json:"deleted,omitempty"`
+	Reactions []ReactionSummary `json:"reactions,omitempty"`
+}
+
+// ReactionSummary aggregates one emoji on a message. Mine is true when the
+// viewing user reacted with it.
+type ReactionSummary struct {
+	Emoji string `json:"emoji"`
+	Count int    `json:"count"`
+	Mine  bool   `json:"mine,omitempty"`
 }
 
 // Channel is a named room. v0.2 introduces the table behind the MVP's single
@@ -94,6 +104,96 @@ func (s *Store) EditMessage(ctx context.Context, id, userID int64, body string) 
 	return m, err
 }
 
+// ErrInvalidEmoji is returned when a reaction emoji is empty or too long.
+var ErrInvalidEmoji = errors.New("invalid emoji")
+
+func validEmoji(e string) bool { return len(e) >= 1 && len(e) <= 16 }
+
+// AddReaction records a (message, user, emoji) reaction (idempotent) and returns
+// the message's channel id for broadcasting. ErrMessageNotFound if the message is
+// gone/deleted; ErrInvalidEmoji for a bad emoji.
+func (s *Store) AddReaction(ctx context.Context, messageID, userID int64, emoji string) (int64, error) {
+	if !validEmoji(emoji) {
+		return 0, ErrInvalidEmoji
+	}
+	channelID, err := s.messageChannel(ctx, messageID, true)
+	if err != nil {
+		return 0, err
+	}
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
+		   ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
+		messageID, userID, emoji)
+	return channelID, err
+}
+
+// RemoveReaction deletes a reaction and returns the message's channel id.
+func (s *Store) RemoveReaction(ctx context.Context, messageID, userID int64, emoji string) (int64, error) {
+	channelID, err := s.messageChannel(ctx, messageID, false)
+	if err != nil {
+		return 0, err
+	}
+	_, err = s.pool.Exec(ctx,
+		`DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+		messageID, userID, emoji)
+	return channelID, err
+}
+
+// messageChannel returns a message's channel id, optionally requiring it to be
+// non-deleted. ErrMessageNotFound when it doesn't exist (or is deleted when required).
+func (s *Store) messageChannel(ctx context.Context, messageID int64, mustBeLive bool) (int64, error) {
+	q := `SELECT channel_id FROM messages WHERE id = $1`
+	if mustBeLive {
+		q += ` AND deleted_at IS NULL`
+	}
+	var channelID int64
+	if err := s.pool.QueryRow(ctx, q, messageID).Scan(&channelID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, ErrMessageNotFound
+		}
+		return 0, err
+	}
+	return channelID, nil
+}
+
+// reactionsForMessages returns reaction summaries keyed by message id. `mine` is
+// true for emojis the viewer reacted with; pass viewerID 0 for count-only.
+func (s *Store) reactionsForMessages(ctx context.Context, messageIDs []int64, viewerID int64) (map[int64][]ReactionSummary, error) {
+	out := make(map[int64][]ReactionSummary)
+	if len(messageIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT message_id, emoji, COUNT(*), bool_or(user_id = $2)
+		   FROM reactions WHERE message_id = ANY($1)
+		  GROUP BY message_id, emoji
+		  ORDER BY MIN(created_at)`,
+		messageIDs, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mid int64
+		var rs ReactionSummary
+		if err := rows.Scan(&mid, &rs.Emoji, &rs.Count, &rs.Mine); err != nil {
+			return nil, err
+		}
+		out[mid] = append(out[mid], rs)
+	}
+	return out, rows.Err()
+}
+
+// ReactionsForMessage returns reaction summaries for a single message (viewerID 0
+// → count-only). Used to broadcast/return updated state after a change.
+func (s *Store) ReactionsForMessage(ctx context.Context, messageID, viewerID int64) ([]ReactionSummary, error) {
+	byMsg, err := s.reactionsForMessages(ctx, []int64{messageID}, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	return byMsg[messageID], nil
+}
+
 // DefaultChannelID returns the id of the default `general` channel.
 func (s *Store) DefaultChannelID(ctx context.Context) (int64, error) {
 	var id int64
@@ -110,7 +210,7 @@ func (s *Store) ChannelExists(ctx context.Context, id int64) (bool, error) {
 
 // Recent returns up to limit messages from the given channel in chronological
 // (oldest-first) order.
-func (s *Store) Recent(ctx context.Context, channelID int64, limit int) ([]Message, error) {
+func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
@@ -141,6 +241,18 @@ func (s *Store) Recent(ctx context.Context, channelID int64, limit int) ([]Messa
 	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
+
+	ids := make([]int64, len(msgs))
+	for i, m := range msgs {
+		ids[i] = m.ID
+	}
+	byMsg, err := s.reactionsForMessages(ctx, ids, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range msgs {
+		msgs[i].Reactions = byMsg[msgs[i].ID]
+	}
 	return msgs, nil
 }
 
@@ -153,7 +265,8 @@ func HandleRecent(store *Store) http.HandlerFunc {
 			http.Error(w, `{"error":"invalid channel"}`, http.StatusBadRequest)
 			return
 		}
-		msgs, err := store.Recent(r.Context(), channelID, 50)
+		viewer, _ := auth.UserFrom(r.Context())
+		msgs, err := store.Recent(r.Context(), channelID, viewer.ID, 50)
 		if err != nil {
 			http.Error(w, `{"error":"could not load messages"}`, http.StatusInternalServerError)
 			return

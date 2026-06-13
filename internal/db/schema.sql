@@ -35,3 +35,14 @@ CREATE INDEX IF NOT EXISTS messages_channel_id_idx ON messages (channel_id);
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- Edit (v0.2): edited_at is set when a message's body is changed.
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+
+-- Reactions (Discord parity): one row per (message, user, emoji).
+CREATE TABLE IF NOT EXISTS reactions (
+    id         BIGSERIAL PRIMARY KEY,
+    message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji      TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (message_id, user_id, emoji)
+);
+CREATE INDEX IF NOT EXISTS reactions_message_id_idx ON reactions (message_id);
