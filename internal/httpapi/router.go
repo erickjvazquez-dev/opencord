@@ -3,7 +3,9 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
@@ -25,7 +27,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.CORSOrigin},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -48,6 +50,26 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Get("/channels", chat.HandleChannels(store))
 			r.Post("/channels", chat.HandleCreateChannel(store))
 			r.Get("/messages", chat.HandleRecent(store))
+			// Delete one's own message (soft delete) → broadcast the removal to the channel.
+			r.Delete("/messages/{id}", func(w http.ResponseWriter, r *http.Request) {
+				u, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid message id"}`, http.StatusBadRequest)
+					return
+				}
+				m, err := store.DeleteMessage(r.Context(), id, u.ID)
+				if errors.Is(err, chat.ErrMessageNotFound) {
+					http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
+					return
+				}
+				if err != nil {
+					http.Error(w, `{"error":"could not delete message"}`, http.StatusInternalServerError)
+					return
+				}
+				hub.BroadcastEvent(ws.Event{Type: "message-deleted", Message: &m})
+				w.WriteHeader(http.StatusNoContent)
+			})
 		})
 	})
 

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,6 +31,7 @@ type Message struct {
 	Username  string    `json:"username"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"createdAt"`
+	Deleted   bool      `json:"deleted,omitempty"`
 }
 
 // Channel is a named room. v0.2 introduces the table behind the MVP's single
@@ -55,6 +57,26 @@ func (s *Store) Save(ctx context.Context, channelID, userID int64, username, bod
 	return m, err
 }
 
+// ErrMessageNotFound is returned when a message doesn't exist, isn't owned by the
+// caller, or was already deleted.
+var ErrMessageNotFound = errors.New("message not found")
+
+// DeleteMessage soft-deletes the caller's own message and returns a stub (id +
+// channel + deleted flag) suitable for broadcasting the removal to the channel.
+func (s *Store) DeleteMessage(ctx context.Context, id, userID int64) (Message, error) {
+	m := Message{ID: id, Deleted: true, Body: "[deleted]"}
+	err := s.pool.QueryRow(ctx,
+		`UPDATE messages SET deleted_at = now()
+		   WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		   RETURNING channel_id`,
+		id, userID,
+	).Scan(&m.ChannelID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Message{}, ErrMessageNotFound
+	}
+	return m, err
+}
+
 // DefaultChannelID returns the id of the default `general` channel.
 func (s *Store) DefaultChannelID(ctx context.Context) (int64, error) {
 	var id int64
@@ -73,7 +95,7 @@ func (s *Store) ChannelExists(ctx context.Context, id int64) (bool, error) {
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		  WHERE m.channel_id = $1
 		  ORDER BY m.id DESC LIMIT $2`, channelID, limit)
@@ -85,8 +107,13 @@ func (s *Store) Recent(ctx context.Context, channelID int64, limit int) ([]Messa
 	msgs := make([]Message, 0, limit)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt); err != nil {
+		var deletedAt *time.Time
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt); err != nil {
 			return nil, err
+		}
+		if deletedAt != nil {
+			m.Deleted = true
+			m.Body = "[deleted]"
 		}
 		msgs = append(msgs, m)
 	}

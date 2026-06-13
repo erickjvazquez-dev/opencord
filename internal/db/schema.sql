@@ -30,3 +30,6 @@ CREATE INDEX IF NOT EXISTS messages_created_at_idx ON messages (created_at);
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS channel_id BIGINT REFERENCES channels(id);
 UPDATE messages SET channel_id = (SELECT id FROM channels WHERE name = 'general') WHERE channel_id IS NULL;
 CREATE INDEX IF NOT EXISTS messages_channel_id_idx ON messages (channel_id);
+
+-- Soft delete (v0.2): deleted messages are retained and rendered as "[deleted]".
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
