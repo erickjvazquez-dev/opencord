@@ -19,7 +19,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [x] WebSocket gateway — history on connect + live broadcast + presence
 - [x] Postgres persistence (self-migrating schema)
 - [x] `docker compose up` one-command stack
-- [ ] Verify end-to-end in a browser (two users, live message) — Rule 14
+- [x] Verify end-to-end in a browser (two users, live message) — Rule 14 (qa/realtime.mjs: 2 contexts, live message + reaction + presence)
 - [x] Push to GitHub + CI (build + `go test`)
 
 ## Next (v0.2 — Structure)

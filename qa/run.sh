@@ -42,5 +42,12 @@ for _ in $(seq 1 60); do curl -sf http://localhost:5173 >/dev/null 2>&1 && break
 echo "[qa] installing Playwright (first run only)…"
 ( cd qa && npm install --silent && npx --yes playwright install chromium >/dev/null 2>&1 )
 
-echo "[qa] running browser QA…"
-QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/browser.mjs"
+echo "[qa] running browser QA (single client)…"
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/browser.mjs"; RC1=$?
+
+echo "[qa] running realtime QA (two clients)…"
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/realtime.mjs"; RC2=$?
+
+echo "[qa] browser=$RC1 realtime=$RC2"
+[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ]
+exit $?
