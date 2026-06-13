@@ -5,7 +5,9 @@ Postgres. This file is the project-specific rule set; it sits **on top of** the
 workspace-level Claude Code Framework rules (`~/CLAUDE.md`) — those still apply.
 
 **North Star:** anyone can `git clone` + one command and run their own real-time
-chat server, at little to no cost, fully open source.
+chat server, at little to no cost, fully open source — built toward **full feature
+parity with Discord** (every feature Discord has). The exhaustive target list is in
+[`GOAL.md`](./GOAL.md) "## Discord Feature Parity".
 
 ## Architecture (keep this shape)
 
