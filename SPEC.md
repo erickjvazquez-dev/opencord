@@ -31,6 +31,28 @@ Servers/guilds, multiple channels, DMs, roles/permissions, message
 edit/delete, reactions, typing indicators, file uploads, search, voice/video,
 federation.
 
+## v0.2 — Channels (in progress)
+
+Goal: move from one hardcoded global channel to first-class channels a user can
+list, pick, and post into — the foundation for servers/guilds later.
+
+Incremental, non-breaking slices (the working global flow stays up until the UI
+switches over):
+
+1. **[this slice] `channels` table + read-only API.** Seed a default `general`
+   channel; expose `GET /api/channels` (auth'd) returning the channel list. No
+   behavior change to messaging/WS yet.
+2. Add `messages.channel_id` (FK → channels), default existing rows to `general`;
+   `Save`/`Recent` become channel-scoped.
+3. WS gateway: client subscribes to a channel (`/ws?token=…&channel=<id>`); the
+   hub fans out per-channel instead of one global room.
+4. Web: channel sidebar; selecting a channel switches the socket + history.
+5. `POST /api/channels` (create) + name validation + per-channel auth later.
+
+Data model (slice 1): `channels(id, name UNIQUE, created_at)`.
+Acceptance (slice 1): `GET /api/channels` returns `[{id, name:"general", …}]`
+on a fresh DB; existing auth + single-channel WS flow unchanged; `go test` green.
+
 ## Architecture
 
 - **Single Go binary** serves REST (`/api/*`, `/healthz`) and the WebSocket

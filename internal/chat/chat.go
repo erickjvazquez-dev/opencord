@@ -19,6 +19,14 @@ type Message struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// Channel is a named room. v0.2 introduces the table behind the MVP's single
+// hardcoded global channel.
+type Channel struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
@@ -72,5 +80,37 @@ func HandleRecent(store *Store) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(msgs)
+	}
+}
+
+// ListChannels returns all channels in creation order.
+func (s *Store) ListChannels(ctx context.Context) ([]Channel, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, name, created_at FROM channels ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	channels := make([]Channel, 0)
+	for rows.Next() {
+		var c Channel
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		channels = append(channels, c)
+	}
+	return channels, rows.Err()
+}
+
+// HandleChannels serves the channel list over REST.
+func HandleChannels(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channels, err := store.ListChannels(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"could not load channels"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(channels)
 	}
 }

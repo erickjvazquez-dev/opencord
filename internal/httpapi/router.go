@@ -45,6 +45,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 		r.Group(func(r chi.Router) {
 			r.Use(authsvc.Middleware)
 			r.Get("/auth/me", authsvc.HandleMe)
+			r.Get("/channels", chat.HandleChannels(store))
 			r.Get("/messages", chat.HandleRecent(store))
 		})
 	})
