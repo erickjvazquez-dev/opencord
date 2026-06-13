@@ -2,6 +2,16 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createChannel, deleteMessage, editMessage, fetchChannels } from '../api'
 import type { Channel, Message, ServerEvent, User } from '../types'
 
+// Deterministic avatar color + initials from a username (no uploaded avatars yet).
+function avatarColor(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360
+  return `hsl(${h}, 55%, 45%)`
+}
+function initials(name: string): string {
+  return name.slice(0, 2).toUpperCase()
+}
+
 export function Chat({
   token,
   user,
@@ -169,36 +179,41 @@ export function Chat({
         <main className="messages">
           {messages.map((m) => (
             <div key={m.id} className={m.deleted ? 'message deleted' : 'message'}>
-              <div className="message-head">
-                <span className="author">{m.username}</span>
-                <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
-                {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
-                {!m.deleted && m.userId === user.id && editingId !== m.id && (
-                  <span className="msg-actions">
-                    <button onClick={() => startEdit(m)}>edit</button>
-                    <button onClick={() => remove(m)}>delete</button>
-                  </span>
+              <div className="avatar" style={{ backgroundColor: avatarColor(m.username) }} aria-hidden>
+                {initials(m.username)}
+              </div>
+              <div className="message-content">
+                <div className="message-head">
+                  <span className="author">{m.username}</span>
+                  <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                  {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
+                  {!m.deleted && m.userId === user.id && editingId !== m.id && (
+                    <span className="msg-actions">
+                      <button onClick={() => startEdit(m)}>edit</button>
+                      <button onClick={() => remove(m)}>delete</button>
+                    </span>
+                  )}
+                </div>
+                {editingId === m.id ? (
+                  <div className="edit-row">
+                    <input
+                      autoFocus
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void submitEdit(m.id)
+                        else if (e.key === 'Escape') cancelEdit()
+                      }}
+                    />
+                    <button onClick={() => void submitEdit(m.id)}>save</button>
+                    <button className="link" onClick={cancelEdit}>
+                      cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="body">{m.body}</div>
                 )}
               </div>
-              {editingId === m.id ? (
-                <div className="edit-row">
-                  <input
-                    autoFocus
-                    value={editDraft}
-                    onChange={(e) => setEditDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void submitEdit(m.id)
-                      else if (e.key === 'Escape') cancelEdit()
-                    }}
-                  />
-                  <button onClick={() => void submitEdit(m.id)}>save</button>
-                  <button className="link" onClick={cancelEdit}>
-                    cancel
-                  </button>
-                </div>
-              ) : (
-                <div className="body">{m.body}</div>
-              )}
             </div>
           ))}
           <div ref={bottomRef} />
