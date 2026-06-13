@@ -18,7 +18,7 @@ run locally at little to no cost.
 - [x] Postgres persistence (self-migrating schema)
 - [x] `docker compose up` one-command stack
 - [ ] Verify end-to-end in a browser (two users, live message) — Rule 14
-- [ ] Push to GitHub + CI (build + `go test`)
+- [x] Push to GitHub + CI (build + `go test`)
 
 ## Next (v0.2 — Structure)
 
