@@ -11,7 +11,7 @@ import (
 
 // Event is the envelope every server→client frame uses.
 type Event struct {
-	Type    string         `json:"type"` // history | message | message-deleted | presence | error
+	Type    string         `json:"type"` // history | message | message-edited | message-deleted | presence | error
 	Message *chat.Message  `json:"message,omitempty"`
 	History []chat.Message `json:"history,omitempty"`
 	Online  int            `json:"online,omitempty"`

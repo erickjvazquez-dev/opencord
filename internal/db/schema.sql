@@ -33,3 +33,5 @@ CREATE INDEX IF NOT EXISTS messages_channel_id_idx ON messages (channel_id);
 
 -- Soft delete (v0.2): deleted messages are retained and rendered as "[deleted]".
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+-- Edit (v0.2): edited_at is set when a message's body is changed.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;

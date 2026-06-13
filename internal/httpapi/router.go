@@ -3,9 +3,11 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
@@ -69,6 +71,40 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				hub.BroadcastEvent(ws.Event{Type: "message-deleted", Message: &m})
 				w.WriteHeader(http.StatusNoContent)
+			})
+			// Edit one's own message → broadcast the updated message to the channel.
+			r.Patch("/messages/{id}", func(w http.ResponseWriter, r *http.Request) {
+				u, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid message id"}`, http.StatusBadRequest)
+					return
+				}
+				var in struct {
+					Body string `json:"body"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				body := strings.TrimSpace(in.Body)
+				if body == "" {
+					http.Error(w, `{"error":"message body required"}`, http.StatusBadRequest)
+					return
+				}
+				m, err := store.EditMessage(r.Context(), id, u.ID, body)
+				if errors.Is(err, chat.ErrMessageNotFound) {
+					http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
+					return
+				}
+				if err != nil {
+					http.Error(w, `{"error":"could not edit message"}`, http.StatusInternalServerError)
+					return
+				}
+				m.Username = u.Username
+				hub.BroadcastEvent(ws.Event{Type: "message-edited", Message: &m})
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(m)
 			})
 		})
 	})
