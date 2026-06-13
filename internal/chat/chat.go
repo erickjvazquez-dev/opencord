@@ -6,10 +6,20 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"regexp"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	// ErrChannelExists is returned when a channel name is already taken.
+	ErrChannelExists = errors.New("channel name already taken")
+	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
+	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
 
 type Message struct {
@@ -118,5 +128,51 @@ func HandleChannels(store *Store) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(channels)
+	}
+}
+
+// CreateChannel inserts a new channel, returning ErrChannelExists if the name is
+// already taken.
+func (s *Store) CreateChannel(ctx context.Context, name string) (Channel, error) {
+	c := Channel{Name: name}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO channels (name) VALUES ($1) RETURNING id, created_at`, name,
+	).Scan(&c.ID, &c.CreatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return Channel{}, ErrChannelExists
+		}
+		return Channel{}, err
+	}
+	return c, nil
+}
+
+// HandleCreateChannel creates a channel from a JSON {"name":"..."} body.
+func HandleCreateChannel(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if !channelNameRe.MatchString(in.Name) {
+			http.Error(w, `{"error":"channel name must be 2-32 chars of [a-z0-9_-]"}`, http.StatusBadRequest)
+			return
+		}
+		c, err := store.CreateChannel(r.Context(), in.Name)
+		if errors.Is(err, ErrChannelExists) {
+			http.Error(w, `{"error":"channel name already taken"}`, http.StatusConflict)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"could not create channel"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(c)
 	}
 }
