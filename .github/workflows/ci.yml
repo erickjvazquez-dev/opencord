@@ -7,8 +7,22 @@ on:
 
 jobs:
   server:
-    name: server (go build · vet · test)
+    name: server (go build · vet · test + DB integration)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: opencord
+          POSTGRES_PASSWORD: opencord
+          POSTGRES_DB: opencord
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opencord"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://opencord:opencord@localhost:5432/opencord?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -17,7 +31,7 @@ jobs:
           cache-dependency-path: go.sum
       - run: go build ./...
       - run: go vet ./...
-      - run: go test ./...
+      - run: go test ./...   # DB integration tests run when DATABASE_URL is set (above)
 
   web:
     name: web (typecheck · build)

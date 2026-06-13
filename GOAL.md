@@ -22,7 +22,8 @@ run locally at little to no cost.
 
 ## Next (v0.2 — Structure)
 
-- [ ] Servers/guilds + multiple channels (schema + UI sidebar)
+- [x] Multiple channels — table, REST list + create, per-channel WS routing, sidebar UI (v0.2; E2E-verified + DB integration tests in CI)
+- [ ] Servers/guilds (group channels under a server; membership)
 - [ ] Direct messages
 - [ ] Message edit/delete + timestamps grouping
 - [ ] Typing indicators + read state
