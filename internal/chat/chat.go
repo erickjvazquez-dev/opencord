@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -43,26 +44,39 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
-// Save inserts a message into the default `general` channel and returns it fully
-// populated. Per-channel targeting (a channelID parameter) lands in a later slice
-// once the WS gateway and client are channel-aware; the column is wired now.
-func (s *Store) Save(ctx context.Context, userID int64, username, body string) (Message, error) {
-	m := Message{UserID: userID, Username: username, Body: body}
+// Save inserts a message into the given channel and returns it fully populated.
+func (s *Store) Save(ctx context.Context, channelID, userID int64, username, body string) (Message, error) {
+	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO messages (user_id, body, channel_id)
-		      VALUES ($1, $2, (SELECT id FROM channels WHERE name = 'general'))
-		   RETURNING id, created_at, channel_id`,
-		userID, body,
-	).Scan(&m.ID, &m.CreatedAt, &m.ChannelID)
+		`INSERT INTO messages (channel_id, user_id, body) VALUES ($1, $2, $3)
+		   RETURNING id, created_at`,
+		channelID, userID, body,
+	).Scan(&m.ID, &m.CreatedAt)
 	return m, err
 }
 
-// Recent returns up to limit messages in chronological (oldest-first) order.
-func (s *Store) Recent(ctx context.Context, limit int) ([]Message, error) {
+// DefaultChannelID returns the id of the default `general` channel.
+func (s *Store) DefaultChannelID(ctx context.Context) (int64, error) {
+	var id int64
+	err := s.pool.QueryRow(ctx, `SELECT id FROM channels WHERE name = 'general'`).Scan(&id)
+	return id, err
+}
+
+// ChannelExists reports whether a channel id exists.
+func (s *Store) ChannelExists(ctx context.Context, id int64) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channels WHERE id = $1)`, id).Scan(&exists)
+	return exists, err
+}
+
+// Recent returns up to limit messages from the given channel in chronological
+// (oldest-first) order.
+func (s *Store) Recent(ctx context.Context, channelID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
-		  ORDER BY m.id DESC LIMIT $1`, limit)
+		  WHERE m.channel_id = $1
+		  ORDER BY m.id DESC LIMIT $2`, channelID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +99,16 @@ func (s *Store) Recent(ctx context.Context, limit int) ([]Message, error) {
 	return msgs, nil
 }
 
-// HandleRecent serves recent history over REST (handy for clients that aren't
-// connected to the WebSocket yet).
+// HandleRecent serves recent history for a channel over REST. The channel is
+// chosen by ?channel=<id>, defaulting to `general`.
 func HandleRecent(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		msgs, err := store.Recent(r.Context(), 50)
+		channelID, err := ChannelIDFromQuery(r, store)
+		if err != nil {
+			http.Error(w, `{"error":"invalid channel"}`, http.StatusBadRequest)
+			return
+		}
+		msgs, err := store.Recent(r.Context(), channelID, 50)
 		if err != nil {
 			http.Error(w, `{"error":"could not load messages"}`, http.StatusInternalServerError)
 			return
@@ -97,6 +116,16 @@ func HandleRecent(store *Store) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(msgs)
 	}
+}
+
+// ChannelIDFromQuery resolves ?channel=<id> against the request, defaulting to
+// the `general` channel when the parameter is absent.
+func ChannelIDFromQuery(r *http.Request, store *Store) (int64, error) {
+	raw := r.URL.Query().Get("channel")
+	if raw == "" {
+		return store.DefaultChannelID(r.Context())
+	}
+	return strconv.ParseInt(raw, 10, 64)
 }
 
 // ListChannels returns all channels in creation order.

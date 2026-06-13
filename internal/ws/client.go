@@ -3,7 +3,9 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,14 +31,18 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
-	user auth.User
+	hub       *Hub
+	conn      *websocket.Conn
+	send      chan []byte
+	user      auth.User
+	channelID int64
 }
 
-// ServeWS authenticates the upgrade request (token via ?token=), registers the
-// client, replays recent history, and starts the read/write pumps.
+var errUnknownChannel = errors.New("unknown channel")
+
+// ServeWS authenticates the upgrade request (token via ?token=), resolves the
+// target channel (?channel=<id>, default `general`), registers the client,
+// replays that channel's recent history, and starts the read/write pumps.
 func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, err := authsvc.Parse(auth.TokenFromRequest(r))
@@ -44,15 +50,20 @@ func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFun
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		channelID, err := resolveChannel(r, store)
+		if err != nil {
+			http.Error(w, "invalid channel", http.StatusBadRequest)
+			return
+		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return // Upgrade already wrote an error response
 		}
 
-		c := &Client{hub: hub, conn: conn, send: make(chan []byte, 32), user: user}
+		c := &Client{hub: hub, conn: conn, send: make(chan []byte, 32), user: user, channelID: channelID}
 		hub.register <- c
 
-		if msgs, err := store.Recent(r.Context(), 50); err == nil {
+		if msgs, err := store.Recent(r.Context(), channelID, 50); err == nil {
 			if data, err := json.Marshal(Event{Type: "history", History: msgs}); err == nil {
 				c.send <- data
 			}
@@ -61,6 +72,27 @@ func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFun
 		go c.writePump()
 		go c.readPump(store)
 	}
+}
+
+// resolveChannel returns the channel id from ?channel=<id>, or the default
+// `general` channel when absent. It errors on a malformed or unknown id.
+func resolveChannel(r *http.Request, store *chat.Store) (int64, error) {
+	raw := r.URL.Query().Get("channel")
+	if raw == "" {
+		return store.DefaultChannelID(r.Context())
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	ok, err := store.ChannelExists(r.Context(), id)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		return 0, errUnknownChannel
+	}
+	return id, nil
 }
 
 // readPump reads inbound frames, persists each as a message, and hands it to
@@ -92,7 +124,7 @@ func (c *Client) readPump(store *chat.Store) {
 		if body == "" || len(body) > maxMessageSize {
 			continue
 		}
-		msg, err := store.Save(context.Background(), c.user.ID, c.user.Username, body)
+		msg, err := store.Save(context.Background(), c.channelID, c.user.ID, c.user.Username, body)
 		if err != nil {
 			continue
 		}

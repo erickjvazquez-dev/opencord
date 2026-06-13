@@ -1,6 +1,6 @@
 // Package ws implements the realtime chat gateway: a single hub fans messages
-// out to every connected client over WebSocket. The MVP has one global channel;
-// the hub abstraction is where per-channel routing will live later.
+// out to connected clients over WebSocket, routed per channel — a client only
+// receives messages and presence for the channel it subscribed to.
 package ws
 
 import (
@@ -43,28 +43,42 @@ func (h *Hub) Run() {
 		select {
 		case c := <-h.register:
 			h.clients[c] = true
-			h.emit(Event{Type: "presence", Online: len(h.clients)})
+			h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
 		case c := <-h.unregister:
 			if _, ok := h.clients[c]; ok {
 				delete(h.clients, c)
 				close(c.send)
+				h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
 			}
-			h.emit(Event{Type: "presence", Online: len(h.clients)})
 		case m := <-h.broadcast:
 			msg := m
-			h.emit(Event{Type: "message", Message: &msg})
+			h.emitToChannel(msg.ChannelID, Event{Type: "message", Message: &msg})
 		}
 	}
 }
 
-// emit serializes an event and pushes it to every client, dropping any client
-// whose send buffer is full (a stuck/slow consumer).
-func (h *Hub) emit(e Event) {
+// countInChannel returns how many connected clients are subscribed to channelID.
+func (h *Hub) countInChannel(channelID int64) int {
+	n := 0
+	for c := range h.clients {
+		if c.channelID == channelID {
+			n++
+		}
+	}
+	return n
+}
+
+// emitToChannel serializes an event and pushes it to every client subscribed to
+// channelID, dropping any client whose send buffer is full (a stuck consumer).
+func (h *Hub) emitToChannel(channelID int64, e Event) {
 	data, err := json.Marshal(e)
 	if err != nil {
 		return
 	}
 	for c := range h.clients {
+		if c.channelID != channelID {
+			continue
+		}
 		select {
 		case c.send <- data:
 		default:
