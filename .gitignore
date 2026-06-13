@@ -1,0 +1,19 @@
+# Go
+/bin/
+*.test
+*.out
+
+# Node / web
+web/node_modules/
+web/dist/
+# TypeScript build artifacts (emitted by `tsc -b`)
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+
+# Local env + per-project framework config (may contain secrets)
+.env
+.ccf/project.env
+
+# OS
+.DS_Store

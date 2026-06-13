@@ -1,0 +1,10 @@
+.git
+.github
+bin
+web/node_modules
+web/dist
+**/.DS_Store
+.env
+.ccf
+*.md
+!go.mod
