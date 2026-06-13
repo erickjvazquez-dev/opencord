@@ -6,10 +6,15 @@ Opencord is built to be owned by the people who run it: one Go binary, a static
 web client, and Postgres. No SaaS, no telemetry, no per-seat pricing — clone it,
 run one command, and you have your own real-time chat server.
 
-> **Status:** v0.1 — *minimal realtime MVP*. Accounts + one global `#general`
-> channel over WebSocket, to prove the realtime loop end-to-end. Servers,
-> multiple channels, DMs, roles, and voice are on the roadmap (see
+> **Status:** v0.2 — *in progress*. The realtime core is solid and growing.
+> DMs, servers/guilds, roles, and voice are on the roadmap (see
 > [`GOAL.md`](./GOAL.md)).
+>
+> **Working today:** accounts (bcrypt + JWT) · multiple channels with per-channel
+> real-time routing (create + switch in a sidebar) · live messaging with **edit &
+> delete** (owner-only) · **typing indicators** · online presence · **initials
+> avatars** · per-connection **rate limiting** · one-command Docker stack · CI with
+> a Postgres service running DB integration tests.
 
 ---
 
@@ -64,19 +69,25 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `JWT_SECRET`    | `dev-insecure-change-me`         | **Change in production.** Signs JWTs |
 | `CORS_ORIGIN`   | `*`                              | Allowed REST origin                  |
 
-## API surface (v0.1)
+## API surface
 
-| Method | Path                  | Auth   | Description                          |
-| ------ | --------------------- | ------ | ------------------------------------ |
-| `GET`  | `/healthz`            | —      | Liveness + version                   |
-| `POST` | `/api/auth/register`  | —      | Create account → `{token, user}`     |
-| `POST` | `/api/auth/login`     | —      | Log in → `{token, user}`             |
-| `GET`  | `/api/auth/me`        | bearer | Current user                         |
-| `GET`  | `/api/messages`       | bearer | Recent history (REST)                |
-| `WS`   | `/ws?token=<jwt>`     | token  | Real-time channel (history + send)   |
+| Method   | Path                           | Auth   | Description                                    |
+| -------- | ------------------------------ | ------ | ---------------------------------------------- |
+| `GET`    | `/healthz`                     | —      | Liveness + version                             |
+| `POST`   | `/api/auth/register`           | —      | Create account → `{token, user}`               |
+| `POST`   | `/api/auth/login`              | —      | Log in → `{token, user}`                       |
+| `GET`    | `/api/auth/me`                 | bearer | Current user                                   |
+| `GET`    | `/api/channels`                | bearer | List channels                                  |
+| `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |
+| `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history for a channel (default general) |
+| `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
+| `DELETE` | `/api/messages/{id}`           | bearer | Delete your own message (soft)                 |
+| `WS`     | `/ws?token=<jwt>&channel=<id>` | token  | Real-time channel (history · send · typing)    |
 
-WebSocket frames are JSON envelopes: `{type: "history"|"message"|"presence"}`.
-Clients send `{ "body": "hello" }`.
+**WebSocket protocol.** Server→client frames are JSON envelopes keyed by `type`:
+`history`, `message`, `message-edited`, `message-deleted`, `typing`, `presence`.
+Client→server: `{ "body": "hello" }` to send, or `{ "type": "typing" }` to signal
+typing. Inbound frames are rate-limited per connection (burst 5, 2/s).
 
 ## Project layout
 
@@ -86,8 +97,8 @@ internal/
   config/          env-driven settings
   db/              pgx pool + embedded idempotent schema
   auth/            bcrypt + JWT + middleware + handlers
-  chat/            message persistence + history
-  ws/              hub + per-connection client pumps
+  chat/            channels + messages: persistence, edit/delete, history
+  ws/              per-channel hub + client pumps (typing, rate limit)
   httpapi/         chi router
 web/               React + Vite client
 docker/            server + web (nginx) Dockerfiles + nginx.conf
