@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 20) — Reactions UI shipped for the orphaned backend
+
+The reactions **backend** shipped last tick (`7e8ecfd`: add/remove, per-viewer counts,
+live WS) but had **zero web UI** — the feature was only reachable via curl. Wired it
+into the client (chips + quick-emoji palette + optimistic toggle) and grew the browser
+QA to drive it (react → assert highlighted chip + count → survives edit).
+
+Reflections:
+- **Real bug the new QA caught (AI-vision + assertion):** the `message-edited` WS
+  handler replaced the whole message object, so editing a message **wiped its
+  reactions**. The "reaction survives the edit" assertion + `04-edited.png` proved the
+  fix (merge `reactions` instead of clobbering). A static render alone wouldn't have
+  found this — it took *driving* the edit after a reaction.
+- **Loop-process gap → rule:** the loop should scan for "**shipped backend, missing
+  frontend**" gaps every tick (a whole feature was usable only via curl). Cheap check:
+  `grep` a backend route family in `web/src/` and flag any with no client caller.
+- **`mine` is client-owned:** the live `reaction` broadcast is count-only (viewerID 0 →
+  `mine=false`), so the UI seeds "mine" from the viewer-scoped history and overlays it
+  on count updates. Document this so a future refactor doesn't trust broadcast `mine`.
+- **Next QA growth:** two-client reaction propagation (A reacts → B sees the count tick
+  up live, the realtime path the single-client QA can't prove); per-channel reaction
+  isolation in the UI.
+
 ## 2026-06-13 — Browser QA + AI manual test introduced (owner ask)
 
 The loop had only ever tested the **backend** (curl/WS scripts) — never the real

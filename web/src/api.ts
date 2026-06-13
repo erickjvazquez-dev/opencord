@@ -57,3 +57,20 @@ export async function deleteMessage(token: string, id: number): Promise<void> {
   })
   if (!res.ok && res.status !== 204) throw new Error('could not delete message')
 }
+
+export async function addReaction(token: string, id: number, emoji: string): Promise<void> {
+  const res = await fetch(`/api/messages/${id}/reactions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ emoji }),
+  })
+  if (!res.ok) throw new Error('could not add reaction')
+}
+
+export async function removeReaction(token: string, id: number, emoji: string): Promise<void> {
+  const res = await fetch(`/api/messages/${id}/reactions/${encodeURIComponent(emoji)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) throw new Error('could not remove reaction')
+}

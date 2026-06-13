@@ -89,3 +89,20 @@ messages(id, user_id → users, body, created_at)
   marked insecure).
 - Request bodies capped (64 KiB); WS messages capped (4 KiB) and trimmed.
 - Treat every inbound frame/body as hostile (validate, bound, reject).
+
+## Reactions UI (v0.2 — client for shipped backend, 2026-06-13)
+
+The reactions **backend** shipped in `7e8ecfd` (PUT/DELETE `/api/messages/{id}/reactions`,
+per-viewer counts, live WS `reaction` events) but had **no web UI**. This adds the client:
+
+- **Render** reaction chips under each non-deleted message from `message.reactions`
+  (`[{emoji, count, mine}]`). A chip the viewer reacted with is highlighted (`.mine`).
+- **Add** via a small quick-emoji palette (👍 ❤️ 😂 🎉 😮 😢) opened from a per-message
+  `react` button (available on ALL messages, not just your own — unlike edit/delete).
+- **Toggle** by clicking a chip or palette emoji → `addReaction`/`removeReaction`.
+- **Live**: the WS `reaction` event carries count-only summaries (`mine` always false —
+  broadcast uses viewerID 0). So the client tracks "mine" locally in a `Set<"msgId:emoji">`
+  seeded from the history event's `reactions[].mine`, and overlays it on count updates.
+  Counts are authoritative from the server; mine is authoritative from the local set.
+- Optimistic: clicking toggles the local set + count immediately; the WS event reconciles
+  counts; an HTTP failure reverts the optimistic change.

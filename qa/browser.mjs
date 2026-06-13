@@ -61,9 +61,23 @@ async function main() {
   check(await page.getByText(body).isVisible(), 'sent message appears')
   check(await page.locator('.avatar').first().isVisible(), 'avatar renders on the message')
 
-  // 4 — Edit the message.
-  step('hover message → edit → change → save')
   const msg = page.locator('.message', { hasText: body }).first()
+
+  // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).
+  step('hover message → react → 👍')
+  await msg.hover()
+  await msg.getByRole('button', { name: 'react' }).click()
+  await page.locator('.emoji-picker').getByRole('button', { name: '👍' }).click()
+  await msg.locator('.reaction.mine').waitFor({ timeout: 8000 })
+  await shot('03b-reaction.png')
+  check(await msg.locator('.reaction.mine').isVisible(), 'reaction chip appears, highlighted as mine')
+  check(
+    (await msg.locator('.reaction .rcount').first().textContent())?.trim() === '1',
+    'reaction count shows 1',
+  )
+
+  // 4 — Edit the message (its reaction must survive the edit).
+  step('hover message → edit → change → save')
   await msg.hover()
   await msg.getByRole('button', { name: 'edit' }).click()
   await page.locator('.edit-row input').fill('edited by the qa bot')
@@ -71,6 +85,8 @@ async function main() {
   await page.getByText('edited by the qa bot').waitFor({ timeout: 8000 })
   await shot('04-edited.png')
   check(await page.getByText('(edited)').first().isVisible(), 'edited indicator shows')
+  const edited = page.locator('.message', { hasText: 'edited by the qa bot' }).first()
+  check(await edited.locator('.reaction.mine').isVisible(), 'reaction survives the edit')
 
   // 5 — Create a channel and see it in the sidebar.
   step('create a channel via "+ New channel"')

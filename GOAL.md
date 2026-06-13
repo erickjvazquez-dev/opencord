@@ -74,7 +74,8 @@ item from here as the structural milestones above land.
 
 ### Messaging
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators
-- [ ] Reactions (emoji) · custom emoji · stickers · GIF picker
+- [x] Reactions (emoji) — add/remove, per-viewer counts, live WS, client UI (quick palette + chips)
+- [ ] Custom emoji · stickers · GIF picker
 - [ ] Markdown (bold/italic/code/quote/spoiler) + code blocks
 - [ ] Mentions @user/@role/@everyone/@here (+ notifications) · replies · threads
 - [ ] File / image / video attachments · link embeds + previews

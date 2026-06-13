@@ -12,9 +12,9 @@ run one command, and you have your own real-time chat server.
 >
 > **Working today:** accounts (bcrypt + JWT) · multiple channels with per-channel
 > real-time routing (create + switch in a sidebar) · live messaging with **edit &
-> delete** (owner-only) · **typing indicators** · online presence · **initials
-> avatars** · per-connection **rate limiting** · one-command Docker stack · CI with
-> a Postgres service running DB integration tests.
+> delete** (owner-only) · **emoji reactions** (live counts) · **typing indicators** ·
+> online presence · **initials avatars** · per-connection **rate limiting** ·
+> one-command Docker stack · CI with a Postgres service running DB integration tests.
 
 ---
 
@@ -82,10 +82,13 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history for a channel (default general) |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
 | `DELETE` | `/api/messages/{id}`           | bearer | Delete your own message (soft)                 |
+| `PUT`    | `/api/messages/{id}/reactions` | bearer | React with an emoji `{emoji}`                   |
+| `DELETE` | `/api/messages/{id}/reactions/{emoji}` | bearer | Remove your reaction                   |
 | `WS`     | `/ws?token=<jwt>&channel=<id>` | token  | Real-time channel (history · send · typing)    |
 
 **WebSocket protocol.** Server→client frames are JSON envelopes keyed by `type`:
-`history`, `message`, `message-edited`, `message-deleted`, `typing`, `presence`.
+`history`, `message`, `message-edited`, `message-deleted`, `reaction`, `typing`,
+`presence`.
 Client→server: `{ "body": "hello" }` to send, or `{ "type": "typing" }` to signal
 typing. Inbound frames are rate-limited per connection (burst 5, 2/s).
 
