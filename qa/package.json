@@ -1,0 +1,12 @@
+{
+  "name": "opencord-qa",
+  "private": true,
+  "type": "module",
+  "description": "Browser QA — drives the real Opencord UI with Playwright, logging every click and screenshotting each step for AI-vision review.",
+  "scripts": {
+    "qa": "node browser.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

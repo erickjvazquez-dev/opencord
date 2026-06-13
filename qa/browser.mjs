@@ -1,0 +1,103 @@
+// Opencord browser QA — drives the REAL rendered UI like a user, logging every
+// click ("→ ...") and screenshotting each step into qa-screenshots/ for AI-vision
+// review. Exits non-zero on any failed assertion or page error.
+//
+// Assumes a running stack at QA_BASE_URL (default http://localhost:5173).
+// Boot one with qa/run.sh (which also runs this).
+import { chromium } from 'playwright'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+
+const BASE = process.env.QA_BASE_URL || 'http://localhost:5173'
+const SHOTS = process.env.QA_SHOTS || join(import.meta.dirname, 'qa-screenshots')
+
+let failed = 0
+const step = (s) => console.log('  → ' + s)
+const check = (cond, msg) => {
+  console.log((cond ? '  ✓ ' : '  ✗ FAIL: ') + msg)
+  if (!cond) failed++
+}
+
+async function main() {
+  await mkdir(SHOTS, { recursive: true })
+  const browser = await chromium.launch()
+  const page = await (await browser.newContext({ viewport: { width: 1100, height: 820 } })).newPage()
+  page.on('pageerror', (e) => {
+    console.log('  [pageerror] ' + e.message)
+    failed++
+  })
+
+  const chanName = 'qa-' + String(Date.now()).slice(-6)
+  // Auto-answer window.prompt (create channel) + window.confirm (delete).
+  page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? chanName : undefined))
+  const shot = (name) => page.screenshot({ path: join(SHOTS, name) })
+
+  // 1 — Auth screen + register.
+  step(`open ${BASE}`)
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await page.getByPlaceholder('username').waitFor({ timeout: 15000 })
+  await shot('01-auth.png')
+  check(await page.getByPlaceholder('username').isVisible(), 'auth screen renders')
+
+  const user = 'qabot' + String(Date.now()).slice(-7)
+  step('switch to Register, fill credentials, submit')
+  await page.getByRole('button', { name: 'No account? Register' }).click()
+  await page.getByPlaceholder('username').fill(user)
+  await page.getByPlaceholder('password').fill('hunter2')
+  await page.getByRole('button', { name: 'Create account' }).click()
+
+  // 2 — Chat loads.
+  await page.getByPlaceholder(/Message #/).waitFor({ timeout: 15000 })
+  await shot('02-chat.png')
+  check(await page.getByRole('button', { name: /general/ }).isVisible(), '#general in sidebar after register')
+
+  // 3 — Send a message; it renders with an avatar.
+  const body = 'hello from the qa bot'
+  step('type a message and Send')
+  await page.getByPlaceholder(/Message #/).fill(body)
+  await page.getByRole('button', { name: 'Send' }).click()
+  await page.getByText(body).waitFor({ timeout: 8000 })
+  await shot('03-message.png')
+  check(await page.getByText(body).isVisible(), 'sent message appears')
+  check(await page.locator('.avatar').first().isVisible(), 'avatar renders on the message')
+
+  // 4 — Edit the message.
+  step('hover message → edit → change → save')
+  const msg = page.locator('.message', { hasText: body }).first()
+  await msg.hover()
+  await msg.getByRole('button', { name: 'edit' }).click()
+  await page.locator('.edit-row input').fill('edited by the qa bot')
+  await page.getByRole('button', { name: 'save' }).click()
+  await page.getByText('edited by the qa bot').waitFor({ timeout: 8000 })
+  await shot('04-edited.png')
+  check(await page.getByText('(edited)').first().isVisible(), 'edited indicator shows')
+
+  // 5 — Create a channel and see it in the sidebar.
+  step('create a channel via "+ New channel"')
+  await page.getByRole('button', { name: '+ New channel' }).click()
+  await page.getByRole('button', { name: new RegExp(chanName) }).waitFor({ timeout: 8000 })
+  await shot('05-channel.png')
+  check(await page.getByRole('button', { name: new RegExp(chanName) }).isVisible(), 'new channel appears in sidebar')
+
+  // 6 — Back to #general, delete the message.
+  step('switch to #general → hover message → delete')
+  await page.getByRole('button', { name: /general/ }).click()
+  const msg2 = page.locator('.message', { hasText: 'edited by the qa bot' }).first()
+  await msg2.hover()
+  await msg2.getByRole('button', { name: 'delete' }).click()
+  await page.getByText('[deleted]').first().waitFor({ timeout: 8000 })
+  await shot('06-deleted.png')
+  check(await page.getByText('[deleted]').first().isVisible(), 'deleted message renders [deleted]')
+
+  await browser.close()
+  console.log(
+    `\nbrowser QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +
+      `  ·  screenshots in ${SHOTS}/`,
+  )
+  process.exit(failed === 0 ? 0 : 1)
+}
+
+main().catch((e) => {
+  console.error('QA crashed:', e)
+  process.exit(1)
+})

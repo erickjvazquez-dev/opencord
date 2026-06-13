@@ -37,6 +37,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [ ] Roles & permissions (owner/admin/member, per-channel)
 - [ ] Invites + membership management
 - [ ] Search
+- [ ] Message grouping (collapse consecutive same-author messages) — surfaced by browser AI-vision QA 2026-06-13
 - [ ] Mobile-responsive layout
 
 ## Later

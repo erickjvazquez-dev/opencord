@@ -29,6 +29,9 @@ dev-web: ## Run the Vite dev server with hot reload (http://localhost:5173)
 test: ## Run Go tests
 	go test ./...
 
+qa-browser: ## Browser QA — boot a dev stack, drive the real UI (Playwright), tear down
+	bash qa/run.sh
+
 build: ## Compile the server binary into ./bin
 	go build -o bin/opencord ./cmd/server
 

@@ -26,12 +26,27 @@ it NEVER runs ContextForge/Railway commands and NEVER touches any other repo.
      (blank here → skip live health).
    - Any red = a P0. Fix it THIS tick before doing anything else.
 
-2. **Track 0 — QA & gaps (do this MOST).** Grow Opencord's autonomous test
-   suite toward the north star: pick ONE real coverage/quality gap and close it
-   with a Go test or scripted E2E — an untested endpoint, a WebSocket edge case
-   (reconnect, oversized/garbage frame), or a Rule 15 adversarial probe
-   (auth bypass, JWT tampering, injection, oversized body). Two-client WS flows
-   count. Prefer tests that need no human interaction.
+2. **Track 0 — QA (do this MOST): coverage + real-UI QA + AI manual test.** The
+   loop must exercise the product the way a *user* does, not just `go test`.
+   - **Autonomous test coverage:** pick ONE real gap and close it — an untested
+     endpoint, a WS edge case (reconnect, oversized/garbage frame), a Rule-15
+     adversarial probe (auth bypass, JWT tampering, injection, oversized body), or
+     extend the DB integration suite. Two-client WS flows count.
+   - **Browser QA (run when any UI surface changed this tick, else every 3rd
+     tick):** run `bash qa/run.sh` (= `make qa-browser`). It boots a dev stack and
+     drives the REAL rendered UI with Playwright — register → send → avatar → edit
+     → create/switch channel → delete — **logging every click** and screenshotting
+     each step into `qa/qa-screenshots/`. A non-zero exit is a **P0**: a feature is
+     broken in the actual UI (which the curl/WS E2E can't catch). Fix it this tick.
+   - **AI manual test (vision):** after browser QA, **`Read` each screenshot in
+     `qa/qa-screenshots/`** and judge it like a human tester — layout right? text
+     readable? avatars / reaction chips / typing line visible and not
+     overlapping/clipped? does it look like a polished chat app? Log every visual
+     issue as a GOAL.md **P0** (broken) / **P1** (polish). Use your own
+     Max-subscription vision — never a metered API.
+   - **Grow the QA itself (Step 5b for the UI):** each tick, add at least one new
+     `qa/browser.mjs` assertion/flow covering whatever you just shipped, so the
+     browser QA always exercises the newest feature.
 
 3. **Track 1/2 — improve.** Advance the highest unchecked item in `GOAL.md`
    "## Now", then "## Next". Spec-first (append to `SPEC.md`) for any >3-file or
@@ -69,6 +84,18 @@ it NEVER runs ContextForge/Railway commands and NEVER touches any other repo.
    ```
    Write ONLY this file — never the global `~/.claude/loop-iterations.json` /
    `loop-state.json` (those belong to other projects' loops).
+
+6.5. **Reflect — what can this loop improve? (every tick).** Look at THIS tick's
+   output, the QA results, and the loop's own rules, then log the ONE highest-value
+   improvement to `qa/IMPROVEMENTS.md` (create if missing; date each entry) — and
+   open a GOAL.md item when it's actionable:
+   - **QA gaps:** a flow the browser QA doesn't click yet · a shipped feature with
+     no regression test · an interaction that needs AI-vision review.
+   - **Loop-process gaps:** a rule that misfired this tick · a verification you
+     skipped · a step that should be automated. *Improve the rule, don't just note
+     it.*
+   - **Coverage:** which part of the product is least tested? Target it next tick.
+   One item, highest value — this is the loop improving itself, per the owner ask.
 
 7. **Self-pace (the loop).** This runs under `/loop` dynamic mode: set the next
    `ScheduleWakeup` from the idle-backoff ladder, re-firing prompt
