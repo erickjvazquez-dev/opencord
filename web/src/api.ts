@@ -40,3 +40,20 @@ export async function createChannel(token: string, name: string): Promise<Channe
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
   return data as Channel
 }
+
+export async function editMessage(token: string, id: number, body: string): Promise<void> {
+  const res = await fetch(`/api/messages/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ body }),
+  })
+  if (!res.ok) throw new Error('could not edit message')
+}
+
+export async function deleteMessage(token: string, id: number): Promise<void> {
+  const res = await fetch(`/api/messages/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) throw new Error('could not delete message')
+}

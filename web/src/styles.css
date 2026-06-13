@@ -270,6 +270,70 @@ button:disabled {
   word-break: break-word;
 }
 
+.edited {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.msg-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+}
+
+.message:hover .msg-actions {
+  opacity: 1;
+}
+
+.msg-actions button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.msg-actions button:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.message.deleted .body {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.edit-row input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 8px;
+  border-radius: var(--radius);
+  outline: none;
+}
+
+.edit-row button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+
+.edit-row button.link {
+  background: none;
+  color: var(--text-muted);
+}
+
 .composer {
   display: flex;
   gap: 10px;

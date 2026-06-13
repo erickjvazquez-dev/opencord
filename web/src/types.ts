@@ -16,10 +16,12 @@ export interface Message {
   username: string
   body: string
   createdAt: string
+  editedAt?: string
+  deleted?: boolean
 }
 
 export interface ServerEvent {
-  type: 'history' | 'message' | 'presence' | 'error'
+  type: 'history' | 'message' | 'message-edited' | 'message-deleted' | 'presence' | 'error'
   message?: Message
   history?: Message[]
   online?: number

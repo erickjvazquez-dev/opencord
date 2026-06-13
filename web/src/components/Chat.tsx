@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { createChannel, fetchChannels } from '../api'
+import { createChannel, deleteMessage, editMessage, fetchChannels } from '../api'
 import type { Channel, Message, ServerEvent, User } from '../types'
 
 export function Chat({
@@ -17,10 +17,11 @@ export function Chat({
   const [online, setOnline] = useState(0)
   const [connected, setConnected] = useState(false)
   const [draft, setDraft] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState('')
   const wsRef = useRef<WebSocket | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Load the channel list once, then default to #general (or the first channel).
   useEffect(() => {
     fetchChannels(token)
       .then((cs) => {
@@ -30,11 +31,10 @@ export function Chat({
       .catch(() => {})
   }, [token])
 
-  // (Re)connect whenever the selected channel changes — the new socket replays
-  // that channel's history, and per-channel routing keeps rooms isolated.
   useEffect(() => {
     if (channelId == null) return
     setMessages([])
+    setEditingId(null)
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(
       `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
@@ -48,6 +48,14 @@ export function Chat({
       else if (data.type === 'message' && data.message) {
         const m = data.message
         setMessages((prev) => [...prev, m])
+      } else if (data.type === 'message-edited' && data.message) {
+        const m = data.message
+        setMessages((prev) => prev.map((x) => (x.id === m.id ? m : x)))
+      } else if (data.type === 'message-deleted' && data.message) {
+        const id = data.message.id
+        setMessages((prev) =>
+          prev.map((x) => (x.id === id ? { ...x, deleted: true, body: '[deleted]' } : x)),
+        )
       } else if (data.type === 'presence') setOnline(data.online ?? 0)
     }
     return () => ws.close()
@@ -74,6 +82,34 @@ export function Chat({
       setChannelId(c.id)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not create channel')
+    }
+  }
+
+  const startEdit = (m: Message) => {
+    setEditingId(m.id)
+    setEditDraft(m.body)
+  }
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditDraft('')
+  }
+  const submitEdit = async (id: number) => {
+    const body = editDraft.trim()
+    if (!body) return
+    try {
+      await editMessage(token, id, body) // the WS broadcast updates the list
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not edit message')
+    } finally {
+      cancelEdit()
+    }
+  }
+  const remove = async (m: Message) => {
+    if (!window.confirm('Delete this message?')) return
+    try {
+      await deleteMessage(token, m.id) // the WS broadcast marks it deleted
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not delete message')
     }
   }
 
@@ -116,12 +152,37 @@ export function Chat({
 
         <main className="messages">
           {messages.map((m) => (
-            <div key={m.id} className="message">
+            <div key={m.id} className={m.deleted ? 'message deleted' : 'message'}>
               <div className="message-head">
                 <span className="author">{m.username}</span>
                 <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
+                {!m.deleted && m.userId === user.id && editingId !== m.id && (
+                  <span className="msg-actions">
+                    <button onClick={() => startEdit(m)}>edit</button>
+                    <button onClick={() => remove(m)}>delete</button>
+                  </span>
+                )}
               </div>
-              <div className="body">{m.body}</div>
+              {editingId === m.id ? (
+                <div className="edit-row">
+                  <input
+                    autoFocus
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void submitEdit(m.id)
+                      else if (e.key === 'Escape') cancelEdit()
+                    }}
+                  />
+                  <button onClick={() => void submitEdit(m.id)}>save</button>
+                  <button className="link" onClick={cancelEdit}>
+                    cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="body">{m.body}</div>
+              )}
             </div>
           ))}
           <div ref={bottomRef} />
