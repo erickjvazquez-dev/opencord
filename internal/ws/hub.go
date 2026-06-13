@@ -11,11 +11,19 @@ import (
 
 // Event is the envelope every server→client frame uses.
 type Event struct {
-	Type    string         `json:"type"` // history | message | message-edited | message-deleted | presence | error
-	Message *chat.Message  `json:"message,omitempty"`
-	History []chat.Message `json:"history,omitempty"`
-	Online  int            `json:"online,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	Type     string         `json:"type"` // history | message | message-edited | message-deleted | typing | presence | error
+	Message  *chat.Message  `json:"message,omitempty"`
+	History  []chat.Message `json:"history,omitempty"`
+	Username string         `json:"username,omitempty"` // who, for "typing"
+	Online   int            `json:"online,omitempty"`
+	Error    string         `json:"error,omitempty"`
+}
+
+// targetedEvent is an Event addressed to a specific channel — used for events
+// that aren't tied to a stored message (e.g. typing).
+type targetedEvent struct {
+	channelID int64
+	event     Event
 }
 
 // Hub owns the set of connected clients and serializes all mutations through a
@@ -24,7 +32,7 @@ type Hub struct {
 	store      *chat.Store
 	clients    map[*Client]bool
 	broadcast  chan chat.Message
-	events     chan Event
+	events     chan targetedEvent
 	register   chan *Client
 	unregister chan *Client
 }
@@ -34,16 +42,25 @@ func NewHub(store *chat.Store) *Hub {
 		store:      store,
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan chat.Message, 64),
-		events:     make(chan Event, 64),
+		events:     make(chan targetedEvent, 64),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
 }
 
 // BroadcastEvent fans an already-built event out to its channel (derived from the
-// embedded message). Used by REST handlers (e.g. delete/edit) to push changes to
-// connected clients without persisting through the message path.
-func (h *Hub) BroadcastEvent(e Event) { h.events <- e }
+// embedded message). Used by REST handlers (e.g. delete/edit).
+func (h *Hub) BroadcastEvent(e Event) {
+	if e.Message != nil {
+		h.events <- targetedEvent{e.Message.ChannelID, e}
+	}
+}
+
+// BroadcastToChannel fans an event out to a specific channel, for events with no
+// stored message (e.g. typing).
+func (h *Hub) BroadcastToChannel(channelID int64, e Event) {
+	h.events <- targetedEvent{channelID, e}
+}
 
 func (h *Hub) Run() {
 	for {
@@ -60,10 +77,8 @@ func (h *Hub) Run() {
 		case m := <-h.broadcast:
 			msg := m
 			h.emitToChannel(msg.ChannelID, Event{Type: "message", Message: &msg})
-		case e := <-h.events:
-			if e.Message != nil {
-				h.emitToChannel(e.Message.ChannelID, e)
-			}
+		case te := <-h.events:
+			h.emitToChannel(te.channelID, te.event)
 		}
 	}
 }

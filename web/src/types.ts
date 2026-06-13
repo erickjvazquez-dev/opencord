@@ -21,9 +21,10 @@ export interface Message {
 }
 
 export interface ServerEvent {
-  type: 'history' | 'message' | 'message-edited' | 'message-deleted' | 'presence' | 'error'
+  type: 'history' | 'message' | 'message-edited' | 'message-deleted' | 'typing' | 'presence' | 'error'
   message?: Message
   history?: Message[]
+  username?: string
   online?: number
   error?: string
 }

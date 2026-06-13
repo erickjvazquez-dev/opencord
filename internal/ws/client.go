@@ -115,9 +115,15 @@ func (c *Client) readPump(store *chat.Store) {
 			return
 		}
 		var in struct {
+			Type string `json:"type"`
 			Body string `json:"body"`
 		}
 		if json.Unmarshal(raw, &in) != nil {
+			continue
+		}
+		if in.Type == "typing" {
+			// Ephemeral: relay to the channel, never persisted.
+			c.hub.BroadcastToChannel(c.channelID, Event{Type: "typing", Username: c.user.Username})
 			continue
 		}
 		body := strings.TrimSpace(in.Body)

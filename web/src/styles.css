@@ -334,10 +334,18 @@ button:disabled {
   color: var(--text-muted);
 }
 
+.typing {
+  height: 18px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .composer {
   display: flex;
   gap: 10px;
-  padding: 16px 18px;
+  padding: 8px 18px 16px;
   background: var(--bg);
 }
 

@@ -19,8 +19,11 @@ export function Chat({
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [typing, setTyping] = useState<string[]>([])
   const wsRef = useRef<WebSocket | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const lastTypingSent = useRef(0)
 
   useEffect(() => {
     fetchChannels(token)
@@ -35,6 +38,7 @@ export function Chat({
     if (channelId == null) return
     setMessages([])
     setEditingId(null)
+    setTyping([])
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(
       `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
@@ -56,10 +60,22 @@ export function Chat({
         setMessages((prev) =>
           prev.map((x) => (x.id === id ? { ...x, deleted: true, body: '[deleted]' } : x)),
         )
+      } else if (data.type === 'typing' && data.username && data.username !== user.username) {
+        const who = data.username
+        setTyping((prev) => (prev.includes(who) ? prev : [...prev, who]))
+        clearTimeout(typingTimers.current[who])
+        typingTimers.current[who] = setTimeout(() => {
+          setTyping((prev) => prev.filter((u) => u !== who))
+          delete typingTimers.current[who]
+        }, 3000)
       } else if (data.type === 'presence') setOnline(data.online ?? 0)
     }
-    return () => ws.close()
-  }, [token, channelId])
+    return () => {
+      ws.close()
+      Object.values(typingTimers.current).forEach(clearTimeout)
+      typingTimers.current = {}
+    }
+  }, [token, channelId, user.username])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -188,11 +204,23 @@ export function Chat({
           <div ref={bottomRef} />
         </main>
 
+        {typing.length > 0 && (
+          <div className="typing">
+            {typing.join(', ')} {typing.length === 1 ? 'is' : 'are'} typing…
+          </div>
+        )}
         <form className="composer" onSubmit={send}>
           <input
             placeholder={connected ? `Message #${current?.name ?? ''}` : 'connecting…'}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              const now = Date.now()
+              if (wsRef.current?.readyState === WebSocket.OPEN && now - lastTypingSent.current > 2000) {
+                lastTypingSent.current = now
+                wsRef.current.send(JSON.stringify({ type: 'typing' }))
+              }
+            }}
             disabled={!connected}
           />
           <button disabled={!connected || !draft.trim()}>Send</button>
