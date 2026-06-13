@@ -1,5 +1,6 @@
-// Package chat persists and retrieves messages for the single global channel
-// that the MVP exposes. Channels/servers come in a later milestone.
+// Package chat persists and retrieves channels and messages. Messages are
+// channel-scoped at the data layer (v0.2); the WS gateway still serves a single
+// default room until per-channel routing lands.
 package chat
 
 import (
@@ -13,6 +14,7 @@ import (
 
 type Message struct {
 	ID        int64     `json:"id"`
+	ChannelID int64     `json:"channelId"`
 	UserID    int64     `json:"userId"`
 	Username  string    `json:"username"`
 	Body      string    `json:"body"`
@@ -31,20 +33,24 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
-// Save inserts a message and returns it fully populated.
+// Save inserts a message into the default `general` channel and returns it fully
+// populated. Per-channel targeting (a channelID parameter) lands in a later slice
+// once the WS gateway and client are channel-aware; the column is wired now.
 func (s *Store) Save(ctx context.Context, userID int64, username, body string) (Message, error) {
 	m := Message{UserID: userID, Username: username, Body: body}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO messages (user_id, body) VALUES ($1, $2) RETURNING id, created_at`,
+		`INSERT INTO messages (user_id, body, channel_id)
+		      VALUES ($1, $2, (SELECT id FROM channels WHERE name = 'general'))
+		   RETURNING id, created_at, channel_id`,
 		userID, body,
-	).Scan(&m.ID, &m.CreatedAt)
+	).Scan(&m.ID, &m.CreatedAt, &m.ChannelID)
 	return m, err
 }
 
 // Recent returns up to limit messages in chronological (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.user_id, u.username, m.body, m.created_at
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		  ORDER BY m.id DESC LIMIT $1`, limit)
 	if err != nil {
@@ -55,7 +61,7 @@ func (s *Store) Recent(ctx context.Context, limit int) ([]Message, error) {
 	msgs := make([]Message, 0, limit)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, m)
