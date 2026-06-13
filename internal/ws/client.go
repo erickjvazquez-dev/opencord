@@ -19,6 +19,12 @@ const (
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 4096
+
+	// Per-connection inbound rate limit (token bucket): burst of rateBurst frames,
+	// refilling rateRefillPerSec/sec. Each inbound frame (message or typing) costs
+	// one token; excess frames are dropped. Bounds a single connection's flood.
+	rateBurst        = 5.0
+	rateRefillPerSec = 2.0
 )
 
 // CheckOrigin is permissive because in production the browser talks to the
@@ -31,11 +37,13 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub       *Hub
-	conn      *websocket.Conn
-	send      chan []byte
-	user      auth.User
-	channelID int64
+	hub        *Hub
+	conn       *websocket.Conn
+	send       chan []byte
+	user       auth.User
+	channelID  int64
+	rateTokens float64
+	rateLast   time.Time
 }
 
 var errUnknownChannel = errors.New("unknown channel")
@@ -60,7 +68,10 @@ func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFun
 			return // Upgrade already wrote an error response
 		}
 
-		c := &Client{hub: hub, conn: conn, send: make(chan []byte, 32), user: user, channelID: channelID}
+		c := &Client{
+			hub: hub, conn: conn, send: make(chan []byte, 32), user: user, channelID: channelID,
+			rateTokens: rateBurst, rateLast: time.Now(),
+		}
 		hub.register <- c
 
 		if msgs, err := store.Recent(r.Context(), channelID, 50); err == nil {
@@ -114,6 +125,14 @@ func (c *Client) readPump(store *chat.Store) {
 		if err != nil {
 			return
 		}
+		// Per-connection rate limit (token bucket): drop frames over the budget.
+		now := time.Now()
+		c.rateTokens = min(rateBurst, c.rateTokens+now.Sub(c.rateLast).Seconds()*rateRefillPerSec)
+		c.rateLast = now
+		if c.rateTokens < 1 {
+			continue
+		}
+		c.rateTokens--
 		var in struct {
 			Type string `json:"type"`
 			Body string `json:"body"`
