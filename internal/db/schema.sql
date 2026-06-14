@@ -89,6 +89,9 @@ CREATE INDEX IF NOT EXISTS server_members_user_id_idx ON server_members (user_id
 ALTER TABLE server_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS server_id BIGINT REFERENCES servers(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
+-- Per-channel posting policy (v0.3): 'everyone' (default) or 'admins' (read-only /
+-- announcement channel — only a server owner/admin may post).
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS post_policy TEXT NOT NULL DEFAULT 'everyone';
 -- Channel names are unique per scope, not globally: each server can have its own
 -- #general. Replace the table-wide UNIQUE(name) with two partial unique indexes.
 ALTER TABLE channels DROP CONSTRAINT IF EXISTS channels_name_key;

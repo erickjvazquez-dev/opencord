@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 37) — Read-only channels: per-channel posting policy (last roadmap slice)
+
+The final roadmap item: `channels.post_policy` ('everyone'|'admins') — an admins-only
+channel is a read-only announcement channel. Gated the **WS send path** (the new attack
+surface) by folding the check into `store.Save` (every caller covered, defense in depth),
+returning `ErrForbidden`, which `readPump` turns into an `error` frame to the sender.
+`PATCH /api/channels/{id}` sets the policy (server admins only). Backend-only; the
+set-read-only UI is the follow-up.
+
+Reflections:
+- **Gate the write at the store, not the handler, when there are multiple entry points or a
+  hot path.** Messages only flow through one WS handler today, but putting the policy check
+  in `Save` means a future REST-post, an import tool, or a bot can't bypass it. The cost is
+  one indexed lookup per message — acceptable, and correctness on a permission check beats a
+  micro-optimization.
+- **A dropped WS frame needs an out-of-band "no" or it reads as a bug.** The send path used
+  to `continue` on any Save error (rate limit, etc.) — fine for those, but a *forbidden*
+  post silently vanishing looks broken. Mapped `ErrForbidden` → an `error` frame so the
+  sender learns why. (The client doesn't surface it yet — that's the UI slice, and no user
+  can reach a read-only channel until the set-policy UI ships anyway.)
+- **Verifying a WS *rejection* needs a listening client, not just a status code.** The live
+  check connected a member socket, sent, and asserted both the `error` frame AND that the
+  message never persisted (GET /messages) — a 2xx/4xx wouldn't exist for a WS frame.
+- **The roadmap is essentially complete.** v0.2 + v0.3 are built and verified end-to-end.
+  Remaining are UI polish (set-read-only control, error toasts) and net-new features beyond
+  the original parity list (threads, attachments, voice) — all good fresh-context work.
+
 ## 2026-06-14 (iter 36) — Moderation UI: the admin delete button (role-aware client)
 
 Surfaced last tick's moderation backend in the UI. The client now needs to know its role

@@ -37,6 +37,8 @@ var (
 	ErrInvalidInvite = errors.New("invalid invite code")
 	// ErrInvalidRole is returned when a role is not one that can be assigned.
 	ErrInvalidRole = errors.New("invalid role")
+	// ErrInvalidPolicy is returned when a channel posting policy is not valid.
+	ErrInvalidPolicy = errors.New("invalid posting policy")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
@@ -110,6 +112,12 @@ func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 // Save inserts a message into the given channel and returns it fully populated.
 func (s *Store) Save(ctx context.Context, channelID, userID int64, username, body string) (Message, error) {
+	// Enforce a read-only ('admins') channel — defense in depth, every caller is gated.
+	if ok, err := s.CanPostInChannel(ctx, channelID, userID); err != nil {
+		return Message{}, err
+	} else if !ok {
+		return Message{}, ErrForbidden
+	}
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO messages (channel_id, user_id, body) VALUES ($1, $2, $3)
@@ -117,6 +125,50 @@ func (s *Store) Save(ctx context.Context, channelID, userID int64, username, bod
 		channelID, userID, body,
 	).Scan(&m.ID, &m.CreatedAt)
 	return m, err
+}
+
+// CanPostInChannel reports whether userID may post in channelID. True unless the
+// channel's policy is 'admins' AND it's a server channel AND the user isn't a server
+// admin (read-only / announcement channel).
+func (s *Store) CanPostInChannel(ctx context.Context, channelID, userID int64) (bool, error) {
+	var policy string
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT post_policy, server_id FROM channels WHERE id = $1`, channelID).Scan(&policy, &serverID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if policy != "admins" || serverID == nil {
+		return true, nil
+	}
+	return s.IsServerAdmin(ctx, *serverID, userID)
+}
+
+// SetChannelPostPolicy sets a server channel's posting policy ('everyone'|'admins').
+// Server admins only; ErrInvalidPolicy for a bad value; ErrForbidden otherwise.
+func (s *Store) SetChannelPostPolicy(ctx context.Context, channelID, actorID int64, policy string) error {
+	if policy != "everyone" && policy != "admins" {
+		return ErrInvalidPolicy
+	}
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT server_id FROM channels WHERE id = $1`, channelID).Scan(&serverID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && serverID == nil) {
+		return ErrForbidden // unknown channel or not a server channel
+	}
+	if err != nil {
+		return err
+	}
+	if ok, err := s.IsServerAdmin(ctx, *serverID, actorID); err != nil {
+		return err
+	} else if !ok {
+		return ErrForbidden
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE channels SET post_policy = $2 WHERE id = $1`, channelID, policy)
+	return err
 }
 
 // ErrMessageNotFound is returned when a message doesn't exist, isn't owned by the

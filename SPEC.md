@@ -262,3 +262,34 @@ creator is `owner` (set in CreateServer). Invite-redeemers join as `member`.
 
 **Tests (DB integration):** creator is owner; a redeemed member can't create a channel; the
 owner promotes them → admin → now they can; a non-owner can't promote (ErrForbidden).
+
+## Per-channel posting policy (v0.3, 2026-06-14) — read-only / announcement channels
+
+The last roles slice: a server channel can be marked **admin-only posting** (a read-only
+announcement channel) — everyone reads, only owner/admins post. Minimal binary policy now;
+full per-role/per-channel permission matrices are a later milestone.
+
+**Schema (idempotent):** `channels.post_policy TEXT NOT NULL DEFAULT 'everyone'`
+('everyone' | 'admins').
+
+**Store:**
+- `CanPostInChannel(channelID, userID)` → true unless the channel's policy is 'admins' AND
+  it's a server channel AND the user isn't a server admin. (Public/serverless channels and
+  the default policy always allow.)
+- `Save` now calls it and returns `ErrForbidden` when posting isn't allowed — defense in
+  depth, so every message path is gated, not just the WS handler.
+- `SetChannelPostPolicy(channelID, actorID, policy)` — server admins only; valid policy
+  only; `ErrForbidden` otherwise.
+
+**WS:** `readPump` maps a dropped `ErrForbidden` Save to an `error` frame back to the sender
+("you can't post in this channel") instead of silently swallowing it.
+
+**REST:** `PATCH /api/channels/{id} {postPolicy}` — admin of the channel's server only (403);
+invalid policy → 400.
+
+**Access control (Rule 15):** a non-admin's WS send to an 'admins' channel is dropped (error
+frame, no broadcast); an admin's posts. A non-admin can't change the policy (403). Reproduced
++ re-attacked at the store and live-WS/HTTP layers; integration test guards it.
+
+**Tests:** admin sets 'admins' → member CanPost false / admin true; member Save → ErrForbidden;
+public channels always allow; non-admin SetChannelPostPolicy → ErrForbidden.

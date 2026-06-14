@@ -83,6 +83,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/auth/me`                 | bearer | Current user                                   |
 | `GET`    | `/api/channels`                | bearer | List public channels                           |
 | `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |
+| `PATCH`  | `/api/channels/{id}`           | bearer | Set posting policy `{postPolicy}` (admin only) |
 | `GET`    | `/api/dms`                     | bearer | List your direct-message channels              |
 | `POST`   | `/api/dms`                     | bearer | Open/get a DM with `{username}`                |
 | `GET`    | `/api/servers`                 | bearer | List servers you belong to                     |

@@ -681,6 +681,64 @@ func TestMessageModerationIntegration(t *testing.T) {
 	}
 }
 
+func TestChannelPostPolicyIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+
+	srv, _ := store.CreateServer(ctx, owner.ID, "Policy Guild")
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	ch, _ := store.CreateServerChannel(ctx, srv.ID, "general")
+
+	// Default 'everyone': a member can post.
+	if _, err := store.Save(ctx, ch.ID, member.ID, member.Username, "hi"); err != nil {
+		t.Fatalf("member should post in an 'everyone' channel: %v", err)
+	}
+
+	// Invalid policy + non-admin can't set the policy.
+	if err := store.SetChannelPostPolicy(ctx, ch.ID, owner.ID, "nope"); !errors.Is(err, chat.ErrInvalidPolicy) {
+		t.Fatalf("invalid policy err = %v, want ErrInvalidPolicy", err)
+	}
+	if err := store.SetChannelPostPolicy(ctx, ch.ID, member.ID, "admins"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-admin SetChannelPostPolicy err = %v, want ErrForbidden", err)
+	}
+
+	// Owner makes it admin-only (read-only for members).
+	if err := store.SetChannelPostPolicy(ctx, ch.ID, owner.ID, "admins"); err != nil {
+		t.Fatalf("owner set policy: %v", err)
+	}
+	if ok, _ := store.CanPostInChannel(ctx, ch.ID, member.ID); ok {
+		t.Fatal("member should NOT be able to post in an admins-only channel")
+	}
+	if ok, _ := store.CanPostInChannel(ctx, ch.ID, owner.ID); !ok {
+		t.Fatal("owner should be able to post in an admins-only channel")
+	}
+	if _, err := store.Save(ctx, ch.ID, member.ID, member.Username, "blocked"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("member Save in admins-only channel err = %v, want ErrForbidden", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, owner.ID, owner.Username, "allowed"); err != nil {
+		t.Fatalf("owner Save in admins-only channel: %v", err)
+	}
+	// Promote the member → they can post again.
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, member.ID, "admin"); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, member.ID, member.Username, "now-ok"); err != nil {
+		t.Fatalf("promoted admin should post in admins-only channel: %v", err)
+	}
+
+	// Public (serverless) channels always allow, and a policy can't be set on them.
+	pub, _ := store.CreateChannel(ctx, uniqueChannel())
+	if ok, _ := store.CanPostInChannel(ctx, pub.ID, member.ID); !ok {
+		t.Fatal("anyone should post in a public channel")
+	}
+	if err := store.SetChannelPostPolicy(ctx, pub.ID, owner.ID, "admins"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("setting a policy on a public channel err = %v, want ErrForbidden", err)
+	}
+}
+
 func hasServer(servers []chat.Server, id int64) bool {
 	for _, s := range servers {
 		if s.ID == id {

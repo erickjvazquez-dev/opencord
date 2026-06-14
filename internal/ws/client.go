@@ -156,6 +156,13 @@ func (c *Client) readPump(store *chat.Store) {
 			continue
 		}
 		msg, err := store.Save(context.Background(), c.channelID, c.user.ID, c.user.Username, body)
+		if errors.Is(err, chat.ErrForbidden) {
+			// Read-only channel: tell the sender instead of silently dropping.
+			if data, e := json.Marshal(Event{Type: "error", Error: "you can't post in this channel"}); e == nil {
+				c.send <- data
+			}
+			continue
+		}
 		if err != nil {
 			continue
 		}
