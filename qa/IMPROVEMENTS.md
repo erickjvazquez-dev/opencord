@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 48) — Auth input-hardening audit: confirmed bounded, then guarded it
+
+Rule-15 audit of the auth input surface: register/login already bound the body
+(`MaxBytesReader` 64 KiB) and validate username/password — so no vuln, but the handler
+rejection paths had no test (only the regex was unit-tested). Added DB-free guards: malformed
+/non-JSON bodies, bad username, short password, and a >64 KiB body all → 400 without a DB call.
+
+Reflections:
+- **An audit that finds the code is *already* safe still earns a regression test.** "It's
+  bounded" was true but unguarded — a future refactor of `decodeCreds` could drop the
+  `MaxBytesReader` and nothing would fail. Pin the safety property, not just fix the unsafe ones.
+- **Test at the cheapest layer that still proves the property.** These run with a nil DB pool
+  because every rejection happens before the DB call — so they're fast, always-on in CI, and
+  don't need the Postgres service. Find the layer where the invariant lives and test there.
+- **Context discipline:** 10th tick in one session — kept it backend-only + DB-free again
+  (lowest blast radius). Strongly recommending a `/clear` before the next feature-sized tick;
+  all loop state is durable (GOAL/IMPROVEMENTS/heartbeat/wakeup/memory) so it resumes clean.
+
 ## 2026-06-14 (iter 47) — Deployed to Railway; then guarded the deploy-critical routing
 
 Out-of-band this session: shipped a single-binary prod build (Go serves the embedded SPA) and
