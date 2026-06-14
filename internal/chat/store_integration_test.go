@@ -344,6 +344,44 @@ func TestDirectMessagesIntegration(t *testing.T) {
 	}
 }
 
+// A non-member must not be able to react (or un-react) to a message in a DM they
+// can't access — reactions take a message id, which is guessable, so the read gate
+// alone isn't enough (Rule 15). Members and public-channel reactions stay open.
+func TestDMReactionAccessControlIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+
+	dm, err := store.CreateOrGetDM(ctx, alice.ID, bob.ID)
+	if err != nil {
+		t.Fatalf("create dm: %v", err)
+	}
+	m, err := store.Save(ctx, dm.ID, alice.ID, alice.Username, "secret dm message")
+	if err != nil {
+		t.Fatalf("save dm message: %v", err)
+	}
+
+	// A member may react.
+	if _, err := store.AddReaction(ctx, m.ID, bob.ID, "👍"); err != nil {
+		t.Fatalf("member should be able to react in a DM: %v", err)
+	}
+	// A non-member must be blocked from adding or removing a reaction.
+	if _, err := store.AddReaction(ctx, m.ID, carol.ID, "👍"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-member AddReaction err = %v, want ErrForbidden", err)
+	}
+	if _, err := store.RemoveReaction(ctx, m.ID, carol.ID, "👍"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-member RemoveReaction err = %v, want ErrForbidden", err)
+	}
+
+	// Public-channel reactions stay unrestricted (no regression).
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+	pm, _ := store.Save(ctx, ch.ID, alice.ID, alice.Username, "public message")
+	if _, err := store.AddReaction(ctx, pm.ID, carol.ID, "👍"); err != nil {
+		t.Fatalf("anyone should be able to react in a public channel: %v", err)
+	}
+}
+
 func hasDM(dms []chat.DMChannel, channelID, otherUserID int64) bool {
 	for _, d := range dms {
 		if d.ID == channelID && d.User.ID == otherUserID {

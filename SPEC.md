@@ -138,8 +138,12 @@ members-only). UI ships in a later tick (reactions pattern: backend → UI).
 - WS `ServeWS`: after resolving the channel, `CanAccessChannel` must pass or the upgrade is
   refused (403) — a non-member cannot open, read history, or send in a DM.
 - REST `GET /api/messages?channel=`: same `CanAccessChannel` gate.
-- Follow-up hardening: gate react/edit/delete on DM messages by membership too (today the
-  read/connect path is gated; message IDs aren't exposed to non-members).
+- Reaction access control (done 2026-06-13): `AddReaction`/`RemoveReaction` now require
+  channel access (`requireChannelAccess` → `ErrForbidden` → HTTP 403), so a non-member
+  can't react to a DM message by guessing its id. Edit/delete were already safe (they're
+  ownership-scoped — a non-member has no messages in a channel they can't post to).
+  Reproduced + re-attacked at the store and live-HTTP layers; guarded by
+  `TestDMReactionAccessControlIntegration`.
 
 **Tests (DB integration):** create-or-get idempotency (same channel twice); ListDMs returns
 the other user; CanAccessChannel (public→anyone, dm→members only, non-member→false); unknown

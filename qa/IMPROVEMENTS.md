@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 26) — Closed the DM reaction-access gap (full Rule-15 cycle)
+
+Closed the security follow-up logged when DMs shipped: reactions weren't access-checked,
+so a non-member could react to a private DM message by guessing its id (ids are
+sequential). Ran the complete Rule-15 loop: **reproduced** (a new test failed —
+`non-member AddReaction err = <nil>`), **fixed** (`requireChannelAccess` gate in
+`AddReaction`/`RemoveReaction` → `ErrForbidden` → HTTP 403), **re-attacked at both layers**
+(store test passes; live server: carol PUT *and* DELETE → 403, member → 200), proved no
+regression (members + public reactions still work, full suite green), and **encoded** it as
+`TestDMReactionAccessControlIntegration`.
+
+Reflections:
+- **Every guessable-id endpoint on a private resource needs its own gate.** The read/connect
+  gate (iter 24) wasn't enough — *write* paths that take an id (react, and later: pin, edit
+  others', report) each need the same `requireChannelAccess` check. New private surfaces
+  should get an access-control test per mutating verb, not just per read.
+- **Node 23's built-in `WebSocket` unblocked live WS-layer adversarial checks** with zero
+  deps — used it to send a real DM message, then curl-react as a non-member. Worth keeping in
+  the toolkit for any WS-only flow the curl/HTTP harness can't reach.
+- **Verified at two layers on purpose:** the store test proves the authorization logic; the
+  live HTTP run proves the handler maps `ErrForbidden`→403. A thin mapping is still a layer
+  that can be wrong.
+
 ## 2026-06-13 (iter 25) — DM UI + a QA-harness P0: the harness was testing STALE code
 
 Shipped the DM UI (sidebar "Direct Messages" section, "+ New DM" flow, DM-aware

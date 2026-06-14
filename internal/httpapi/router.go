@@ -132,6 +132,10 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
 					return
 				}
+				if errors.Is(err, chat.ErrForbidden) {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
 				if err != nil {
 					http.Error(w, `{"error":"could not add reaction"}`, http.StatusInternalServerError)
 					return
@@ -149,6 +153,10 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				chID, err := store.RemoveReaction(r.Context(), id, u.ID, chi.URLParam(r, "emoji"))
 				if errors.Is(err, chat.ErrMessageNotFound) {
 					http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
+					return
+				}
+				if errors.Is(err, chat.ErrForbidden) {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 					return
 				}
 				if err != nil {

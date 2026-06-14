@@ -25,6 +25,9 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 	// ErrCannotDMSelf is returned when a user tries to open a DM with themselves.
 	ErrCannotDMSelf = errors.New("cannot DM yourself")
+	// ErrForbidden is returned when a user acts on a channel they can't access
+	// (e.g. reacting to a message in a DM they're not a member of).
+	ErrForbidden = errors.New("forbidden")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
@@ -138,6 +141,9 @@ func (s *Store) AddReaction(ctx context.Context, messageID, userID int64, emoji 
 	if err != nil {
 		return 0, err
 	}
+	if err := s.requireChannelAccess(ctx, channelID, userID); err != nil {
+		return 0, err
+	}
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
 		   ON CONFLICT (message_id, user_id, emoji) DO NOTHING`,
@@ -151,10 +157,25 @@ func (s *Store) RemoveReaction(ctx context.Context, messageID, userID int64, emo
 	if err != nil {
 		return 0, err
 	}
+	if err := s.requireChannelAccess(ctx, channelID, userID); err != nil {
+		return 0, err
+	}
 	_, err = s.pool.Exec(ctx,
 		`DELETE FROM reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
 		messageID, userID, emoji)
 	return channelID, err
+}
+
+// requireChannelAccess returns ErrForbidden if userID can't access channelID.
+func (s *Store) requireChannelAccess(ctx context.Context, channelID, userID int64) error {
+	ok, err := s.CanAccessChannel(ctx, channelID, userID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
+	}
+	return nil
 }
 
 // messageChannel returns a message's channel id, optionally requiring it to be
