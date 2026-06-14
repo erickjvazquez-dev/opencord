@@ -29,6 +29,7 @@ import type {
   ServerMember,
   User,
 } from '../types'
+import { renderMarkdown } from '../markdown'
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -610,7 +611,7 @@ export function Chat({
                       <span className="author">{m.username}</span>
                       <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
                     </div>
-                    <div className="body">{m.body}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body)}</div>
                   </div>
                 </div>
               ))}
@@ -682,7 +683,7 @@ export function Chat({
                       </button>
                     </div>
                   ) : (
-                    <div className="body">{m.body}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body)}</div>
                   )}
                   {pickerFor === m.id && !m.deleted && (
                     <div className="emoji-picker">

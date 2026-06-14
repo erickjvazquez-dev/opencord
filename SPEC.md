@@ -293,3 +293,21 @@ frame, no broadcast); an admin's posts. A non-admin can't change the policy (403
 
 **Tests:** admin sets 'admins' → member CanPost false / admin true; member Save → ErrForbidden;
 public channels always allow; non-admin SetChannelPostPolicy → ErrForbidden.
+
+## Message Markdown rendering (v0.3, 2026-06-14) — client-only, XSS-safe
+
+**Goal:** render a small Discord-like Markdown subset in message bodies — `**bold**`,
+`*italic*`/`_italic_`, `~~strike~~`, `` `inline code` ``, and ```` ```fenced code``` ````.
+
+**Approach (security-first, Rule B/15):** `web/src/markdown.tsx::renderMarkdown(text)` returns
+**React elements, never an HTML string** — no `dangerouslySetInnerHTML`. React escapes all text,
+so only the fixed safe tag set (`strong`/`em`/`del`/`code`/`pre`) is emitted and any raw HTML in a
+message (e.g. `<script>…</script>`) renders as literal text. Inline code and fenced blocks are
+literal (no nested formatting); bold is matched before single-`*` italic.
+
+**Wiring:** both message render sites in `Chat.tsx` use `renderMarkdown(m.body)` (deleted messages
+keep the plain `[deleted]` stub). CSS for `code`/`pre`/`del` added to `styles.css`.
+
+**Verification:** `qa/browser.mjs` sends `**bold** and \`code\` and <script>alert(1)</script>` and
+asserts the `<strong>`/`<code>` render while the `<script>` shows as literal text with no injected
+script element (XSS guard); AI-vision review of the screenshot confirms it looks right.

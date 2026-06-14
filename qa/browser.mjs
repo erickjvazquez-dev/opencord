@@ -81,6 +81,28 @@ async function main() {
   )
   check((await grouped.locator('.avatar').count()) === 0, 'grouped message hides the repeated avatar')
 
+  // 3c — Markdown renders to safe elements; raw HTML is escaped (XSS guard, Rule B/15).
+  step('send a markdown + <script> message → bold/code render, script stays literal')
+  const md = '**bold** and `code` and <script>alert(1)</script>'
+  await page.getByPlaceholder(/Message #/).fill(md)
+  await page.getByRole('button', { name: 'Send' }).click()
+  const mdMsg = page.locator('.message', { hasText: 'bold' }).last()
+  await mdMsg.locator('.body strong').first().waitFor({ timeout: 8000 })
+  await shot('03c-markdown.png')
+  check(
+    (await mdMsg.locator('.body strong').first().textContent())?.trim() === 'bold',
+    'markdown **bold** renders as <strong>bold</strong>',
+  )
+  check(await mdMsg.locator('.body code').first().isVisible(), 'inline `code` renders as <code>')
+  check(
+    await mdMsg.getByText('<script>alert(1)</script>').isVisible(),
+    'raw <script> shows as literal text (escaped)',
+  )
+  check(
+    (await page.locator('script', { hasText: 'alert(1)' }).count()) === 0,
+    'no <script> element was injected into the DOM (XSS-safe)',
+  )
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).
