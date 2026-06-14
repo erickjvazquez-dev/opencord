@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 41) — Markdown rendering (a feature tick) + the first real-app QA this session
+
+After two backend test-coverage ticks, advanced the *product*: a Discord-like Markdown
+subset in messages (**bold**, *italic*, ~~strike~~, `inline`/```fenced``` code). Built it
+security-first — `renderMarkdown` returns **React elements, never an HTML string**, so it's
+XSS-safe by construction (raw `<script>` renders as literal text). Ran the **full browser QA
+stack** for the first time this session and reviewed `03c-markdown.png` by eye: bold/code
+render, the `<script>` is escaped. browser + realtime QA both green.
+
+Reflections:
+- **CI does not build/typecheck the web client — a real coverage gap.** `ci.yml` only runs
+  the Go job; a TypeScript error or web regression would NOT fail CI (I caught my build
+  locally via `npm run build`, but CI wouldn't have). **Next tick's highest-value item: add a
+  `web` job to `ci.yml`** (`npm ci && npm run build`) so the frontend is gated like the
+  backend. Logged as the next QA-process improvement.
+- **Rendering user content is an attack surface — pick a structurally-safe design, not a
+  filter.** Returning React elements (no `dangerouslySetInnerHTML`) means there's no HTML sink
+  to sanitize and no blocklist to keep current; the safety is in the shape of the code. Prefer
+  that over "escape then inject" every time.
+- **Grow the QA with the feature (Step 5b):** added a markdown+XSS assertion to `browser.mjs`
+  in the same commit, so the guard ships with the feature, not later.
+- **Balance the tracks:** three straight QA ticks would drift from the North Star (Discord
+  parity); a feature tick that *still* ships its own QA + vision check keeps both moving.
+
 ## 2026-06-14 (iter 40) — WS access-control suite + a CI race adding tests exposed
 
 Shipped the WebSocket gateway's first access-control test (`internal/ws/serve_integration_test.go`):
