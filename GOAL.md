@@ -25,7 +25,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 ## Next (v0.2 — Structure)
 
 - [x] Multiple channels — table, REST list + create, per-channel WS routing, sidebar UI (E2E + DB integration tests in CI)
-- [x] Message edit/delete (owner-only, live WS, soft delete) — timestamp grouping still TODO
+- [x] Message edit/delete (owner-only, live WS, soft delete)
 - [x] Typing indicators — read state still TODO
 - [x] Profiles: initials avatars — uploaded avatars/banners/status still TODO
 - [ ] Servers/guilds (group channels under a server; membership)
@@ -37,7 +37,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [ ] Roles & permissions (owner/admin/member, per-channel)
 - [ ] Invites + membership management
 - [ ] Search
-- [ ] Message grouping (collapse consecutive same-author messages) — surfaced by browser AI-vision QA 2026-06-13
+- [x] Message grouping (collapse consecutive same-author messages within 5 min) — flagged then closed by browser AI-vision QA 2026-06-13
 - [ ] Mobile-responsive layout
 
 ## Later

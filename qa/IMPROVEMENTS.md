@@ -3,6 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 22) — Closed the message-grouping P1 the loop's own QA raised
+
+The loop's AI-vision QA flagged (iter ~19) that consecutive same-author messages
+repeat the avatar + name — un-Discord-like. This tick closed it: consecutive
+same-author messages within 5 min collapse into a tight block (avatar gutter kept via
+a spacer so bodies align; name/time/avatar hidden). A deleted message breaks the run.
+Verified by eye in `03a-grouped.png` — clean, aligned, tight.
+
+Reflections:
+- **The find→fix loop worked as designed:** a P1 *surfaced by AI-vision* one tick became
+  a *closed + regression-guarded* item a few ticks later. The screenshot review is
+  earning its keep — it catches polish gaps no assertion would.
+- **Blast-radius win:** relocating the hover action toolbar out of the (now-conditional)
+  message header into a floating absolute element could have broken edit/delete/react.
+  The existing browser-QA flow caught that risk for free — all three still PASS — which
+  is exactly why the harness drives real clicks, not DOM assertions. New assertion added:
+  "consecutive same-author message is grouped / hides the repeated avatar."
+- **Next QA growth:** assert a group *breaks* correctly — a different author, or a
+  >5-min gap, or a deleted message in the middle must start a fresh (avatar-bearing) row.
+  That's the inverse of what I tested and the more likely regression site.
+
 ## 2026-06-13 (iter 21) — Two-client realtime QA (the fan-out the single client can't prove)
 
 The whole point of Opencord is *realtime* — yet every QA so far drove a **single**

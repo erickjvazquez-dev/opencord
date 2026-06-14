@@ -261,16 +261,40 @@ export function Chat({
         </header>
 
         <main className="messages">
-          {messages.map((m) => (
-            <div key={m.id} className={m.deleted ? 'message deleted' : 'message'}>
-              <div className="avatar" style={{ backgroundColor: avatarColor(m.username) }} aria-hidden>
-                {initials(m.username)}
-              </div>
-              <div className="message-content">
-                <div className="message-head">
-                  <span className="author">{m.username}</span>
-                  <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
-                  {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
+          {messages.map((m, i) => {
+            const prev = i > 0 ? messages[i - 1] : null
+            // Group consecutive messages from the same author within 5 min (Discord-style):
+            // hide the repeated avatar + name. A deleted message breaks the run.
+            const grouped =
+              !!prev &&
+              !m.deleted &&
+              !prev.deleted &&
+              prev.userId === m.userId &&
+              new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000
+            return (
+              <div
+                key={m.id}
+                className={`message${m.deleted ? ' deleted' : ''}${grouped ? ' grouped' : ''}`}
+              >
+                {grouped ? (
+                  <div className="avatar-spacer" aria-hidden />
+                ) : (
+                  <div
+                    className="avatar"
+                    style={{ backgroundColor: avatarColor(m.username) }}
+                    aria-hidden
+                  >
+                    {initials(m.username)}
+                  </div>
+                )}
+                <div className="message-content">
+                  {!grouped && (
+                    <div className="message-head">
+                      <span className="author">{m.username}</span>
+                      <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                      {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
+                    </div>
+                  )}
                   {!m.deleted && editingId !== m.id && (
                     <span className="msg-actions">
                       {m.userId === user.id && (
@@ -284,63 +308,63 @@ export function Chat({
                       </button>
                     </span>
                   )}
-                </div>
-                {editingId === m.id ? (
-                  <div className="edit-row">
-                    <input
-                      autoFocus
-                      value={editDraft}
-                      onChange={(e) => setEditDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void submitEdit(m.id)
-                        else if (e.key === 'Escape') cancelEdit()
-                      }}
-                    />
-                    <button onClick={() => void submitEdit(m.id)}>save</button>
-                    <button className="link" onClick={cancelEdit}>
-                      cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="body">{m.body}</div>
-                )}
-                {pickerFor === m.id && !m.deleted && (
-                  <div className="emoji-picker">
-                    {QUICK_EMOJIS.map((e) => (
-                      <button
-                        key={e}
-                        className="emoji-option"
-                        onClick={() => {
-                          void toggleReaction(m, e)
-                          setPickerFor(null)
+                  {editingId === m.id ? (
+                    <div className="edit-row">
+                      <input
+                        autoFocus
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void submitEdit(m.id)
+                          else if (e.key === 'Escape') cancelEdit()
                         }}
-                      >
-                        {e}
+                      />
+                      <button onClick={() => void submitEdit(m.id)}>save</button>
+                      <button className="link" onClick={cancelEdit}>
+                        cancel
                       </button>
-                    ))}
-                  </div>
-                )}
-                {!m.deleted && (m.reactions?.length ?? 0) > 0 && (
-                  <div className="reactions">
-                    {m.reactions!.map((r) => {
-                      const mine = myReactions.has(rkey(m.id, r.emoji))
-                      return (
+                    </div>
+                  ) : (
+                    <div className="body">{m.body}</div>
+                  )}
+                  {pickerFor === m.id && !m.deleted && (
+                    <div className="emoji-picker">
+                      {QUICK_EMOJIS.map((e) => (
                         <button
-                          key={r.emoji}
-                          className={mine ? 'reaction mine' : 'reaction'}
-                          aria-pressed={mine}
-                          onClick={() => void toggleReaction(m, r.emoji)}
+                          key={e}
+                          className="emoji-option"
+                          onClick={() => {
+                            void toggleReaction(m, e)
+                            setPickerFor(null)
+                          }}
                         >
-                          <span className="emoji">{r.emoji}</span>
-                          <span className="rcount">{r.count}</span>
+                          {e}
                         </button>
-                      )
-                    })}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                  {!m.deleted && (m.reactions?.length ?? 0) > 0 && (
+                    <div className="reactions">
+                      {m.reactions!.map((r) => {
+                        const mine = myReactions.has(rkey(m.id, r.emoji))
+                        return (
+                          <button
+                            key={r.emoji}
+                            className={mine ? 'reaction mine' : 'reaction'}
+                            aria-pressed={mine}
+                            onClick={() => void toggleReaction(m, r.emoji)}
+                          >
+                            <span className="emoji">{r.emoji}</span>
+                            <span className="rcount">{r.count}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           <div ref={bottomRef} />
         </main>
 

@@ -252,6 +252,18 @@ button:disabled {
 .message {
   display: flex;
   gap: 12px;
+  position: relative;
+}
+
+/* Consecutive same-author messages collapse into a tight block (Discord-style):
+   the avatar gutter is preserved (spacer) so bodies stay aligned, name/time hidden. */
+.message.grouped {
+  margin-top: -8px;
+}
+
+.avatar-spacer {
+  width: 38px;
+  flex-shrink: 0;
 }
 
 .avatar {
@@ -298,15 +310,25 @@ button:disabled {
   color: var(--text-muted);
 }
 
+/* Floating hover toolbar, anchored to the message's top-right so it works on
+   grouped rows too (which have no header to live in). */
 .msg-actions {
-  margin-left: auto;
+  position: absolute;
+  top: 2px;
+  right: 8px;
   display: flex;
   gap: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   opacity: 0;
+  pointer-events: none;
 }
 
 .message:hover .msg-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .msg-actions button {

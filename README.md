@@ -12,9 +12,10 @@ run one command, and you have your own real-time chat server.
 >
 > **Working today:** accounts (bcrypt + JWT) · multiple channels with per-channel
 > real-time routing (create + switch in a sidebar) · live messaging with **edit &
-> delete** (owner-only) · **emoji reactions** (live counts) · **typing indicators** ·
-> online presence · **initials avatars** · per-connection **rate limiting** ·
-> one-command Docker stack · CI with a Postgres service running DB integration tests.
+> delete** (owner-only) · **emoji reactions** (live counts) · **grouped messages**
+> (consecutive same-author) · **typing indicators** · online presence · **initials
+> avatars** · per-connection **rate limiting** · one-command Docker stack · CI with a
+> Postgres service running DB integration tests.
 
 ---
 

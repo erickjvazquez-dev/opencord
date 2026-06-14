@@ -61,6 +61,20 @@ async function main() {
   check(await page.getByText(body).isVisible(), 'sent message appears')
   check(await page.locator('.avatar').first().isVisible(), 'avatar renders on the message')
 
+  // 3a — A second message from the same author groups (no repeated avatar/name).
+  step('send a second message → it groups under the first')
+  const body2 = 'second line, same author'
+  await page.getByPlaceholder(/Message #/).fill(body2)
+  await page.getByRole('button', { name: 'Send' }).click()
+  await page.getByText(body2).waitFor({ timeout: 8000 })
+  const grouped = page.locator('.message', { hasText: body2 }).first()
+  await shot('03a-grouped.png')
+  check(
+    await grouped.evaluate((el) => el.classList.contains('grouped')),
+    'consecutive same-author message is grouped',
+  )
+  check((await grouped.locator('.avatar').count()) === 0, 'grouped message hides the repeated avatar')
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).
