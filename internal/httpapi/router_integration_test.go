@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -192,5 +193,68 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 	t.Run("malformed ids are 400", func(t *testing.T) {
 		wantStatus(t, hs.req(t, "PATCH", "/api/channels/abc", ownerTok, `{"postPolicy":"admins"}`), http.StatusBadRequest, "non-numeric channel id")
 		wantStatus(t, hs.req(t, "DELETE", "/api/messages/xyz", ownerTok, ""), http.StatusBadRequest, "non-numeric message id")
+	})
+}
+
+// TestRouterMessageEndpointsIntegration covers the edit + reaction REST endpoints,
+// which carry their own authorization (edit is author-only; reactions are gated by
+// channel access) and map store errors to HTTP status. The message under test lives
+// in a members-only server channel so the access gate is exercised.
+func TestRouterMessageEndpointsIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Msg Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	code, err := hs.store.CreateInvite(ctx, srv.ID, owner.ID)
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if _, err := hs.store.RedeemInvite(ctx, code, member.ID); err != nil {
+		t.Fatalf("redeem: %v", err)
+	}
+	ch, err := hs.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	msg, err := hs.store.Save(ctx, ch.ID, owner.ID, owner.Username, "original")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	msgPath := fmt.Sprintf("/api/messages/%d", msg.ID)
+
+	t.Run("edit is author-only", func(t *testing.T) {
+		// A member who isn't the author can't edit it — 404 (no existence leak).
+		wantStatus(t, hs.req(t, "PATCH", msgPath, memberTok, `{"body":"hacked"}`), http.StatusNotFound, "non-author edits")
+		// Empty body is rejected.
+		wantStatus(t, hs.req(t, "PATCH", msgPath, ownerTok, `{"body":"   "}`), http.StatusBadRequest, "empty body")
+		// The author edits successfully and the new body comes back.
+		w := hs.req(t, "PATCH", msgPath, ownerTok, `{"body":"edited by owner"}`)
+		wantStatus(t, w, http.StatusOK, "author edits own message")
+		var got chat.Message
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode edited message: %v", err)
+		}
+		if got.Body != "edited by owner" {
+			t.Fatalf("edited body = %q, want %q", got.Body, "edited by owner")
+		}
+	})
+
+	t.Run("reactions are channel-access gated", func(t *testing.T) {
+		rxPath := msgPath + "/reactions"
+		// A non-member of the server can't react to its channel's message — 403.
+		wantStatus(t, hs.req(t, "PUT", rxPath, strangerTok, `{"emoji":"👍"}`), http.StatusForbidden, "non-member reacts")
+		// An over-long emoji is rejected.
+		wantStatus(t, hs.req(t, "PUT", rxPath, memberTok, `{"emoji":"x_way_too_long_emoji"}`), http.StatusBadRequest, "invalid emoji")
+		// A member reacts, then removes it.
+		wantStatus(t, hs.req(t, "PUT", rxPath, memberTok, `{"emoji":"👍"}`), http.StatusOK, "member adds reaction")
+		del := fmt.Sprintf("%s/%s", rxPath, url.PathEscape("👍"))
+		wantStatus(t, hs.req(t, "DELETE", del, memberTok, ""), http.StatusOK, "member removes reaction")
 	})
 }
