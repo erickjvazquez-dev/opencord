@@ -40,6 +40,9 @@ CREATE INDEX IF NOT EXISTS messages_channel_id_idx ON messages (channel_id);
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 -- Edit (v0.2): edited_at is set when a message's body is changed.
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+-- Pinned (v0.3): a message can be pinned in its channel (server-channel admins;
+-- any member elsewhere). Surfaced on the message so clients can badge it.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
 
 -- Reactions (Discord parity): one row per (message, user, emoji).
 CREATE TABLE IF NOT EXISTS reactions (

@@ -359,3 +359,63 @@ func TestRouterChannelTopicIntegration(t *testing.T) {
 		}
 	})
 }
+
+// TestRouterPinIntegration covers PUT/DELETE /messages/{id}/pin in a server channel:
+// only admins may pin there, and the pinned flag round-trips into the message list.
+func TestRouterPinIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	member, memberTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Pin Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	code, err := hs.store.CreateInvite(ctx, srv.ID, owner.ID)
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if _, err := hs.store.RedeemInvite(ctx, code, member.ID); err != nil {
+		t.Fatalf("redeem: %v", err)
+	}
+	ch, err := hs.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	msg, err := hs.store.Save(ctx, ch.ID, owner.ID, owner.Username, "pin me")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	p := fmt.Sprintf("/api/messages/%d/pin", msg.ID)
+
+	pinnedNow := func() bool {
+		t.Helper()
+		msgs, err := hs.store.Recent(ctx, ch.ID, owner.ID, 50)
+		if err != nil {
+			t.Fatalf("recent: %v", err)
+		}
+		for _, m := range msgs {
+			if m.ID == msg.ID {
+				return m.Pinned
+			}
+		}
+		t.Fatalf("message %d not found in recent", msg.ID)
+		return false
+	}
+
+	wantStatus(t, hs.req(t, "PUT", "/api/messages/abc/pin", ownerTok, ""), http.StatusBadRequest, "bad message id")
+	wantStatus(t, hs.req(t, "PUT", p, memberTok, ""), http.StatusForbidden, "non-admin pins in server channel")
+	if pinnedNow() {
+		t.Fatal("message pinned after a forbidden attempt")
+	}
+	wantStatus(t, hs.req(t, "PUT", p, ownerTok, ""), http.StatusNoContent, "admin pins")
+	if !pinnedNow() {
+		t.Fatal("message not pinned after admin PUT")
+	}
+	wantStatus(t, hs.req(t, "DELETE", p, ownerTok, ""), http.StatusNoContent, "admin unpins")
+	if pinnedNow() {
+		t.Fatal("message still pinned after admin DELETE")
+	}
+}

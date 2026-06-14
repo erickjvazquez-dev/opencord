@@ -218,6 +218,33 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				broadcastReactions(w, r, store, hub, id, chID)
 			})
+
+			// Pin / unpin a message → broadcast the change to the channel. Server
+			// channels: admins only; serverless channels: any member (see store).
+			setPinned := func(pinned bool) http.HandlerFunc {
+				return func(w http.ResponseWriter, r *http.Request) {
+					u, _ := auth.UserFrom(r.Context())
+					id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+					if err != nil {
+						http.Error(w, `{"error":"invalid message id"}`, http.StatusBadRequest)
+						return
+					}
+					m, err := store.SetMessagePinned(r.Context(), id, u.ID, pinned)
+					switch {
+					case errors.Is(err, chat.ErrMessageNotFound):
+						http.Error(w, `{"error":"message not found"}`, http.StatusNotFound)
+					case errors.Is(err, chat.ErrForbidden):
+						http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					case err != nil:
+						http.Error(w, `{"error":"could not change pin"}`, http.StatusInternalServerError)
+					default:
+						hub.BroadcastEvent(ws.Event{Type: "message-pinned", Message: &m})
+						w.WriteHeader(http.StatusNoContent)
+					}
+				}
+			}
+			r.Put("/messages/{id}/pin", setPinned(true))
+			r.Delete("/messages/{id}/pin", setPinned(false))
 		})
 	})
 

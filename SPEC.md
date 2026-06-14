@@ -400,3 +400,16 @@ the href is never `javascript:`/`data:`; React escapes the attribute. Trailing s
 (`).,!?;:]`) is trimmed back to text so "(see http://x.com)." links cleanly. URLs inside inline code
 stay literal (code matches first). Verified via react-dom/server probe (basic/paren/xss/in-code) +
 browser QA (clickable link + rel=noopener assertions) + AI-vision.
+
+## Pinned messages — backend slice (v0.3, 2026-06-14)
+
+Messages can be pinned in their channel. Backend slice (UI follows).
+- Schema: `messages.pinned BOOLEAN NOT NULL DEFAULT false` (idempotent ALTER).
+- `Message.Pinned` surfaced in `Recent` (and WS history) so clients can badge it.
+- `Store.SetMessagePinned(id, actorID, pinned)` → returns a stub for broadcast.
+  Authz mirrors moderation: server channels → admins only; serverless channels
+  (global, DM) → any member who can access. ErrMessageNotFound / ErrForbidden.
+- REST: `PUT /api/messages/{id}/pin` and `DELETE …/pin` → broadcast a
+  `message-pinned` event to the channel.
+- Tests: bad id 400, non-admin 403 (server channel), admin pin 204 → pinned=true →
+  unpin 204 → pinned=false (round-trip via Recent). DATABASE_URL-gated.

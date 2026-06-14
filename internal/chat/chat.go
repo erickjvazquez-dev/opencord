@@ -87,6 +87,7 @@ type Message struct {
 	CreatedAt time.Time         `json:"createdAt"`
 	EditedAt  *time.Time        `json:"editedAt,omitempty"`
 	Deleted   bool              `json:"deleted,omitempty"`
+	Pinned    bool              `json:"pinned,omitempty"`
 	Reactions []ReactionSummary `json:"reactions,omitempty"`
 }
 
@@ -243,6 +244,43 @@ func (s *Store) DeleteMessage(ctx context.Context, id, userID int64) (Message, e
 		return Message{}, err
 	}
 	return Message{ID: id, ChannelID: channelID, Deleted: true, Body: "[deleted]"}, nil
+}
+
+// SetMessagePinned pins or unpins a (non-deleted) message and returns a stub
+// (id + channel + pinned) for broadcasting the change. Authorization mirrors
+// moderation: in a server channel only server admins may pin; in a serverless
+// channel (global, DM) any member who can access it may. ErrMessageNotFound if the
+// message is gone; ErrForbidden if the actor isn't allowed.
+func (s *Store) SetMessagePinned(ctx context.Context, id, actorID int64, pinned bool) (Message, error) {
+	var channelID int64
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT m.channel_id, c.server_id
+		   FROM messages m JOIN channels c ON c.id = m.channel_id
+		  WHERE m.id = $1 AND m.deleted_at IS NULL`, id).Scan(&channelID, &serverID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Message{}, ErrMessageNotFound
+	}
+	if err != nil {
+		return Message{}, err
+	}
+	if serverID != nil {
+		if ok, err := s.IsServerAdmin(ctx, *serverID, actorID); err != nil {
+			return Message{}, err
+		} else if !ok {
+			return Message{}, ErrForbidden
+		}
+	} else {
+		if ok, err := s.CanAccessChannel(ctx, channelID, actorID); err != nil {
+			return Message{}, err
+		} else if !ok {
+			return Message{}, ErrForbidden
+		}
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE messages SET pinned = $2 WHERE id = $1`, id, pinned); err != nil {
+		return Message{}, err
+	}
+	return Message{ID: id, ChannelID: channelID, Pinned: pinned}, nil
 }
 
 // EditMessage updates the body of the caller's own (non-deleted) message, stamps
@@ -748,7 +786,7 @@ func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Se
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at, m.pinned
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		  WHERE m.channel_id = $1
 		  ORDER BY m.id DESC LIMIT $2`, channelID, limit)
@@ -761,7 +799,7 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 	for rows.Next() {
 		var m Message
 		var deletedAt, editedAt *time.Time
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt, &editedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt, &editedAt, &m.Pinned); err != nil {
 			return nil, err
 		}
 		m.EditedAt = editedAt
