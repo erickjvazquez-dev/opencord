@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 44) — Markdown blockquote + spoiler; isolate the unit when E2E fails
+
+Completed the Markdown subset: `> ` blockquotes (block-level line grouping) and `||spoiler||`
+(stateful click-to-reveal component), still React-elements-only (XSS-safe). GOAL's Markdown item
+is now `[x]`. But the real lesson was the debugging.
+
+Reflections:
+- **When an E2E test fails, isolate the unit before touching it.** The browser QA timed out waiting
+  for a blockquote, which *looked* like a renderer bug. Instead of poking the renderer blind, I
+  transpiled `markdown.tsx` with esbuild and rendered it through `react-dom/server`:
+  `"> q\n||s||"` → `<blockquote>q</blockquote><span class="spoiler">s</span>`. The renderer was
+  **provably correct**, which redirected the hunt to the test/runtime — saving a wrong "fix" to good
+  code. **Keep this technique: prove the pure unit in isolation to bisect unit-vs-integration.**
+- **The actual cause was the product working as designed: the rate limiter.** Diagnostics (compose
+  value correct, draft cleared on Enter, yet no message) showed the WS frame was *sent* but *dropped*
+  server-side — the per-connection token bucket (`rateBurst=5`, `+2/s`, every message AND typing
+  frame costs a token) had emptied under the bot's rapid sends. An automated client sends far faster
+  than a human and trips real abuse limits. **Fix the test (pace it), not the limit.**
+- **Layered diagnostics beat guessing:** body-HTML dump → "message never sent"; compose-value
+  before/after Enter → "sent but dropped"; each step removed half the search space. Add the
+  diagnostic, don't theorize.
+- **Meta-QA gap to watch:** the browser QA accumulates WS frames across steps; future message-send
+  steps should pace by default (or the suite should reset the connection) so they don't randomly trip
+  the limiter as more steps are added.
+
 ## 2026-06-14 (iter 43) — Multi-line composer; "check the input path can type the syntax"
 
 Set out to finish Markdown (blockquote/spoiler) and discovered the composer was a single-line
