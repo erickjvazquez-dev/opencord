@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 49) — @everyone/@here highlighting; a feature tick (not more tests)
+
+After several test/QA ticks, deliberately advanced a user-visible parity item instead of adding
+the Nth test: `@everyone`/`@here` now render as highlighted all-mention chips (they ping you too),
+with a `mention-all` DOM hook. Pure renderer + React elements (no new CSS, XSS-safe). GOAL Mentions
+TODO shrank.
+
+Reflections:
+- **Watch for safe-busywork drift.** I'd done many low-risk test ticks; another would have been
+  borderline churn (Rule 10). The honest move when the product is green is to *advance* it — a small,
+  fully-verifiable feature — not manufacture coverage to look busy. Picked a bounded renderer change
+  with the same verification rigor (react-dom/server probe → browser QA → AI-vision).
+- **Reuse the verification ladder you built.** Probe the pure unit (1s) → fold the assertion into an
+  existing QA message (no extra WS send, dodges the rate limiter) → eyeball one screenshot. Each new
+  renderer feature now costs almost no incremental QA effort because the rungs are in place.
+- **Keep `[~]` honest:** this is rendering only — no delivery/notifications — so Mentions stays `[~]`
+  with the remaining work spelled out, not optimistically closed.
+
 ## 2026-06-14 (iter 48) — Auth input-hardening audit: confirmed bounded, then guarded it
 
 Rule-15 audit of the auth input surface: register/login already bound the body
