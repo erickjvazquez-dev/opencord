@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 36) — Moderation UI: the admin delete button (role-aware client)
+
+Surfaced last tick's moderation backend in the UI. The client now needs to know its role
+per server, so `ListServers` (and CreateServer/RedeemInvite) carry the requesting user's
+`role`; the chat computes `canModerate` for the active server channel and shows the delete
+button on *others'* messages when I'm owner/admin (edit stays author-only). Verified E2E in
+the two-client realtime QA: B posts → A (owner) clicks delete → B sees `[deleted]` live.
+
+Reflections:
+- **A backend permission only becomes a feature once the client can ask "what am I here?"**
+  Moderation was enforced server-side last tick, but invisible until the client knew its
+  role. Cheapest answer: fold the viewer's role into the resource it already fetches
+  (`/servers`), rather than a separate "my permissions" call per channel.
+- **Authorize on the server, *hint* on the client.** The delete button is shown via
+  `canModerate`, but the actual permission is still enforced in `DeleteMessage` (iter 35).
+  The UI flag is a convenience/affordance, never the gate — a hand-crafted DELETE still
+  hits the server check. Keep that split explicit so a UI bug can't become a security bug.
+- **No new pixels, no new screenshot — but say so.** This tick added a *conditional* on an
+  existing, already-vision-graded button (delete) and reused the verified `[deleted]`
+  render. The assertion (B sees `[deleted]` live) covers behaviour; I logged that there's no
+  new visual surface rather than silently skipping the vision step.
+- **Roles & permissions is now feature-complete bar per-channel overrides** — the last
+  remaining slice is channel-level permission overrides (e.g. a read-only announcement
+  channel), which is a bigger model change and a good fresh-context candidate.
+
 ## 2026-06-14 (iter 35) — Message moderation: server admins can delete others' messages
 
 `DeleteMessage` now allows the author OR an admin of the message's channel's server (the

@@ -183,6 +183,24 @@ async function main() {
   await b.getByText(srvMsg2).waitFor({ timeout: 8000 })
   check(await b.getByText(srvMsg2).isVisible(), 'B receives a live message in the shared server channel')
 
+  // 5b — Moderation: B posts, A (owner) deletes B's message via the delete button.
+  step("B posts → A (owner) moderates it away → B sees [deleted] live")
+  const modMsg = 'please moderate me ' + sfx
+  await b.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(modMsg)
+  await b.getByRole('button', { name: 'Send' }).click()
+  const aModRow = a.locator('.message', { hasText: modMsg }).first()
+  await aModRow.waitFor({ timeout: 8000 })
+  await aModRow.hover()
+  await aModRow.getByRole('button', { name: 'delete' }).click() // confirm auto-accepted
+  await b
+    .locator('.message', { hasText: '[deleted]' })
+    .first()
+    .waitFor({ timeout: 8000 })
+  check(
+    (await b.locator('.message', { hasText: '[deleted]' }).count()) > 0,
+    'owner moderates B\'s message → B sees it [deleted] live',
+  )
+
   // 6 — Roles: A (owner) opens the members panel and promotes B (member) to admin.
   step('A opens members and promotes B to admin')
   await a

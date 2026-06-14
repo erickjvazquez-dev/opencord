@@ -623,6 +623,14 @@ func TestServerRolesIntegration(t *testing.T) {
 	if !sawAdmin {
 		t.Fatalf("the promoted member should be listed as admin: %+v", ms)
 	}
+
+	// ListServers carries the requesting user's own role (drives the moderation UI).
+	if sl, _ := store.ListServers(ctx, owner.ID); len(sl) == 0 || sl[0].Role != "owner" {
+		t.Fatalf("ListServers should report the owner's role: %+v", sl)
+	}
+	if sl, _ := store.ListServers(ctx, member.ID); len(sl) == 0 || sl[0].Role != "admin" {
+		t.Fatalf("ListServers should report the member's (promoted) role: %+v", sl)
+	}
 }
 
 func TestMessageModerationIntegration(t *testing.T) {

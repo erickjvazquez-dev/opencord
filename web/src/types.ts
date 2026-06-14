@@ -24,6 +24,8 @@ export interface Server {
   name: string
   ownerId: number
   createdAt: string
+  // The requesting user's role in this server ('owner'|'admin'|'member').
+  role?: string
 }
 
 // A server member with their role (owner | admin | member).

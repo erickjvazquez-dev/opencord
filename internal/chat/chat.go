@@ -55,12 +55,15 @@ type DMChannel struct {
 	User      DMUser    `json:"user"`
 }
 
-// Server is a guild grouping channels under a shared membership.
+// Server is a guild grouping channels under a shared membership. Role is the
+// requesting user's role in it ('owner'|'admin'|'member'), populated by the
+// per-user views (ListServers, CreateServer, RedeemInvite).
 type Server struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
 	OwnerID   int64     `json:"ownerId"`
 	CreatedAt time.Time `json:"createdAt"`
+	Role      string    `json:"role,omitempty"`
 }
 
 // ServerMember is a participant in a server with their role.
@@ -439,13 +442,14 @@ func (s *Store) CreateServer(ctx context.Context, ownerID int64, name string) (S
 	if err := tx.Commit(ctx); err != nil {
 		return Server{}, err
 	}
+	srv.Role = "owner"
 	return srv, nil
 }
 
 // ListServers returns the servers userID is a member of.
 func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT s.id, s.name, s.owner_id, s.created_at
+		`SELECT s.id, s.name, s.owner_id, s.created_at, m.role
 		   FROM servers s
 		   JOIN server_members m ON m.server_id = s.id AND m.user_id = $1
 		  ORDER BY s.id`, userID)
@@ -456,7 +460,7 @@ func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error)
 	out := make([]Server, 0)
 	for rows.Next() {
 		var srv Server
-		if err := rows.Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt); err != nil {
+		if err := rows.Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt, &srv.Role); err != nil {
 			return nil, err
 		}
 		out = append(out, srv)
@@ -648,6 +652,7 @@ func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Se
 	if err := s.AddServerMember(ctx, srv.ID, userID); err != nil {
 		return Server{}, err
 	}
+	srv.Role = "member"
 	return srv, nil
 }
 

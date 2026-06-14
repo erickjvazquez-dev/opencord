@@ -361,6 +361,14 @@ export function Chat({
   const activeChannelName = current?.name ?? activeServerChannel?.name
   const iAmServerOwner =
     membersOf?.members.find((x) => x.userId === user.id)?.role === 'owner'
+  // Moderation: in a server channel, an owner/admin may delete anyone's message.
+  const activeServerId = Object.keys(serverChannels).find((sid) =>
+    serverChannels[Number(sid)]?.some((c) => c.id === channelId),
+  )
+  const myActiveRole = activeServerId
+    ? servers.find((s) => s.id === Number(activeServerId))?.role
+    : undefined
+  const canModerate = myActiveRole === 'owner' || myActiveRole === 'admin'
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -615,10 +623,10 @@ export function Chat({
                   {!m.deleted && editingId !== m.id && (
                     <span className="msg-actions">
                       {m.userId === user.id && (
-                        <>
-                          <button onClick={() => startEdit(m)}>edit</button>
-                          <button onClick={() => remove(m)}>delete</button>
-                        </>
+                        <button onClick={() => startEdit(m)}>edit</button>
+                      )}
+                      {(m.userId === user.id || canModerate) && (
+                        <button onClick={() => remove(m)}>delete</button>
                       )}
                       <button onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}>
                         react
