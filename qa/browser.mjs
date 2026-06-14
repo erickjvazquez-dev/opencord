@@ -82,8 +82,8 @@ async function main() {
   check((await grouped.locator('.avatar').count()) === 0, 'grouped message hides the repeated avatar')
 
   // 3c — Markdown renders to safe elements; raw HTML is escaped (XSS guard, Rule B/15).
-  step('send a markdown + <script> message → bold/code render, script stays literal')
-  const md = '**bold** and `code` and <script>alert(1)</script>'
+  step('send a markdown + <script> + link message → bold/code/link render, script stays literal')
+  const md = '**bold** and `code` and <script>alert(1)</script> and http://example.com'
   await page.getByPlaceholder(/Message #/).fill(md)
   await page.getByRole('button', { name: 'Send' }).click()
   const mdMsg = page.locator('.message', { hasText: 'bold' }).last()
@@ -94,6 +94,12 @@ async function main() {
     'markdown **bold** renders as <strong>bold</strong>',
   )
   check(await mdMsg.locator('.body code').first().isVisible(), 'inline `code` renders as <code>')
+  const link = mdMsg.locator('.body a[href="http://example.com"]')
+  check(await link.isVisible(), 'a http(s) URL renders as a clickable link')
+  check(
+    (await link.getAttribute('rel'))?.includes('noopener') ?? false,
+    'autolink has rel="noopener noreferrer" (tab-nabbing safe)',
+  )
   check(
     await mdMsg.getByText('<script>alert(1)</script>').isVisible(),
     'raw <script> shows as literal text (escaped)',

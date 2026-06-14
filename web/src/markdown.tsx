@@ -34,7 +34,7 @@ type InlineRule = {
   re: RegExp
   el?: string | React.ComponentType<{ children?: ReactNode }>
   literal?: boolean
-  kind?: 'mention'
+  kind?: 'mention' | 'link'
 }
 
 // Order matters: inline code first (its content is literal), then spoiler, then
@@ -43,6 +43,8 @@ type InlineRule = {
 // e.g. `@x` inside `` `@x` `` stays literal (the code match starts earlier).
 const INLINE_RULES: InlineRule[] = [
   { re: /`([^`\n]+)`/, el: 'code', literal: true },
+  // Autolink only http(s):// — never javascript:/data:, so the href is always safe.
+  { re: /https?:\/\/[^\s<]+/, kind: 'link' },
   { re: /\|\|([^|\n]+)\|\|/, el: Spoiler },
   { re: /\*\*([^*\n]+)\*\*/, el: 'strong' },
   { re: /~~([^~\n]+)~~/, el: 'del' },
@@ -66,8 +68,24 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
   const out: ReactNode[] = []
   const before = text.slice(0, m.index)
   if (before) out.push(before)
+  let after = text.slice(m.index + m[0].length)
 
-  if (rule.kind === 'mention') {
+  if (rule.kind === 'link') {
+    // Don't swallow trailing punctuation that's clearly sentence text, e.g. "(see http://x.com)."
+    let url = m[0]
+    const trail = url.match(/[.,!?;:)\]]+$/)
+    if (trail) {
+      url = url.slice(0, -trail[0].length)
+      after = trail[0] + after
+    }
+    out.push(
+      React.createElement(
+        'a',
+        { key: `md${ctx.n++}`, href: url, target: '_blank', rel: 'noopener noreferrer' },
+        url,
+      ),
+    )
+  } else if (rule.kind === 'mention') {
     const name = m[1]
     const lower = name.toLowerCase()
     const isMe = !!ctx.me && lower === ctx.me.toLowerCase()
@@ -80,7 +98,7 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
     const children = rule.literal ? [m[1]] : renderInline(m[1], ctx)
     out.push(React.createElement(rule.el as string, { key: `md${ctx.n++}` }, ...children))
   }
-  out.push(...renderInline(text.slice(m.index + m[0].length), ctx))
+  out.push(...renderInline(after, ctx))
   return out
 }
 

@@ -391,3 +391,12 @@ follows, per the backend-first pattern).
   postPolicy backward-compat (204), topic echoed in the channel list. DATABASE_URL-gated.
 
 _UI shipped 2026-06-14 (iter 51): the header shows the topic (muted, divider, ellipsis) and admins get an "edit topic" prompt control; browser QA `07f-topic.png` + AI-vision verified._
+
+## Message link autolink (v0.3, 2026-06-14)
+
+`http(s)://` URLs in messages render as clickable `<a target="_blank" rel="noopener noreferrer">`
+(markdown.tsx, new `link` inline rule). XSS-safe by construction: only `https?://` is matched, so
+the href is never `javascript:`/`data:`; React escapes the attribute. Trailing sentence punctuation
+(`).,!?;:]`) is trimmed back to text so "(see http://x.com)." links cleanly. URLs inside inline code
+stay literal (code matches first). Verified via react-dom/server probe (basic/paren/xss/in-code) +
+browser QA (clickable link + rel=noopener assertions) + AI-vision.
