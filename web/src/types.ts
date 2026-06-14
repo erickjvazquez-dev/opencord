@@ -9,6 +9,8 @@ export interface Channel {
   createdAt: string
   // 'everyone' or 'admins' (read-only); present for server channels.
   postPolicy?: string
+  // Short channel description shown in the header; present for server channels.
+  topic?: string
 }
 
 // A direct-message channel as seen by one participant: the channel id plus the

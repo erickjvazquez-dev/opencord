@@ -17,6 +17,7 @@ import {
   removeReaction,
   searchMessages,
   setChannelPolicy,
+  setChannelTopic,
   setServerMemberRole,
 } from '../api'
 import type {
@@ -418,6 +419,25 @@ export function Chat({
     }
   }
 
+  // Admin edit: set the active server channel's topic (header description).
+  const editTopic = async () => {
+    if (!activeServerChannel || activeServerId == null) return
+    const sid = Number(activeServerId)
+    const next = window.prompt('Channel topic:', activeServerChannel.topic ?? '')
+    if (next === null) return // cancelled
+    try {
+      await setChannelTopic(token, activeServerChannel.id, next)
+      setServerChannels((cur) => ({
+        ...cur,
+        [sid]: (cur[sid] ?? []).map((c) =>
+          c.id === activeServerChannel.id ? { ...c, topic: next } : c,
+        ),
+      }))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not set topic')
+    }
+  }
+
   return (
     <div className={sidebarOpen ? 'app sidebar-open' : 'app'}>
       {sidebarOpen && (
@@ -528,10 +548,20 @@ export function Chat({
                 🔒 read-only
               </span>
             )}
+            {activeServerChannel?.topic && (
+              <span className="channel-topic" title={activeServerChannel.topic}>
+                {activeServerChannel.topic}
+              </span>
+            )}
           </div>
           {activeServerChannel && canModerate && (
             <button className="link readonly-toggle" onClick={() => void toggleReadOnly()}>
               {activeIsReadOnly ? 'allow everyone' : 'make read-only'}
+            </button>
+          )}
+          {activeServerChannel && canModerate && (
+            <button className="link topic-edit" onClick={() => void editTopic()}>
+              edit topic
             </button>
           )}
           <form className="search-form" onSubmit={runSearch}>

@@ -389,3 +389,5 @@ follows, per the backend-first pattern).
   → 400.
 - Tests: admin sets topic (204), non-admin (403), >1024 (400), empty patch (400),
   postPolicy backward-compat (204), topic echoed in the channel list. DATABASE_URL-gated.
+
+_UI shipped 2026-06-14 (iter 51): the header shows the topic (muted, divider, ellipsis) and admins get an "edit topic" prompt control; browser QA `07f-topic.png` + AI-vision verified._

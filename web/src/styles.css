@@ -647,6 +647,27 @@ button:disabled {
   white-space: nowrap;
 }
 
+.topic-edit {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Channel topic in the header: muted, divider, single-line with ellipsis. */
+.chat-header .channel-topic {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 400;
+  max-width: 42ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .search-results-head {
   display: flex;
   align-items: center;

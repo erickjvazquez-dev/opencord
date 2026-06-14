@@ -295,6 +295,17 @@ async function main() {
     'toggle flips to "allow everyone"',
   )
 
+  // 7f — Channel topic: the admin sets a topic via "edit topic"; it shows in the header.
+  step('admin sets a channel topic → it appears in the header')
+  promptAnswer = 'Welcome to the QA server channel'
+  await page.getByRole('button', { name: 'edit topic' }).click()
+  await page.locator('.channel-topic').waitFor({ timeout: 8000 })
+  await shot('07f-topic.png')
+  check(
+    (await page.locator('.channel-topic').textContent())?.includes('Welcome to the QA server channel') ?? false,
+    'channel topic appears in the header after editing',
+  )
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

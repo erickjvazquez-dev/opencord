@@ -142,6 +142,22 @@ export async function setChannelPolicy(
   }
 }
 
+export async function setChannelTopic(
+  token: string,
+  channelId: number,
+  topic: string,
+): Promise<void> {
+  const res = await fetch(`/api/channels/${channelId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ topic }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not set channel topic')
+  }
+}
+
 export async function searchMessages(
   token: string,
   channelId: number,
