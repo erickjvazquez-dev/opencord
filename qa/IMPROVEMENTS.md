@@ -3,7 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 41) — Markdown rendering (a feature tick) + the first real-app QA this session
+## 2026-06-14 (iter 42) — Closed the iter-39 edit/reaction HTTP gap; caught a self-made phantom gap
+
+Two things this tick. (1) Closed a *real* logged gap: the message **edit** and **reaction** REST
+endpoints had no HTTP-layer test despite carrying authz — added cases to `router_integration_test.go`
+(edit author-only → 404 for others; empty body 400; reactions channel-access gated → non-member 403;
+invalid emoji 400; add/remove 200). (2) The item I'd queued as "next" — *add a web CI job* — turned
+out to be **already done**: `ci.yml` has gated `web (typecheck · build)` since the first CI commit.
+
+Reflections:
+- **A "gap" found by a partial grep is not a gap — verify against the whole source before logging
+  it.** Last tick I grepped `ci.yml` for `DATABASE_URL|go test|postgres`, saw only the server job,
+  and declared the web ungated. Reading the full file this tick showed a `web` job that passes every
+  run. **Rule: confirm a missing-thing claim by reading the file / `git show HEAD:<file>` and the
+  live CI job list, not by a keyword search that can miss a sibling block.** Cheaper than a tick spent
+  "fixing" what exists. (Corrected the false note in the iter-41 entry above.)
+- **Honesty over tidiness:** struck the wrong claim in place rather than deleting it, so the loop's
+  record shows what it learned, not a clean rewrite.
+- **Next real gaps (verified by reading, not grepping):** message edit/reaction over **WS** (not just
+  REST); finishing Markdown (blockquote/spoiler, still `[~]` in GOAL); a new parity feature
+  (mentions / pinned messages) for a Track-2 tick.
+
+
 
 After two backend test-coverage ticks, advanced the *product*: a Discord-like Markdown
 subset in messages (**bold**, *italic*, ~~strike~~, `inline`/```fenced``` code). Built it
@@ -13,11 +34,11 @@ stack** for the first time this session and reviewed `03c-markdown.png` by eye: 
 render, the `<script>` is escaped. browser + realtime QA both green.
 
 Reflections:
-- **CI does not build/typecheck the web client — a real coverage gap.** `ci.yml` only runs
-  the Go job; a TypeScript error or web regression would NOT fail CI (I caught my build
-  locally via `npm run build`, but CI wouldn't have). **Next tick's highest-value item: add a
-  `web` job to `ci.yml`** (`npm ci && npm run build`) so the frontend is gated like the
-  backend. Logged as the next QA-process improvement.
+- **CI does not build/typecheck the web client — a real coverage gap.** ~~`ci.yml` only runs
+  the Go job…~~ **[CORRECTED iter 42 — this was WRONG.]** `ci.yml` has had a `web (typecheck ·
+  build)` job (`npm ci && npm run build`) since the first CI commit (`aca1f80`), and it passes
+  every run. I concluded "no web job" from a partial `grep` that only matched the server job's
+  lines instead of reading the whole file. The frontend IS gated. See iter 42's lesson.
 - **Rendering user content is an attack surface — pick a structurally-safe design, not a
   filter.** Returning React elements (no `dangerouslySetInnerHTML`) means there's no HTML sink
   to sanitize and no blocklist to keep current; the safety is in the shape of the code. Prefer
