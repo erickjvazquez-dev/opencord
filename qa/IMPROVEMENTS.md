@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 29) — Mobile-responsive layout; a transition-vs-screenshot QA lesson
+
+First v0.3 item: at ≤640px the sidebar collapses into an off-canvas drawer behind a
+header `☰` toggle, the chat goes full-width, a backdrop dims it, and selecting a channel
+closes it (`selectChannel` helper). Pure CSS media query + a little drawer state — no
+data/access changes. Verified E2E (toggle opens/closes the drawer) + by eye (`08-mobile-
+closed` full-width chat; `08-mobile-open` drawer over a dimmed chat).
+
+**QA lesson — screenshots can catch an animation mid-flight.** The first mobile shots
+looked broken: "closed" showed the sidebar half-on, "open" showed it half-off. Not a CSS
+bug — the 0.2s slide `transition` was still animating when the screenshot fired (the QA
+resizes desktop→mobile mid-session, which animates the transform; a real mobile load
+renders hidden from the start, no flash). Fix: `waitForTimeout(350)` to let the transition
+settle before the shot. Lesson: **when vision-checking anything with a CSS transition,
+wait for it to settle first**, or the artifact lies. Don't "fix" a transition artifact by
+changing correct CSS.
+
+Reflections:
+- **The AI-vision pass earned its keep again** — the assertions were green (the drawer
+  *did* open/close), but only the screenshot revealed the mid-transition capture. A
+  text/DOM-only QA would have shipped misleading artifacts.
+- **Close-on-select via one helper:** routing all three sidebar lists' clicks through
+  `selectChannel(id)` (set channel + close drawer) kept the mobile behaviour in one place
+  instead of sprinkling `setSidebarOpen(false)` across handlers.
+- **Next:** the two-client server flow (still pending from iter 28) and a mobile
+  vision-check of the *open DM/serverlist* drawer states, not just channels.
+
 ## 2026-06-13 (iter 28) — Servers UI: a sidebar accordion over the existing chat machinery
 
 Shipped the servers UI: a "Servers" sidebar section listing each server (name + id badge)

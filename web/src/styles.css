@@ -538,3 +538,67 @@ button:disabled {
 .composer input {
   flex: 1;
 }
+
+/* Mobile menu toggle + drawer backdrop — hidden on desktop, shown ≤640px. */
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 10px 4px 0;
+  cursor: pointer;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Sidebar becomes an off-canvas drawer that slides in over the chat. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 20;
+    width: 80vw;
+    max-width: 300px;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .app.sidebar-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5);
+  }
+
+  .app.sidebar-open .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  /* The chat takes the full width (the sidebar is out of flow). */
+  .chat {
+    width: 100%;
+  }
+
+  /* Keep the header readable on a narrow screen. */
+  .chat-header {
+    padding: 12px 14px;
+  }
+
+  .meta {
+    font-size: 12px;
+    gap: 8px;
+  }
+}

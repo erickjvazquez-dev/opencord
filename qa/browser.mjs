@@ -157,6 +157,25 @@ async function main() {
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
+  // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
+  // menu toggle, and selecting a channel closes it.
+  step('shrink to a phone viewport → sidebar becomes a drawer')
+  await page.setViewportSize({ width: 390, height: 780 })
+  await page.waitForTimeout(350) // let the drawer's slide transition settle
+  check(await page.getByRole('button', { name: 'menu' }).isVisible(), 'menu toggle appears on mobile')
+  await shot('08-mobile-closed.png')
+  await page.getByRole('button', { name: 'menu' }).click()
+  await page.locator('.app.sidebar-open').waitFor({ timeout: 4000 })
+  await page.waitForTimeout(350) // let the drawer finish sliding in
+  await shot('08-mobile-open.png')
+  check((await page.locator('.app.sidebar-open').count()) === 1, 'menu toggle opens the drawer')
+  await page.getByRole('button', { name: /general/ }).click()
+  await page.locator('.app:not(.sidebar-open)').waitFor({ timeout: 4000 })
+  check(
+    (await page.locator('.app.sidebar-open').count()) === 0,
+    'selecting a channel closes the drawer',
+  )
+
   await browser.close()
   console.log(
     `\nbrowser QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

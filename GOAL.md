@@ -38,7 +38,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [ ] Invites + membership management
 - [ ] Search
 - [x] Message grouping (collapse consecutive same-author messages within 5 min) — flagged then closed by browser AI-vision QA 2026-06-13
-- [ ] Mobile-responsive layout
+- [x] Mobile-responsive layout — sidebar collapses into an off-canvas drawer behind a header menu toggle (≤640px); chat goes full-width; backdrop + close-on-select (E2E + vision verified)
 
 ## Later
 

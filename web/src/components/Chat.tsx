@@ -72,6 +72,8 @@ export function Chat({
   // broadcast is count-only (mine=false), so we own this locally; seeded from history.
   const [myReactions, setMyReactions] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<number | null>(null)
+  // Mobile: the sidebar is an off-canvas drawer toggled by the header menu button.
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -309,8 +311,17 @@ export function Chat({
     .find((c) => c.id === channelId)
   const activeChannelName = current?.name ?? activeServerChannel?.name
 
+  // Pick a channel and (on mobile) close the drawer so the chat is visible.
+  const selectChannel = (id: number) => {
+    setChannelId(id)
+    setSidebarOpen(false)
+  }
+
   return (
-    <div className="app">
+    <div className={sidebarOpen ? 'app sidebar-open' : 'app'}>
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden />
+      )}
       <aside className="sidebar">
         <div className="sidebar-head">Channels</div>
         <nav className="channel-list">
@@ -318,7 +329,7 @@ export function Chat({
             <button
               key={c.id}
               className={c.id === channelId ? 'channel-item active' : 'channel-item'}
-              onClick={() => setChannelId(c.id)}
+              onClick={() => selectChannel(c.id)}
             >
               <span className="hash">#</span>
               {c.name}
@@ -335,7 +346,7 @@ export function Chat({
             <button
               key={d.id}
               className={d.id === channelId ? 'channel-item active' : 'channel-item'}
-              onClick={() => setChannelId(d.id)}
+              onClick={() => selectChannel(d.id)}
             >
               <span
                 className="dm-avatar"
@@ -367,7 +378,7 @@ export function Chat({
                       ? 'channel-item server-channel active'
                       : 'channel-item server-channel'
                   }
-                  onClick={() => setChannelId(c.id)}
+                  onClick={() => selectChannel(c.id)}
                 >
                   <span className="hash">#</span>
                   {c.name}
@@ -391,6 +402,13 @@ export function Chat({
 
       <div className="chat">
         <header className="chat-header">
+          <button
+            className="menu-toggle"
+            aria-label="menu"
+            onClick={() => setSidebarOpen((o) => !o)}
+          >
+            ☰
+          </button>
           <div className="brand">
             Opencord{' '}
             <span className="channel">

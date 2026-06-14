@@ -15,8 +15,9 @@ run one command, and you have your own real-time chat server.
 > channels under a members-only server) · **direct messages** (private, members-only) ·
 > live messaging with **edit & delete** (owner-only) · **emoji reactions** (live
 > counts) · **grouped messages** (consecutive same-author) · **typing indicators** ·
-> online presence · **initials avatars** · per-connection **rate limiting** ·
-> one-command Docker stack · CI with a Postgres service running DB integration tests.
+> online presence · **initials avatars** · **mobile-responsive** (sidebar drawer) ·
+> per-connection **rate limiting** · one-command Docker stack · CI with a Postgres
+> service running DB integration tests.
 
 ---
 
