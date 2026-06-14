@@ -341,3 +341,18 @@ costs a token) had emptied under the bot's rapid sends. The product is correct (
 working, renderer proven via react-dom/server); the QA now paces (waits for the bucket to
 refill) before the send. Lesson: an automated client sends faster than a human and can trip
 real abuse limits — pace the QA, don't weaken the limit.
+
+## @mentions — rendering slice (v0.3, 2026-06-14)
+
+First mention slice (client-only, builds on the Markdown renderer). `markdown.tsx` gains an
+inline `@([A-Za-z0-9_]{2,32})` rule emitting `<span class="mention">`; `renderMarkdown(text,
+{ me })` highlights a mention of the **current user** with an extra `mention-me` class (amber)
+vs the regular accent chip. Both `Chat.tsx` render sites pass `{ me: user.username }`. CSS for
+`.mention` / `.mention-me`. Still React-elements-only (XSS-safe).
+
+**Scope/limits (logged, not hidden):** rendering only — no autocomplete, no resolution against
+real users, no notifications, no @role/@everyone/@here, no replies/threads. Known quirk: an
+email like `foo@bar` renders `@bar` as a mention (no left-boundary check); acceptable for the
+MVP slice. **Verification:** browser QA sends `hey @<self> and @someone_else`, asserts the
+self-mention gets `mention-me` and the other a plain `mention`; AI-vision of `03f-mention.png`
+confirms the amber vs accent styling. Renderer also proven via react-dom/server.

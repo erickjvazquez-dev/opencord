@@ -152,6 +152,21 @@ async function main() {
   )
   await shot('03e-spoiler-shown.png')
 
+  // 3f — @mention: a mention of yourself is highlighted distinctly from others.
+  step('send a message mentioning self + another → self-mention is highlighted')
+  await page.waitForTimeout(3000) // let the rate-limit bucket refill before this send
+  await composer.click()
+  await composer.fill(`hey @${user} and @someone_else`)
+  await composer.press('Enter')
+  const mineMention = page.locator('.message .body .mention.mention-me', { hasText: `@${user}` }).last()
+  await mineMention.waitFor({ timeout: 8000 })
+  await shot('03f-mention.png')
+  check(await mineMention.isVisible(), 'a mention of yourself renders with the mention-me style')
+  const otherMention = page
+    .locator('.message .body .mention:not(.mention-me)', { hasText: '@someone_else' })
+    .last()
+  check(await otherMention.isVisible(), 'a mention of someone else renders as a plain mention')
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).

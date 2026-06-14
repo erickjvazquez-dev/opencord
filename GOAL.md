@@ -79,7 +79,9 @@ item from here as the structural milestones above land.
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   and `||spoilers||` (click to reveal); XSS-safe (React elements, no innerHTML);
   E2E + AI-vision verified.
-- [ ] Mentions @user/@role/@everyone/@here (+ notifications) · replies · threads
+- [~] Mentions — `@user` rendered as a chip, your own mention highlighted distinctly
+  (E2E + AI-vision verified). (@role/@everyone/@here, autocomplete, notifications,
+  replies, threads still TODO)
 - [ ] File / image / video attachments · link embeds + previews
 - [ ] Pinned + bookmarked messages · read state / unread / mention badges
 - [ ] Message search (from/in/has/before/after) · polls · timestamp grouping

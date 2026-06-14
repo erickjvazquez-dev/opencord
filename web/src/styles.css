@@ -439,6 +439,18 @@ button:disabled {
   cursor: default;
   user-select: text;
 }
+.message .body .mention {
+  color: var(--accent, #5865f2);
+  background: rgba(88, 101, 242, 0.12);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-weight: 600;
+}
+/* A mention of the current user stands out so they notice it. */
+.message .body .mention.mention-me {
+  color: #d9a200;
+  background: rgba(217, 162, 0, 0.18);
+}
 
 .edited {
   font-size: 11px;

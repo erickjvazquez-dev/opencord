@@ -615,7 +615,7 @@ export function Chat({
                       <span className="author">{m.username}</span>
                       <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
                     </div>
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body)}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}</div>
                   </div>
                 </div>
               ))}
@@ -687,7 +687,7 @@ export function Chat({
                       </button>
                     </div>
                   ) : (
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body)}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}</div>
                   )}
                   {pickerFor === m.id && !m.deleted && (
                     <div className="emoji-picker">
