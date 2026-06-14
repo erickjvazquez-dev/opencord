@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 51) — Channel-topic UI; completed the two-tick vertical slice
+
+Shipped the frontend half from last tick: the header shows a server channel's topic and admins
+get an "edit topic" control. Channel topics is now a complete, E2E-verified feature.
+
+Reflections:
+- **Backend-first, then UI in the next tick, is a clean way to size risk in a long session.** The
+  backend slice (iter 50) was pure data + a tested endpoint; this tick was a contained UI change
+  against an already-proven API. Each half was small and independently verifiable — better than one
+  big cross-layer change deep in a long context.
+- **Reused the project's own UI patterns instead of inventing.** The "edit topic" admin control mirrors
+  the existing read-only toggle (same `canModerate` gate, same optimistic `setServerChannels` update,
+  same `window.prompt` affordance as channel creation). Matching local conventions kept the diff tiny
+  and the QA wiring trivial (the harness already drives prompts via `promptAnswer`).
+- **The QA harness's existing seams made the new test almost free:** set `promptAnswer`, click, assert
+  `.channel-topic`. Investments in test infrastructure compound — the Nth UI feature costs almost no
+  incremental QA effort.
+
 ## 2026-06-14 (iter 50) — Channel topics (backend slice); a schema change done safely
 
 Shipped a real parity item's backend: server channels get a `topic` (admin-set, ≤1024 chars,
