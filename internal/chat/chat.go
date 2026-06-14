@@ -5,6 +5,8 @@ package chat
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -30,6 +32,8 @@ var (
 	ErrForbidden = errors.New("forbidden")
 	// ErrServerNotFound is returned for an unknown server id.
 	ErrServerNotFound = errors.New("server not found")
+	// ErrInvalidInvite is returned when an invite code doesn't exist.
+	ErrInvalidInvite = errors.New("invalid invite code")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
@@ -488,6 +492,58 @@ func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Chann
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// inviteCode returns 8 url-safe random characters (6 bytes of crypto/rand).
+func inviteCode() (string, error) {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// CreateInvite mints a unique invite code for serverID created by userID. The
+// caller must verify membership. Retries on the (astronomically rare) collision.
+func (s *Store) CreateInvite(ctx context.Context, serverID, userID int64) (string, error) {
+	for attempt := 0; attempt < 5; attempt++ {
+		code, err := inviteCode()
+		if err != nil {
+			return "", err
+		}
+		_, err = s.pool.Exec(ctx,
+			`INSERT INTO server_invites (code, server_id, created_by) VALUES ($1, $2, $3)`,
+			code, serverID, userID)
+		if err == nil {
+			return code, nil
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // code collision — try again
+			continue
+		}
+		return "", err
+	}
+	return "", errors.New("could not allocate a unique invite code")
+}
+
+// RedeemInvite joins userID to the server the code belongs to and returns that
+// server. ErrInvalidInvite if the code is unknown.
+func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Server, error) {
+	var srv Server
+	err := s.pool.QueryRow(ctx,
+		`SELECT s.id, s.name, s.owner_id, s.created_at
+		   FROM server_invites i JOIN servers s ON s.id = i.server_id
+		  WHERE i.code = $1`, code).Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Server{}, ErrInvalidInvite
+	}
+	if err != nil {
+		return Server{}, err
+	}
+	if err := s.AddServerMember(ctx, srv.ID, userID); err != nil {
+		return Server{}, err
+	}
+	return srv, nil
 }
 
 // Recent returns up to limit messages from the given channel in chronological

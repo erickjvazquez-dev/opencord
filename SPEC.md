@@ -186,3 +186,35 @@ history, already gated by `CanAccessChannel`) and the server-channel endpoints a
 **Tests (DB integration):** create server → owner is a member; create a channel under it;
 member can access, non-member cannot; ListServers/ListServerChannels; global ListChannels
 excludes server channels; join makes a non-member able to access.
+
+## Server invites (v0.3, 2026-06-13) — closes the open-join gap
+
+The first servers slice shipped `POST /api/servers/{id}/join`, which let ANY authenticated
+user join ANY server by guessing its (sequential) id — so "members-only" servers weren't
+actually private. Replace open join-by-id with **invite codes**: joining requires a valid,
+unguessable code created by a member.
+
+**Schema (idempotent):**
+- `server_invites (code TEXT PRIMARY KEY, server_id → servers ON DELETE CASCADE,
+  created_by → users, created_at)`. Code = 8 url-safe chars from crypto/rand (6 bytes).
+
+**Store:**
+- `CreateInvite(serverID, userID)` → generate a unique code, insert, return it (retries on
+  the astronomically-rare PK collision).
+- `RedeemInvite(code, userID)` → look up the invite's server, add the user as a member,
+  return the Server; `ErrInvalidInvite` for an unknown code.
+
+**REST (auth-gated):**
+- `POST /api/servers/{id}/invites` (members only → 403) → `{code}`.
+- `POST /api/invites/{code}` → join the invite's server; returns the Server; 404 on bad code.
+- **Removed:** `POST /api/servers/{id}/join` (the open gap).
+
+**Access control (Rule 15):** a non-member can no longer join by id — only a valid invite
+code admits them; an invalid/guessed code → 404; a non-member can't mint an invite (403).
+Reproduced + re-attacked at the store and live-HTTP layers; integration test guards it.
+
+**UI:** each server gets an "invite" action (creates a code, shows it to copy); "Join
+server" now prompts for a CODE (not an id) and redeems it.
+
+**Tests (DB integration):** create invite → redeem makes a non-member a member with access;
+invalid code → ErrInvalidInvite; the redeemed server is returned.

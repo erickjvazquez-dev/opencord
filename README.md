@@ -86,7 +86,8 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/dms`                     | bearer | Open/get a DM with `{username}`                |
 | `GET`    | `/api/servers`                 | bearer | List servers you belong to                     |
 | `POST`   | `/api/servers`                 | bearer | Create a server `{name}` (you auto-join)       |
-| `POST`   | `/api/servers/{id}/join`       | bearer | Join a server                                  |
+| `POST`   | `/api/servers/{id}/invites`    | bearer | Mint an invite code (members only) → `{code}`  |
+| `POST`   | `/api/invites/{code}`          | bearer | Redeem an invite → join the server             |
 | `GET`    | `/api/servers/{id}/channels`   | bearer | A server's channels (members only)             |
 | `POST`   | `/api/servers/{id}/channels`   | bearer | Create a channel in a server (members only)    |
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |

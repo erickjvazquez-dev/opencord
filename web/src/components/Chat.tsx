@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   addReaction,
   createChannel,
+  createInvite,
   createServer,
   createServerChannel,
   deleteMessage,
@@ -10,8 +11,8 @@ import {
   fetchDMs,
   fetchServerChannels,
   fetchServers,
-  joinServer,
   openDM,
+  redeemInvite,
   removeReaction,
 } from '../api'
 import type { Channel, DMChannel, Message, Reaction, Server, ServerEvent, User } from '../types'
@@ -218,14 +219,24 @@ export function Chat({
   }
 
   const joinServerPrompt = async () => {
-    const raw = window.prompt('Join which server? (server id)')?.trim()
-    const id = Number(raw)
-    if (!raw || !Number.isInteger(id) || id <= 0) return
+    const code = window.prompt('Join a server — paste an invite code:')?.trim()
+    if (!code) return
     try {
-      await joinServer(token, id)
+      const srv = await redeemInvite(token, code)
       await refreshServers()
+      const chans = await fetchServerChannels(token, srv.id).catch(() => [])
+      if (chans[0]) setChannelId(chans[0].id)
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'could not join server')
+      window.alert(err instanceof Error ? err.message : 'could not redeem invite')
+    }
+  }
+
+  const inviteToServer = async (serverId: number) => {
+    try {
+      const code = await createInvite(token, serverId)
+      window.prompt('Invite code (share it so others can join):', code)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not create invite')
     }
   }
 
@@ -384,9 +395,14 @@ export function Chat({
                   {c.name}
                 </button>
               ))}
-              <button className="server-add-channel" onClick={() => void addServerChannel(s.id)}>
-                + channel
-              </button>
+              <div className="server-group-actions">
+                <button className="server-add-channel" onClick={() => void addServerChannel(s.id)}>
+                  + channel
+                </button>
+                <button className="server-add-channel" onClick={() => void inviteToServer(s.id)}>
+                  invite
+                </button>
+              </div>
             </div>
           ))}
         </nav>

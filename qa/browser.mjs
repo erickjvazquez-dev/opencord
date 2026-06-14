@@ -31,7 +31,11 @@ async function main() {
   // Auto-answer window.prompt with whatever the current step expects, and accept
   // window.confirm (delete). Set `promptAnswer` before an action that prompts.
   let promptAnswer = chanName
-  page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? promptAnswer : undefined))
+  let lastPromptDefault = '' // capture a prompt's pre-filled value (e.g. an invite code)
+  page.on('dialog', (d) => {
+    if (d.type() === 'prompt') lastPromptDefault = d.defaultValue()
+    d.accept(d.type() === 'prompt' ? promptAnswer : undefined)
+  })
   const shot = (name) => page.screenshot({ path: join(SHOTS, name) })
 
   // 1 — Auth screen + register.
@@ -156,6 +160,17 @@ async function main() {
   await page.getByText(srvBody).waitFor({ timeout: 8000 })
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
+
+  // 7b — Invite: the invite button mints a code (shown in a prompt to copy).
+  step('click invite → a server invite code is generated')
+  lastPromptDefault = ''
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: 'invite' })
+    .click()
+  // createInvite is async, so the prompt fires after a round-trip — poll for it.
+  for (let i = 0; i < 50 && lastPromptDefault.length < 6; i++) await page.waitForTimeout(100)
+  check(lastPromptDefault.length >= 6, 'invite button produces a shareable code')
 
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.

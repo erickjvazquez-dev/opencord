@@ -58,15 +58,24 @@ export async function createServer(token: string, name: string): Promise<Server>
   return data as Server
 }
 
-export async function joinServer(token: string, serverId: number): Promise<void> {
-  const res = await fetch(`/api/servers/${serverId}/join`, {
+export async function createInvite(token: string, serverId: number): Promise<string> {
+  const res = await fetch(`/api/servers/${serverId}/invites`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok && res.status !== 204) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error((data as { error?: string }).error || 'could not join server')
-  }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create invite')
+  return (data as { code: string }).code
+}
+
+export async function redeemInvite(token: string, code: string): Promise<Server> {
+  const res = await fetch(`/api/invites/${encodeURIComponent(code)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not redeem invite')
+  return data as Server
 }
 
 export async function fetchServerChannels(token: string, serverId: number): Promise<Channel[]> {

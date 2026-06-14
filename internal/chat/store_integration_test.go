@@ -461,6 +461,47 @@ func TestServersIntegration(t *testing.T) {
 	}
 }
 
+func TestServerInvitesIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	outsider := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Invite Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, _ := store.CreateServerChannel(ctx, srv.ID, "general")
+
+	// Before redeeming, the outsider cannot access the server's channel.
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, outsider.ID); ok {
+		t.Fatal("outsider should not access the server channel before redeeming an invite")
+	}
+
+	// A member mints an invite code.
+	code, err := store.CreateInvite(ctx, srv.ID, owner.ID)
+	if err != nil || len(code) < 6 {
+		t.Fatalf("create invite: code=%q err=%v", code, err)
+	}
+
+	// An unknown code is rejected — you can't join by guessing.
+	if _, err := store.RedeemInvite(ctx, "not-a-real-code", outsider.ID); !errors.Is(err, chat.ErrInvalidInvite) {
+		t.Fatalf("redeem bad code err = %v, want ErrInvalidInvite", err)
+	}
+
+	// Redeeming the real code joins the outsider, who can then access the channel.
+	joined, err := store.RedeemInvite(ctx, code, outsider.ID)
+	if err != nil || joined.ID != srv.ID {
+		t.Fatalf("redeem: server=%+v err=%v (want id %d)", joined, err, srv.ID)
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, outsider.ID); !ok {
+		t.Fatal("after redeeming the invite, the outsider should access the server channel")
+	}
+	// Redeeming again is idempotent (membership insert is ON CONFLICT DO NOTHING).
+	if _, err := store.RedeemInvite(ctx, code, outsider.ID); err != nil {
+		t.Fatalf("re-redeem should be idempotent: %v", err)
+	}
+}
+
 func hasServer(servers []chat.Server, id int64) bool {
 	for _, s := range servers {
 		if s.ID == id {

@@ -242,6 +242,11 @@ button:disabled {
   text-decoration: underline;
 }
 
+.server-group-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .server-actions {
   display: flex;
   gap: 6px;

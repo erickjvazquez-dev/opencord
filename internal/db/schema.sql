@@ -93,3 +93,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
     ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
     ON channels (server_id, name) WHERE server_id IS NOT NULL;
+
+-- Server invites (v0.3): joining a server requires a valid, unguessable code created
+-- by a member — replaces the original open join-by-id.
+CREATE TABLE IF NOT EXISTS server_invites (
+    code       TEXT PRIMARY KEY,
+    server_id  BIGINT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS server_invites_server_id_idx ON server_invites (server_id);

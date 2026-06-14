@@ -233,21 +233,25 @@ func mountServerRoutes(r chi.Router, store *chat.Store) {
 		}
 		writeJSON(w, http.StatusCreated, srv)
 	})
-	r.Post("/servers/{id}/join", func(w http.ResponseWriter, r *http.Request) {
+	// Mint an invite code for a server (members only). Joining is invite-only — the
+	// old open POST /servers/{id}/join (anyone could join by guessing the id) is gone.
+	r.Post("/servers/{id}/invites", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
 		id, err := serverIDParam(r)
 		if err != nil {
 			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
 			return
 		}
-		switch err := store.AddServerMember(r.Context(), id, me.ID); {
-		case errors.Is(err, chat.ErrServerNotFound):
-			http.Error(w, `{"error":"server not found"}`, http.StatusNotFound)
-		case err != nil:
-			http.Error(w, `{"error":"could not join server"}`, http.StatusInternalServerError)
-		default:
-			w.WriteHeader(http.StatusNoContent)
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
 		}
+		code, err := store.CreateInvite(r.Context(), id, me.ID)
+		if err != nil {
+			http.Error(w, `{"error":"could not create invite"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"code": code})
 	})
 	r.Get("/servers/{id}/channels", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
@@ -299,5 +303,19 @@ func mountServerRoutes(r chi.Router, store *chat.Store) {
 			return
 		}
 		writeJSON(w, http.StatusCreated, c)
+	})
+	// Redeem an invite code → join its server (the only way to join). 404 on a bad code.
+	r.Post("/invites/{code}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		srv, err := store.RedeemInvite(r.Context(), chi.URLParam(r, "code"), me.ID)
+		if errors.Is(err, chat.ErrInvalidInvite) {
+			http.Error(w, `{"error":"invalid invite code"}`, http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"could not redeem invite"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, srv)
 	})
 }

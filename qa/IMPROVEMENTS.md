@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 30) — Server invites: a feature that closes a gap I shipped
+
+The first servers slice (iter 27) shipped an **open** `POST /servers/{id}/join` — anyone
+could join any server by guessing its sequential id, defeating the members-only access
+control. Replaced it with **invite codes**: a member mints an unguessable 8-char code
+(crypto/rand), redeeming it admits you; the open join endpoint is gone. Full Rule-15
+cycle, all live-verified: old join → 404 (gap closed), non-member read → 403, non-member
+mint → 403, bogus code → 404, real code → 200 then read → 200. Plus a store integration
+test and a browser-QA invite-button check.
+
+Reflections:
+- **A feature can be the fix for a gap you shipped.** The "members-only" servers weren't
+  actually private until joining was gated. When you add access control, audit *every*
+  way in — I gated reads/WS but left an open join door for three ticks. New private
+  resources need a "how does someone get IN, and is THAT gated?" check, not just "can an
+  outsider read it?".
+- **QA pattern — capturing a prompt's value:** the invite code is shown via
+  `window.prompt(msg, code)`. To assert it in browser QA, the dialog handler records
+  `d.defaultValue()` into a node var, and the test polls it (the prompt fires after an
+  async round-trip, so a poll, not a bare check). Reusable for any "we showed the user a
+  generated value" flow.
+- **Still pending (now 3 ticks):** the two-client server flow (A invites → B redeems →
+  B chats live) — the realtime analogue of today's single-client + HTTP checks.
+
 ## 2026-06-13 (iter 29) — Mobile-responsive layout; a transition-vs-screenshot QA lesson
 
 First v0.3 item: at ≤640px the sidebar collapses into an off-canvas drawer behind a
