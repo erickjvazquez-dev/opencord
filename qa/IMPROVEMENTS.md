@@ -3,6 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 23) — Guard the grouping *break* cases (the likely regression site)
+
+Last tick shipped grouping with a single "it groups" assertion. The more likely
+regression is the *inverse* — grouping failing to BREAK — so this tick added both
+break cases: (a) browser QA, after deleting the message above a grouped follow-up,
+asserts the follow-up un-groups and its avatar returns; (b) realtime QA, B replies
+after A and asserts a different author is NOT grouped (keeps its avatar). No product
+code changed — pure Track-0 coverage.
+
+Reflections:
+- **One screenshot proved every rule at once** (`rt-01b-different-authors.png`): a
+  `[deleted]` row, a same-author message that un-grouped *because the row above it was
+  deleted*, then two different-author rows — i.e. the exact same "second line" body that
+  GROUPS in the single-client test correctly UN-groups here under different context. That
+  is the strongest kind of QA evidence: the same code, opposite-but-correct outcomes.
+- **Test the inverse of every new conditional.** A feature that hides UI under a
+  condition needs a test that the UI *returns* when the condition flips — assert both
+  edges, not just the one you built toward.
+- **Next QA growth (still open from iter 21):** per-channel isolation across two clients
+  — A in #general, B in a second channel; a message in one must NOT appear in the other.
+
 ## 2026-06-13 (iter 22) — Closed the message-grouping P1 the loop's own QA raised
 
 The loop's AI-vision QA flagged (iter ~19) that consecutive same-author messages

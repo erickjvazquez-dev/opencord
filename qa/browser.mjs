@@ -119,6 +119,15 @@ async function main() {
   await shot('06-deleted.png')
   check(await page.getByText('[deleted]').first().isVisible(), 'deleted message renders [deleted]')
 
+  // 6b — Inverse of grouping: deleting the message above a grouped follow-up must
+  // break the run, so the follow-up un-groups and its avatar returns.
+  const follow = page.locator('.message', { hasText: 'second line, same author' }).first()
+  await follow.locator('.avatar').waitFor({ timeout: 8000 })
+  check(
+    (await follow.locator('.avatar').count()) === 1,
+    'follow-up un-groups (avatar returns) when the message above it is deleted',
+  )
+
   await browser.close()
   console.log(
     `\nbrowser QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

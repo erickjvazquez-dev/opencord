@@ -65,6 +65,21 @@ async function main() {
   await b.screenshot({ path: join(SHOTS, 'rt-01-b-sees-message.png') })
   check(await b.getByText(body).isVisible(), "B receives A's message in real time")
 
+  // 1b — B replies: a DIFFERENT author must NOT group under A (the inverse of the
+  // same-author grouping rule) — B's message keeps its own avatar.
+  const reply = 'reply from B ' + sfx
+  step('B replies → different author is not grouped (avatar shown for both)')
+  await b.getByPlaceholder(/Message #/).fill(reply)
+  await b.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(reply).waitFor({ timeout: 8000 })
+  const aReply = a.locator('.message', { hasText: reply }).first()
+  await a.screenshot({ path: join(SHOTS, 'rt-01b-different-authors.png') })
+  check((await aReply.locator('.avatar').count()) === 1, "B's reply (different author) shows its avatar")
+  check(
+    !(await aReply.evaluate((el) => el.classList.contains('grouped'))),
+    "B's reply is not grouped under A",
+  )
+
   const aMsg = a.locator('.message', { hasText: body }).first()
   const bMsg = b.locator('.message', { hasText: body }).first()
 
