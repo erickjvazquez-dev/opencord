@@ -3,6 +3,22 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 55) — Pins list endpoint; correctness over the cheap in-memory filter
+
+Added `GET /messages/pins` so a future pins panel sees ALL pins, not just those among the loaded
+last-50 messages. Backend slice (panel UI next).
+
+Reflections:
+- **Resisted the cheap-but-wrong shortcut.** A pins panel could just filter the in-memory `messages`
+  (`m.pinned`), which needs no backend — but it would silently miss any pin older than the loaded
+  window. Spent the extra ~30 lines on a dedicated query/endpoint so the feature is *correct*, and
+  logged the reasoning. "It mostly works for recent data" is a bug waiting to confuse someone.
+- **New read endpoints are nearly free when you mirror the existing one.** `HandlePins` is `HandleRecent`
+  with a different store call — same `ChannelIDFromQuery`, same `CanAccessChannel` gate, same shape —
+  so the access-control story is identical and obviously-correct, and the test is a near-copy.
+- **Still backend-first** at iter 55 to keep long-context risk low; the panel UI (reusing the existing
+  search-results-panel pattern) is the next clean tick.
+
 ## 2026-06-14 (iter 54) — Pin UI; mirrored the server authz rule in the client gate
 
 Completed pinned messages: pin/unpin hover action, 📌 badge, live `message-pinned` WS handler.
