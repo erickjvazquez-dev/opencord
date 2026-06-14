@@ -552,6 +552,61 @@ func TestSearchMessagesIntegration(t *testing.T) {
 	}
 }
 
+func TestServerRolesIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Role Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	// Roles after creation/join: creator=owner, joiner=member.
+	if role, _ := store.ServerRole(ctx, srv.ID, owner.ID); role != "owner" {
+		t.Fatalf("creator role = %q, want owner", role)
+	}
+	if role, _ := store.ServerRole(ctx, srv.ID, member.ID); role != "member" {
+		t.Fatalf("joiner role = %q, want member", role)
+	}
+	if ok, _ := store.IsServerAdmin(ctx, srv.ID, owner.ID); !ok {
+		t.Fatal("owner should be admin")
+	}
+	if ok, _ := store.IsServerAdmin(ctx, srv.ID, member.ID); ok {
+		t.Fatal("a plain member should not be admin")
+	}
+
+	// Only the owner can change roles; role must be valid; owner can't self-change;
+	// target must be a member.
+	if err := store.SetServerRole(ctx, srv.ID, member.ID, owner.ID, "member"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-owner SetServerRole err = %v, want ErrForbidden", err)
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, member.ID, "superadmin"); !errors.Is(err, chat.ErrInvalidRole) {
+		t.Fatalf("invalid role err = %v, want ErrInvalidRole", err)
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, owner.ID, "member"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("owner self-change err = %v, want ErrForbidden", err)
+	}
+	stranger := regUser(t, pool)
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, stranger.ID, "admin"); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("promote non-member err = %v, want ErrUserNotFound", err)
+	}
+
+	// Owner promotes the member to admin → they become an admin.
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, member.ID, "admin"); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if role, _ := store.ServerRole(ctx, srv.ID, member.ID); role != "admin" {
+		t.Fatalf("promoted role = %q, want admin", role)
+	}
+	if ok, _ := store.IsServerAdmin(ctx, srv.ID, member.ID); !ok {
+		t.Fatal("promoted member should be admin")
+	}
+}
+
 func hasServer(servers []chat.Server, id int64) bool {
 	for _, s := range servers {
 		if s.ID == id {

@@ -90,7 +90,8 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/servers/{id}/invites`    | bearer | Mint an invite code (members only) → `{code}`  |
 | `POST`   | `/api/invites/{code}`          | bearer | Redeem an invite → join the server             |
 | `GET`    | `/api/servers/{id}/channels`   | bearer | A server's channels (members only)             |
-| `POST`   | `/api/servers/{id}/channels`   | bearer | Create a channel in a server (members only)    |
+| `POST`   | `/api/servers/{id}/channels`   | bearer | Create a channel in a server (admin+ only)     |
+| `POST`   | `/api/servers/{id}/roles`      | bearer | Set a member's role (owner only) `{userId,role}` |
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
 | `GET`    | `/api/messages/search?channel=<id>&q=` | bearer | Search a channel's messages (members only) |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |

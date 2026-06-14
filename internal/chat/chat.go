@@ -35,6 +35,8 @@ var (
 	ErrServerNotFound = errors.New("server not found")
 	// ErrInvalidInvite is returned when an invite code doesn't exist.
 	ErrInvalidInvite = errors.New("invalid invite code")
+	// ErrInvalidRole is returned when a role is not one that can be assigned.
+	ErrInvalidRole = errors.New("invalid role")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
@@ -404,7 +406,8 @@ func (s *Store) CreateServer(ctx context.Context, ownerID int64, name string) (S
 		return Server{}, err
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO server_members (server_id, user_id) VALUES ($1, $2)`, srv.ID, ownerID); err != nil {
+		`INSERT INTO server_members (server_id, user_id, role) VALUES ($1, $2, 'owner')`,
+		srv.ID, ownerID); err != nil {
 		return Server{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -433,6 +436,59 @@ func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error)
 		out = append(out, srv)
 	}
 	return out, rows.Err()
+}
+
+// ServerRole returns userID's role in serverID ('owner'|'admin'|'member'), or ""
+// if they are not a member.
+func (s *Store) ServerRole(ctx context.Context, serverID, userID int64) (string, error) {
+	var role string
+	err := s.pool.QueryRow(ctx,
+		`SELECT role FROM server_members WHERE server_id = $1 AND user_id = $2`,
+		serverID, userID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return role, err
+}
+
+// IsServerAdmin reports whether userID is an owner or admin of serverID.
+func (s *Store) IsServerAdmin(ctx context.Context, serverID, userID int64) (bool, error) {
+	role, err := s.ServerRole(ctx, serverID, userID)
+	if err != nil {
+		return false, err
+	}
+	return role == "owner" || role == "admin", nil
+}
+
+// SetServerRole lets the server OWNER set targetID's role to 'admin' or 'member'.
+// Only the owner may change roles; the role must be valid; an owner row is never
+// changed. Returns ErrForbidden (actor not owner / target is self), ErrInvalidRole,
+// or ErrUserNotFound (target not a member).
+func (s *Store) SetServerRole(ctx context.Context, serverID, actorID, targetID int64, role string) error {
+	if role != "admin" && role != "member" {
+		return ErrInvalidRole
+	}
+	actorRole, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" {
+		return ErrForbidden
+	}
+	if targetID == actorID {
+		return ErrForbidden // the owner can't change their own role
+	}
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE server_members SET role = $3
+		   WHERE server_id = $1 AND user_id = $2 AND role <> 'owner'`,
+		serverID, targetID, role)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotFound // target isn't a member of this server
+	}
+	return nil
 }
 
 // IsServerMember reports whether userID belongs to serverID.

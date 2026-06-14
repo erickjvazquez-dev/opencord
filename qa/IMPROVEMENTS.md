@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 33) — Server roles, first slice (the big v0.3 feature, bounded)
+
+Began roles & permissions with a deliberately small, Discord-shaped slice instead of the
+whole thing: `server_members.role` (owner|admin|member), channel creation gated to admin+
+(members can't — the Discord default), and owner-only promote/demote
+(`POST /servers/{id}/roles`). Backend only; per-channel overrides, message moderation, and
+a UI are later slices. Full Rule-15 cycle live: member create-channel → 403 until the owner
+promotes them → admin → 201; member self-promote → 403; invalid role → 400.
+
+Reflections:
+- **A huge feature is a sequence of small verified slices, not one commit.** "Roles &
+  permissions" sounds like a monolith; the first useful, shippable unit is one role enum +
+  one gated action + one management endpoint. Each slice ships green and de-risks the next —
+  better than a giant branch, especially deep in a long session.
+- **Tightening an existing gate is a regression risk — check who relied on the old rule.**
+  Channel-create went member→admin. The QA flows create channels only as the server *owner*
+  (an admin), so they stayed green — but I verified that explicitly rather than assuming.
+  When you narrow a permission, grep every caller/test that exercised the looser one.
+- **Roles QA is a two-actor story** — the next slice's QA should be: owner promotes B in the
+  UI, B (now admin) can create a channel; before promotion B has no "+ channel". That needs
+  the roles UI first, so it's coupled to the UI slice.
+- **Next:** roles UI (show role, owner's promote control) + message moderation (admins delete
+  others' messages); then per-channel permission overrides.
+
 ## 2026-06-14 (iter 32) — In-channel search, with LIKE-wildcard hardening
 
 Added message search within a channel: `GET /api/messages/search?channel&q`, a header

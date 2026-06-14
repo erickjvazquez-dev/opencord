@@ -237,3 +237,28 @@ match: author · time · body) replacing the message list, with a clear (✕) to
 
 **Tests (DB integration):** matches case-insensitively; excludes deleted; a `%` query
 matches literally (not everything); respects the limit. Access gate covered via CanAccessChannel.
+
+## Server roles — first slice (v0.3, 2026-06-14)
+
+The start of roles & permissions. Minimal, Discord-shaped: server membership carries a
+**role** (owner | admin | member); some actions require admin+. This slice gates **channel
+creation** (Discord default: plain members can't create channels) and adds **promotion**.
+Per-channel permission overrides + a UI come in later slices.
+
+**Schema (idempotent):** `server_members.role TEXT NOT NULL DEFAULT 'member'`. The server
+creator is `owner` (set in CreateServer). Invite-redeemers join as `member`.
+
+**Store:**
+- `ServerRole(serverID, userID)` → 'owner' | 'admin' | 'member' | '' (not a member).
+- `SetServerRole(serverID, actorID, targetID, role)` → only the **owner** may change roles;
+  role ∈ {admin, member}; `ErrForbidden` otherwise. Can't change the owner's own role.
+
+**Access control (Rule 15):**
+- `POST /api/servers/{id}/channels` now requires admin+ (owner/admin), not just membership —
+  a plain member → 403.
+- `POST /api/servers/{id}/roles {userId, role}` → owner only (403 otherwise); promotes/demotes.
+- Reproduced + re-attacked at store + live HTTP: member can't create a channel (403) until the
+  owner promotes them to admin, then they can.
+
+**Tests (DB integration):** creator is owner; a redeemed member can't create a channel; the
+owner promotes them → admin → now they can; a non-owner can't promote (ErrForbidden).

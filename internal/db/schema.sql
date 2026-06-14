@@ -84,6 +84,9 @@ CREATE TABLE IF NOT EXISTS server_members (
     PRIMARY KEY (server_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS server_members_user_id_idx ON server_members (user_id);
+-- Roles (v0.3): a member's role in a server — 'owner' | 'admin' | 'member'. The creator
+-- is 'owner'; admin+ may create channels. Per-channel overrides come later.
+ALTER TABLE server_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS server_id BIGINT REFERENCES servers(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
 -- Channel names are unique per scope, not globally: each server can have its own

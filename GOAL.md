@@ -34,7 +34,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 ## Next (v0.3 — Roles & Polish)
 
 - [x] Rate limiting + abuse protection — per-connection WS token bucket (Rule 15)
-- [ ] Roles & permissions (owner/admin/member, per-channel)
+- [~] Roles & permissions — server roles (owner/admin/member) done: channel creation is admin-only, owner promotes/demotes via `POST /api/servers/{id}/roles`, adversarially verified. (Per-channel overrides, message-moderation, and a roles UI still TODO)
 - [x] Invites — invite-code join (replaces the open join-by-id gap): members mint codes, redeeming admits you; non-member can't mint/guess (403/404), adversarially verified. (Membership mgmt: kick/roles still TODO)
 - [x] Search — in-channel message search (case-insensitive, access-gated, LIKE-wildcards escaped per Rule B), header search box + results panel (channel-spanning search later)
 - [x] Message grouping (collapse consecutive same-author messages within 5 min) — flagged then closed by browser AI-vision QA 2026-06-13

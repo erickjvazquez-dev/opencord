@@ -279,7 +279,8 @@ func mountServerRoutes(r chi.Router, store *chat.Store) {
 			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
 			return
 		}
-		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+		// Creating a channel requires admin+ (Discord default: members can't).
+		if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil || !ok {
 			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 			return
 		}
@@ -304,6 +305,35 @@ func mountServerRoutes(r chi.Router, store *chat.Store) {
 			return
 		}
 		writeJSON(w, http.StatusCreated, c)
+	})
+	// Promote/demote a member (owner only): {userId, role:'admin'|'member'}.
+	r.Post("/servers/{id}/roles", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			UserID int64  `json:"userId"`
+			Role   string `json:"role"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.SetServerRole(r.Context(), id, me.ID, in.UserID, in.Role); {
+		case errors.Is(err, chat.ErrInvalidRole):
+			http.Error(w, `{"error":"role must be admin or member"}`, http.StatusBadRequest)
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not set role"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
 	})
 	// Redeem an invite code → join its server (the only way to join). 404 on a bad code.
 	r.Post("/invites/{code}", func(w http.ResponseWriter, r *http.Request) {
