@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 46) — Tested the rate limiter (the abuse defense I only knew worked by accident)
+
+Added `TestServeWSRateLimitIntegration`: one connection floods 30 messages; the test asserts the
+per-connection token bucket throttles most (saved < 30) while allowing the burst (observed 5/30,
+matching `rateBurst`). Backend-only tick (deliberately low-risk given a long session).
+
+Reflections:
+- **A security feature you only confirmed by accident has no guard — write it.** I learned the rate
+  limiter existed in iter 44 because it silently dropped the QA bot's sends. "It clearly works" was
+  true but untested; one refactor of the bucket math could have weakened it invisibly. Convert every
+  *observed* behavior into an *asserted* one. The flood test now pins burst+throttle behavior.
+- **Make adversarial assertions timing-robust.** The exact pass-count depends on send speed vs refill,
+  so the test asserts a wide band (`>=3 && <30`), not `==5` — it proves the invariant (throttling
+  happens, burst survives) without being flaky on a slow CI runner.
+- **Match the tick's risk to the context's age.** Eight ticks deep in one session, I chose a
+  self-contained backend test over a cross-cutting frontend change — less blast radius if my context
+  is fraying. (Offered the user a `/clear`; they kept going, so I kept the work conservative.)
+
 ## 2026-06-14 (iter 45) — @mention rendering; applied last tick's lesson proactively
 
 Shipped the first @mention slice: `@user` chips with the viewer's own mention highlighted
