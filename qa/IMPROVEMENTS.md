@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 40) — WS access-control suite + a CI race adding tests exposed
+
+Shipped the WebSocket gateway's first access-control test (`internal/ws/serve_integration_test.go`):
+the realtime path is the most attacker-exposed surface (Rule B), and `ServeWS` rejects
+401/403/400 *before* the upgrade — now proven, including a **real gorilla/websocket
+handshake** (member connects via the `?token=` browser path and receives history; a
+non-member is refused 403, no leak before upgrade).
+
+But adding integration tests to a *third* package turned CI red — and the lesson is the
+bigger deliverable:
+- **A new test package can change the concurrency profile of `go test ./...`.** Go runs
+  package binaries in parallel, so chat + httpapi + ws all called `db.Migrate` at once on
+  CI's fresh DB. `CREATE … IF NOT EXISTS` is **not** atomic against simultaneous creation
+  → catalog duplicate-key (SQLSTATE 23505 on pg_class/pg_type). Fixed at the root with a
+  `pg_advisory_lock` in Migrate (+ `TestMigrateConcurrent` regression guard).
+- **A green local `go test ./...` ≠ green CI when the local DB is pre-migrated.** The race
+  only fires on *first* concurrent creation; my warm dev DB already had the schema, so it
+  hid the bug. **Process fix (apply every DB tick): verify on a FRESH DB** — `docker
+  compose down -v` before the run — to match CI, not the warm dev DB.
+- **Rule 15 done right even when the first repro misses:** a single `go test ./...` didn't
+  reproduce the timing race, so I forced it deterministically (8 goroutines from a barrier,
+  fresh schema each run) — 3/3 FAIL without the lock, 3/3 PASS with it, then full suite +
+  CI green. Don't conclude "can't reproduce" from one non-overlapping run.
+
 ## 2026-06-14 (iter 39) — HTTP-layer authz coverage: testing router.go, not just the store
 
 `internal/httpapi/router.go` (the entire REST surface) had **zero** test files while
