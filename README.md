@@ -78,9 +78,11 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/auth/register`           | —      | Create account → `{token, user}`               |
 | `POST`   | `/api/auth/login`              | —      | Log in → `{token, user}`                       |
 | `GET`    | `/api/auth/me`                 | bearer | Current user                                   |
-| `GET`    | `/api/channels`                | bearer | List channels                                  |
+| `GET`    | `/api/channels`                | bearer | List public channels                           |
 | `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |
-| `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history for a channel (default general) |
+| `GET`    | `/api/dms`                     | bearer | List your direct-message channels              |
+| `POST`   | `/api/dms`                     | bearer | Open/get a DM with `{username}`                |
+| `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
 | `DELETE` | `/api/messages/{id}`           | bearer | Delete your own message (soft)                 |
 | `PUT`    | `/api/messages/{id}/reactions` | bearer | React with an emoji `{emoji}`                   |
@@ -89,7 +91,8 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 
 **WebSocket protocol.** Server→client frames are JSON envelopes keyed by `type`:
 `history`, `message`, `message-edited`, `message-deleted`, `reaction`, `typing`,
-`presence`.
+`presence`. Connecting to a **DM** channel (or any future private channel) requires
+membership — a non-member's upgrade and REST history requests are refused with `403`.
 Client→server: `{ "body": "hello" }` to send, or `{ "type": "typing" }` to signal
 typing. Inbound frames are rate-limited per connection (burst 5, 2/s).
 

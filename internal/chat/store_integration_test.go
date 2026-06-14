@@ -5,19 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
 	"github.com/erickjvazquez-dev/opencord/internal/chat"
 	"github.com/erickjvazquez-dev/opencord/internal/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // setup connects to the database named by DATABASE_URL, applies the schema, and
 // returns a store plus a freshly-registered user. It SKIPS when DATABASE_URL is
 // unset, so `go test ./...` stays green locally without a database; CI sets it
 // (a postgres service) so these run there.
-func setup(t *testing.T) (*chat.Store, auth.User) {
+func setup(t *testing.T) (*chat.Store, *pgxpool.Pool, auth.User) {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
@@ -32,18 +34,27 @@ func setup(t *testing.T) (*chat.Store, auth.User) {
 	if err := db.Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	return chat.NewStore(pool), pool, regUser(t, pool)
+}
+
+var userCounter int64
+
+// regUser registers a fresh, uniquely-named user on the pool.
+func regUser(t *testing.T, pool *pgxpool.Pool) auth.User {
+	t.Helper()
+	name := fmt.Sprintf("itest_%d_%d", time.Now().UnixNano(), atomic.AddInt64(&userCounter, 1))
 	u, err := auth.New(pool, []byte("test-secret"), time.Hour).
-		Register(ctx, fmt.Sprintf("itest_%d", time.Now().UnixNano()), "password123")
+		Register(context.Background(), name, "password123")
 	if err != nil {
 		t.Fatalf("register test user: %v", err)
 	}
-	return chat.NewStore(pool), u
+	return u
 }
 
 func uniqueChannel() string { return fmt.Sprintf("itest-%d", time.Now().UnixNano()) }
 
 func TestChannelStoreIntegration(t *testing.T) {
-	store, _ := setup(t)
+	store, _, _ := setup(t)
 	ctx := context.Background()
 
 	name := uniqueChannel()
@@ -85,7 +96,7 @@ func TestChannelStoreIntegration(t *testing.T) {
 }
 
 func TestMessageChannelScopingIntegration(t *testing.T) {
-	store, u := setup(t)
+	store, _, u := setup(t)
 	ctx := context.Background()
 
 	a, err := store.CreateChannel(ctx, uniqueChannel())
@@ -122,7 +133,7 @@ func TestMessageChannelScopingIntegration(t *testing.T) {
 }
 
 func TestEditMessageIntegration(t *testing.T) {
-	store, u := setup(t)
+	store, _, u := setup(t)
 	ctx := context.Background()
 	ch, _ := store.CreateChannel(ctx, uniqueChannel())
 	m, err := store.Save(ctx, ch.ID, u.ID, u.Username, "before")
@@ -153,7 +164,7 @@ func TestEditMessageIntegration(t *testing.T) {
 }
 
 func TestDeleteMessageIntegration(t *testing.T) {
-	store, u := setup(t)
+	store, _, u := setup(t)
 	ctx := context.Background()
 	ch, _ := store.CreateChannel(ctx, uniqueChannel())
 	m, _ := store.Save(ctx, ch.ID, u.ID, u.Username, "doomed")
@@ -193,7 +204,7 @@ func TestDeleteMessageIntegration(t *testing.T) {
 }
 
 func TestReactionsIntegration(t *testing.T) {
-	store, u := setup(t)
+	store, _, u := setup(t)
 	ctx := context.Background()
 	ch, _ := store.CreateChannel(ctx, uniqueChannel())
 	m, err := store.Save(ctx, ch.ID, u.ID, u.Username, "react to me")
@@ -247,4 +258,97 @@ func reactionOf(t *testing.T, store *chat.Store, ctx context.Context, channelID,
 	}
 	t.Fatalf("message %d not in history", msgID)
 	return nil
+}
+
+func TestDirectMessagesIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+
+	// Open a DM alice↔bob; it reports bob as the other participant.
+	dm, err := store.CreateOrGetDM(ctx, alice.ID, bob.ID)
+	if err != nil {
+		t.Fatalf("create dm: %v", err)
+	}
+	if dm.ID == 0 || dm.User.ID != bob.ID || dm.User.Username != bob.Username {
+		t.Fatalf("dm wrong: %+v", dm)
+	}
+
+	// Idempotent: a second open returns the same channel, not a duplicate.
+	again, err := store.CreateOrGetDM(ctx, alice.ID, bob.ID)
+	if err != nil || again.ID != dm.ID {
+		t.Fatalf("CreateOrGetDM not idempotent: %+v (want id %d), err=%v", again, dm.ID, err)
+	}
+	// Order-independent: bob opening with alice resolves to the same channel.
+	rev, err := store.CreateOrGetDM(ctx, bob.ID, alice.ID)
+	if err != nil || rev.ID != dm.ID {
+		t.Fatalf("reverse open made a different channel: %+v (want id %d)", rev, dm.ID)
+	}
+
+	// Access control — the privacy core. Members in, everyone else out.
+	for _, tc := range []struct {
+		who  int64
+		want bool
+		name string
+	}{
+		{alice.ID, true, "alice (member)"},
+		{bob.ID, true, "bob (member)"},
+		{carol.ID, false, "carol (non-member)"},
+	} {
+		got, err := store.CanAccessChannel(ctx, dm.ID, tc.who)
+		if err != nil || got != tc.want {
+			t.Fatalf("CanAccessChannel dm for %s = %v (err %v), want %v", tc.name, got, err, tc.want)
+		}
+	}
+
+	// Public channels are open to everyone; unknown ids are denied.
+	general, _ := store.DefaultChannelID(ctx)
+	if ok, err := store.CanAccessChannel(ctx, general, carol.ID); err != nil || !ok {
+		t.Fatalf("carol must access the public general channel, got %v err %v", ok, err)
+	}
+	if ok, _ := store.CanAccessChannel(ctx, 1<<40, alice.ID); ok {
+		t.Fatal("CanAccessChannel for an unknown channel must be false")
+	}
+
+	// ListDMs is per-viewer and names the *other* participant.
+	aliceDMs, err := store.ListDMs(ctx, alice.ID)
+	if err != nil || !hasDM(aliceDMs, dm.ID, bob.ID) {
+		t.Fatalf("alice's DMs should include the dm with bob: %+v err %v", aliceDMs, err)
+	}
+	bobDMs, _ := store.ListDMs(ctx, bob.ID)
+	if !hasDM(bobDMs, dm.ID, alice.ID) {
+		t.Fatalf("bob's DMs should include the dm with alice: %+v", bobDMs)
+	}
+	if carolDMs, _ := store.ListDMs(ctx, carol.ID); len(carolDMs) != 0 {
+		t.Fatalf("carol should have no DMs, got %+v", carolDMs)
+	}
+
+	// DM channels never leak into the public channel list.
+	publics, _ := store.ListChannels(ctx)
+	for _, c := range publics {
+		if c.ID == dm.ID {
+			t.Fatalf("DM channel %d leaked into the public channel list", dm.ID)
+		}
+	}
+
+	// Guards: self-DM and unknown user.
+	if _, err := store.CreateOrGetDM(ctx, alice.ID, alice.ID); !errors.Is(err, chat.ErrCannotDMSelf) {
+		t.Fatalf("self-DM err = %v, want ErrCannotDMSelf", err)
+	}
+	if _, err := store.LookupUserByUsername(ctx, "nobody_"+uniqueChannel()); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("unknown user err = %v, want ErrUserNotFound", err)
+	}
+	if u, err := store.LookupUserByUsername(ctx, bob.Username); err != nil || u.ID != bob.ID {
+		t.Fatalf("lookup bob = %+v err %v", u, err)
+	}
+}
+
+func hasDM(dms []chat.DMChannel, channelID, otherUserID int64) bool {
+	for _, d := range dms {
+		if d.ID == channelID && d.User.ID == otherUserID {
+			return true
+		}
+	}
+	return false
 }

@@ -63,6 +63,12 @@ func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFun
 			http.Error(w, "invalid channel", http.StatusBadRequest)
 			return
 		}
+		// DM (and future private) channels are members-only — refuse the upgrade for
+		// anyone who can't access this channel before we read or stream anything.
+		if ok, err := store.CanAccessChannel(r.Context(), channelID, user.ID); err != nil || !ok {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return // Upgrade already wrote an error response

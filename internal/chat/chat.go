@@ -21,9 +21,27 @@ import (
 var (
 	// ErrChannelExists is returned when a channel name is already taken.
 	ErrChannelExists = errors.New("channel name already taken")
+	// ErrUserNotFound is returned when a DM target username does not exist.
+	ErrUserNotFound = errors.New("user not found")
+	// ErrCannotDMSelf is returned when a user tries to open a DM with themselves.
+	ErrCannotDMSelf = errors.New("cannot DM yourself")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
+
+// DMUser is the other participant in a direct message channel.
+type DMUser struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+}
+
+// DMChannel is a direct-message channel as seen by one participant: the channel
+// plus the *other* user in it.
+type DMChannel struct {
+	ID        int64     `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	User      DMUser    `json:"user"`
+}
 
 type Message struct {
 	ID        int64     `json:"id"`
@@ -208,6 +226,121 @@ func (s *Store) ChannelExists(ctx context.Context, id int64) (bool, error) {
 	return exists, err
 }
 
+// CanAccessChannel reports whether userID may read/join channelID. Public
+// channels are open to everyone; DM (and future private) channels require
+// membership. A non-existent channel returns (false, nil).
+func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT c.kind <> 'dm'
+		     OR EXISTS (SELECT 1 FROM channel_members m
+		                 WHERE m.channel_id = c.id AND m.user_id = $2)
+		   FROM channels c WHERE c.id = $1`, channelID, userID).Scan(&ok)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return ok, err
+}
+
+// LookupUserByUsername resolves a DM target, returning ErrUserNotFound if absent.
+func (s *Store) LookupUserByUsername(ctx context.Context, username string) (DMUser, error) {
+	var u DMUser
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, username FROM users WHERE username = $1`, username).Scan(&u.ID, &u.Username)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DMUser{}, ErrUserNotFound
+	}
+	return u, err
+}
+
+// CreateOrGetDM returns the existing two-member DM channel between users a and b,
+// creating it (kind='dm', both as members) if absent. Idempotent for sequential
+// callers. Returns the channel as seen by viewer `a` (the other user is `b`).
+func (s *Store) CreateOrGetDM(ctx context.Context, a, b int64) (DMChannel, error) {
+	if a == b {
+		return DMChannel{}, ErrCannotDMSelf
+	}
+	other, err := s.LookupUserByID(ctx, b)
+	if err != nil {
+		return DMChannel{}, err
+	}
+
+	// Existing DM with exactly {a, b}?
+	var dm DMChannel
+	dm.User = other
+	err = s.pool.QueryRow(ctx,
+		`SELECT c.id, c.created_at FROM channels c
+		  WHERE c.kind = 'dm'
+		    AND EXISTS (SELECT 1 FROM channel_members m WHERE m.channel_id = c.id AND m.user_id = $1)
+		    AND EXISTS (SELECT 1 FROM channel_members m WHERE m.channel_id = c.id AND m.user_id = $2)
+		    AND (SELECT COUNT(*) FROM channel_members m WHERE m.channel_id = c.id) = 2
+		  LIMIT 1`, a, b).Scan(&dm.ID, &dm.CreatedAt)
+	if err == nil {
+		return dm, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return DMChannel{}, err
+	}
+
+	// Create it atomically.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return DMChannel{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO channels (kind) VALUES ('dm') RETURNING id, created_at`).
+		Scan(&dm.ID, &dm.CreatedAt); err != nil {
+		return DMChannel{}, err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2), ($1, $3)`,
+		dm.ID, a, b); err != nil {
+		return DMChannel{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return DMChannel{}, err
+	}
+	return dm, nil
+}
+
+// LookupUserByID resolves a user id to id+username, ErrUserNotFound if absent.
+func (s *Store) LookupUserByID(ctx context.Context, id int64) (DMUser, error) {
+	var u DMUser
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, username FROM users WHERE id = $1`, id).Scan(&u.ID, &u.Username)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DMUser{}, ErrUserNotFound
+	}
+	return u, err
+}
+
+// ListDMs returns userID's direct-message channels, each with the other member.
+func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT c.id, c.created_at, u.id, u.username
+		   FROM channels c
+		   JOIN channel_members me    ON me.channel_id = c.id AND me.user_id = $1
+		   JOIN channel_members other ON other.channel_id = c.id AND other.user_id <> $1
+		   JOIN users u ON u.id = other.user_id
+		  WHERE c.kind = 'dm'
+		  ORDER BY c.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	dms := make([]DMChannel, 0)
+	for rows.Next() {
+		var d DMChannel
+		if err := rows.Scan(&d.ID, &d.CreatedAt, &d.User.ID, &d.User.Username); err != nil {
+			return nil, err
+		}
+		dms = append(dms, d)
+	}
+	return dms, rows.Err()
+}
+
 // Recent returns up to limit messages from the given channel in chronological
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
@@ -266,6 +399,10 @@ func HandleRecent(store *Store) http.HandlerFunc {
 			return
 		}
 		viewer, _ := auth.UserFrom(r.Context())
+		if ok, err := store.CanAccessChannel(r.Context(), channelID, viewer.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
 		msgs, err := store.Recent(r.Context(), channelID, viewer.ID, 50)
 		if err != nil {
 			http.Error(w, `{"error":"could not load messages"}`, http.StatusInternalServerError)
@@ -288,7 +425,8 @@ func ChannelIDFromQuery(r *http.Request, store *Store) (int64, error) {
 
 // ListChannels returns all channels in creation order.
 func (s *Store) ListChannels(ctx context.Context) ([]Channel, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, name, created_at FROM channels ORDER BY id`)
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, name, created_at FROM channels WHERE kind = 'public' ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -361,5 +499,53 @@ func HandleCreateChannel(store *Store) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(c)
+	}
+}
+
+// HandleListDMs serves the caller's direct-message channels.
+func HandleListDMs(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		dms, err := store.ListDMs(r.Context(), me.ID)
+		if err != nil {
+			http.Error(w, `{"error":"could not load dms"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(dms)
+	}
+}
+
+// HandleCreateDM opens (or returns the existing) DM with {"username":"..."}.
+func HandleCreateDM(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		var in struct {
+			Username string `json:"username"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		target, err := store.LookupUserByUsername(r.Context(), in.Username)
+		if errors.Is(err, ErrUserNotFound) {
+			http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"could not look up user"}`, http.StatusInternalServerError)
+			return
+		}
+		dm, err := store.CreateOrGetDM(r.Context(), me.ID, target.ID)
+		if errors.Is(err, ErrCannotDMSelf) {
+			http.Error(w, `{"error":"cannot DM yourself"}`, http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"could not open dm"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(dm)
 	}
 }

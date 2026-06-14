@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 24) — Direct messages: backend slice + the first access-control surface
+
+First big v0.2 feature, built backend-first (reactions pattern). A DM is a new channel
+**kind** with a `channel_members` table; the genuinely new piece is **per-channel access
+control** (`CanAccessChannel`) gating both the WS upgrade and REST history. Verified two
+ways before "done": DB integration test (`TestDirectMessagesIntegration`) on real Postgres,
+AND a live-server adversarial pass — carol (non-member) hitting the DM's REST history and
+WS both returned **403**, while alice (member) got 200 (Rule 14 + Rule 15).
+
+Reflections:
+- **The first private surface changes the QA shape.** Until now every channel was public,
+  so QA never tested *authorization*. From here, every read/write path needs a
+  "non-member is denied" probe — I added one at the HTTP/WS layer this tick; the browser QA
+  should grow a two-client DM-isolation flow when the UI lands (A and B DM; C must not see
+  it). This is the access-control analogue of the per-channel-isolation gap from iter 21.
+- **Test helper as shared infrastructure:** extending `setup()` to also return the pool (so
+  tests can register multiple users) unlocked the multi-user tests DMs/roles/membership all
+  need. The 5 call-site updates were mechanical; worth it — future membership tests reuse
+  `regUser(t, pool)`.
+- **Known follow-ups (logged in SPEC):** (a) react/edit/delete on DM messages aren't yet
+  membership-gated (read path is, and IDs aren't exposed to non-members); (b) CreateOrGetDM
+  has no cross-process lock — a concurrent double-open could duplicate a DM channel.
+- **Next:** the DM **UI** slice (sidebar DM list + "message @user" + open a DM), then the
+  two-client DM-isolation browser QA.
+
 ## 2026-06-13 (iter 23) — Guard the grouping *break* cases (the likely regression site)
 
 Last tick shipped grouping with a single "it groups" assertion. The more likely

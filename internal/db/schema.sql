@@ -46,3 +46,19 @@ CREATE TABLE IF NOT EXISTS reactions (
     UNIQUE (message_id, user_id, emoji)
 );
 CREATE INDEX IF NOT EXISTS reactions_message_id_idx ON reactions (message_id);
+
+-- Direct messages (v0.2): a DM is a channel of kind 'dm' with exactly two members.
+-- Public channels keep kind='public' and have no membership rows (open to everyone).
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'public';
+-- DM channels are unnamed, so name must be nullable (the UNIQUE constraint still
+-- holds: Postgres permits many NULLs).
+ALTER TABLE channels ALTER COLUMN name DROP NOT NULL;
+
+-- Channel membership — drives DM (and future private-channel) access control.
+CREATE TABLE IF NOT EXISTS channel_members (
+    channel_id BIGINT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (channel_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS channel_members_user_id_idx ON channel_members (user_id);

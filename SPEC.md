@@ -106,3 +106,41 @@ per-viewer counts, live WS `reaction` events) but had **no web UI**. This adds t
   Counts are authoritative from the server; mine is authoritative from the local set.
 - Optimistic: clicking toggles the local set + count immediately; the WS event reconciles
   counts; an HTTP failure reverts the optimistic change.
+
+## Direct messages — backend slice (v0.2, 2026-06-13)
+
+Private 1:1 conversations. Built as a new channel **kind** rather than a parallel
+system, so the existing message store + per-channel WS fan-out are reused; the genuinely
+new piece is **per-channel access control** (public channels stay open; DM channels are
+members-only). UI ships in a later tick (reactions pattern: backend → UI).
+
+**Schema (idempotent):**
+- `channels.kind TEXT NOT NULL DEFAULT 'public'` ('public' | 'dm').
+- `channels.name` made nullable (DMs are unnamed). UNIQUE stays (Postgres allows many NULLs).
+- `channel_members (channel_id, user_id, PRIMARY KEY(channel_id,user_id))` — membership
+  for DM (and future private) channels. Public channels have no rows (open to all).
+
+**Store:**
+- `CreateOrGetDM(a, b)` — returns the existing 2-member DM channel for {a,b}, else creates
+  one (`kind='dm'`, members a+b) in a tx. Idempotent for sequential calls. (Known: no
+  cross-process lock yet — a concurrent double-create could make two DM channels; follow-up.)
+- `ListDMs(user)` — the user's DM channels, each with the *other* participant.
+- `CanAccessChannel(channelID, userID)` — true for public channels; for DMs, membership.
+- `LookupUserByUsername(name)` — resolve a DM target.
+- `ListChannels` now filters `kind='public'` so DMs never leak into the public sidebar.
+
+**REST (auth-gated):**
+- `POST /api/dms {username}` → find-or-create a DM with that user; returns `{id, createdAt,
+  user:{id,username}}`. Rejects DM-with-self (400) and unknown user (404).
+- `GET /api/dms` → the caller's DM list.
+
+**Access control (the privacy core):**
+- WS `ServeWS`: after resolving the channel, `CanAccessChannel` must pass or the upgrade is
+  refused (403) — a non-member cannot open, read history, or send in a DM.
+- REST `GET /api/messages?channel=`: same `CanAccessChannel` gate.
+- Follow-up hardening: gate react/edit/delete on DM messages by membership too (today the
+  read/connect path is gated; message IDs aren't exposed to non-members).
+
+**Tests (DB integration):** create-or-get idempotency (same channel twice); ListDMs returns
+the other user; CanAccessChannel (public→anyone, dm→members only, non-member→false); unknown
+channel→false; ListChannels excludes DMs.

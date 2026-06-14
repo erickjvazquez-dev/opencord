@@ -29,7 +29,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [x] Typing indicators — read state still TODO
 - [x] Profiles: initials avatars — uploaded avatars/banners/status still TODO
 - [ ] Servers/guilds (group channels under a server; membership)
-- [ ] Direct messages
+- [ ] Direct messages — backend slice done (DM channels + membership + per-channel access control + REST `POST/GET /api/dms`, WS/REST 403 for non-members, adversarially verified); **UI next**
 
 ## Next (v0.3 — Roles & Polish)
 
