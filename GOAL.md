@@ -28,7 +28,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [x] Message edit/delete (owner-only, live WS, soft delete)
 - [x] Typing indicators — read state still TODO
 - [x] Profiles: initials avatars — uploaded avatars/banners/status still TODO
-- [ ] Servers/guilds — backend foundation done (servers + members + server-scoped channels, per-server channel names, REST `POST/GET /api/servers`, `POST/GET /api/servers/{id}/channels`, `POST .../join`, members-only access adversarially verified at HTTP+WS); **UI next**
+- [x] Servers/guilds — servers + members + server-scoped channels (per-server names, members-only access adversarially verified at HTTP+WS) + sidebar Servers accordion (create/join server, create channel, chat) — backend + UI, E2E verified
 - [x] Direct messages — DM channels + membership + per-channel access control (WS/REST 403 for non-members, adversarially verified) + sidebar DM list, new-DM flow, DM-aware header/composer (two-user E2E verified)
 
 ## Next (v0.3 — Roles & Polish)

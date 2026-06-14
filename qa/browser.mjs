@@ -28,8 +28,10 @@ async function main() {
   })
 
   const chanName = 'qa-' + String(Date.now()).slice(-6)
-  // Auto-answer window.prompt (create channel) + window.confirm (delete).
-  page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? chanName : undefined))
+  // Auto-answer window.prompt with whatever the current step expects, and accept
+  // window.confirm (delete). Set `promptAnswer` before an action that prompts.
+  let promptAnswer = chanName
+  page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? promptAnswer : undefined))
   const shot = (name) => page.screenshot({ path: join(SHOTS, name) })
 
   // 1 — Auth screen + register.
@@ -127,6 +129,33 @@ async function main() {
     (await follow.locator('.avatar').count()) === 1,
     'follow-up un-groups (avatar returns) when the message above it is deleted',
   )
+
+  // 7 — Servers: create a server, add a channel under it, and post in that channel.
+  step('create a server → add a channel → post in it')
+  promptAnswer = 'qa server'
+  await page.getByRole('button', { name: '+ New server' }).click()
+  await page.locator('.server-name', { hasText: 'qa server' }).waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.server-name', { hasText: 'qa server' }).isVisible(),
+    'new server appears in the Servers section',
+  )
+  const srvChan = 'srv' + String(Date.now()).slice(-6)
+  promptAnswer = srvChan
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: '+ channel' })
+    .click()
+  await page.getByRole('button', { name: new RegExp(srvChan) }).waitFor({ timeout: 8000 })
+  check(
+    await page.getByRole('button', { name: new RegExp(srvChan) }).isVisible(),
+    'server channel appears under its server',
+  )
+  const srvBody = 'hello from a server channel'
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(srvBody)
+  await page.getByRole('button', { name: 'Send' }).click()
+  await page.getByText(srvBody).waitFor({ timeout: 8000 })
+  await shot('07-server.png')
+  check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
   await browser.close()
   console.log(

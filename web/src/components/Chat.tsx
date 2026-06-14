@@ -2,14 +2,19 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   addReaction,
   createChannel,
+  createServer,
+  createServerChannel,
   deleteMessage,
   editMessage,
   fetchChannels,
   fetchDMs,
+  fetchServerChannels,
+  fetchServers,
+  joinServer,
   openDM,
   removeReaction,
 } from '../api'
-import type { Channel, DMChannel, Message, Reaction, ServerEvent, User } from '../types'
+import type { Channel, DMChannel, Message, Reaction, Server, ServerEvent, User } from '../types'
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -52,6 +57,9 @@ export function Chat({
 }) {
   const [channels, setChannels] = useState<Channel[]>([])
   const [dms, setDms] = useState<DMChannel[]>([])
+  const [servers, setServers] = useState<Server[]>([])
+  // serverId → its channels (members-only; fetched per server).
+  const [serverChannels, setServerChannels] = useState<Record<number, Channel[]>>({})
   const [channelId, setChannelId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [online, setOnline] = useState(0)
@@ -69,6 +77,22 @@ export function Chat({
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
 
+  // Load the user's servers and each server's channels into the serverChannels map.
+  const refreshServers = async () => {
+    try {
+      const srvs = await fetchServers(token)
+      setServers(srvs)
+      const entries = await Promise.all(
+        srvs.map(
+          async (s) => [s.id, await fetchServerChannels(token, s.id).catch(() => [])] as const,
+        ),
+      )
+      setServerChannels(Object.fromEntries(entries))
+    } catch {
+      /* leave servers as-is on failure */
+    }
+  }
+
   useEffect(() => {
     fetchChannels(token)
       .then((cs) => {
@@ -77,6 +101,8 @@ export function Chat({
       })
       .catch(() => {})
     fetchDMs(token).then(setDms).catch(() => {})
+    void refreshServers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   useEffect(() => {
@@ -176,6 +202,43 @@ export function Chat({
     }
   }
 
+  const addServer = async () => {
+    const name = window.prompt('New server name:')?.trim()
+    if (!name) return
+    try {
+      const srv = await createServer(token, name)
+      setServers((cur) => [...cur, srv])
+      const chans = await fetchServerChannels(token, srv.id).catch(() => [])
+      setServerChannels((cur) => ({ ...cur, [srv.id]: chans }))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not create server')
+    }
+  }
+
+  const joinServerPrompt = async () => {
+    const raw = window.prompt('Join which server? (server id)')?.trim()
+    const id = Number(raw)
+    if (!raw || !Number.isInteger(id) || id <= 0) return
+    try {
+      await joinServer(token, id)
+      await refreshServers()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not join server')
+    }
+  }
+
+  const addServerChannel = async (serverId: number) => {
+    const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
+    if (!name) return
+    try {
+      const c = await createServerChannel(token, serverId, name)
+      setServerChannels((cur) => ({ ...cur, [serverId]: [...(cur[serverId] ?? []), c] }))
+      setChannelId(c.id)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not create channel')
+    }
+  }
+
   const startEdit = (m: Message) => {
     setEditingId(m.id)
     setEditDraft(m.body)
@@ -241,6 +304,10 @@ export function Chat({
 
   const current = channels.find((c) => c.id === channelId)
   const activeDM = dms.find((d) => d.id === channelId)
+  const activeServerChannel = Object.values(serverChannels)
+    .flat()
+    .find((c) => c.id === channelId)
+  const activeChannelName = current?.name ?? activeServerChannel?.name
 
   return (
     <div className="app">
@@ -284,6 +351,42 @@ export function Chat({
         <button className="add-channel" onClick={startDM}>
           + New DM
         </button>
+
+        <div className="sidebar-head">Servers</div>
+        <nav className="channel-list server-list">
+          {servers.map((s) => (
+            <div key={s.id} className="server-group">
+              <div className="server-name">
+                {s.name} <span className="server-id">#{s.id}</span>
+              </div>
+              {(serverChannels[s.id] ?? []).map((c) => (
+                <button
+                  key={c.id}
+                  className={
+                    c.id === channelId
+                      ? 'channel-item server-channel active'
+                      : 'channel-item server-channel'
+                  }
+                  onClick={() => setChannelId(c.id)}
+                >
+                  <span className="hash">#</span>
+                  {c.name}
+                </button>
+              ))}
+              <button className="server-add-channel" onClick={() => void addServerChannel(s.id)}>
+                + channel
+              </button>
+            </div>
+          ))}
+        </nav>
+        <div className="server-actions">
+          <button className="add-channel" onClick={addServer}>
+            + New server
+          </button>
+          <button className="add-channel" onClick={joinServerPrompt}>
+            Join server
+          </button>
+        </div>
       </aside>
 
       <div className="chat">
@@ -291,7 +394,7 @@ export function Chat({
           <div className="brand">
             Opencord{' '}
             <span className="channel">
-              {activeDM ? `@${activeDM.user.username}` : `#${current?.name ?? '…'}`}
+              {activeDM ? `@${activeDM.user.username}` : `#${activeChannelName ?? '…'}`}
             </span>
           </div>
           <div className="meta">
@@ -422,7 +525,7 @@ export function Chat({
               connected
                 ? activeDM
                   ? `Message @${activeDM.user.username}`
-                  : `Message #${current?.name ?? ''}`
+                  : `Message #${activeChannelName ?? ''}`
                 : 'connecting…'
             }
             value={draft}

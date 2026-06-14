@@ -11,12 +11,12 @@ run one command, and you have your own real-time chat server.
 > [`GOAL.md`](./GOAL.md)).
 >
 > **Working today:** accounts (bcrypt + JWT) · multiple channels with per-channel
-> real-time routing (create + switch in a sidebar) · **direct messages** (private,
-> members-only) · live messaging with **edit & delete** (owner-only) · **emoji
-> reactions** (live counts) · **grouped messages** (consecutive same-author) ·
-> **typing indicators** · online presence · **initials avatars** · per-connection
-> **rate limiting** · one-command Docker stack · CI with a Postgres service running
-> DB integration tests.
+> real-time routing (create + switch in a sidebar) · **servers/guilds** (group
+> channels under a members-only server) · **direct messages** (private, members-only) ·
+> live messaging with **edit & delete** (owner-only) · **emoji reactions** (live
+> counts) · **grouped messages** (consecutive same-author) · **typing indicators** ·
+> online presence · **initials avatars** · per-connection **rate limiting** ·
+> one-command Docker stack · CI with a Postgres service running DB integration tests.
 
 ---
 

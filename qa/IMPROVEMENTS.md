@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 28) — Servers UI: a sidebar accordion over the existing chat machinery
+
+Shipped the servers UI: a "Servers" sidebar section listing each server (name + id badge)
+with its channels indented (accordion), plus create-server / join-by-id / create-channel.
+Selecting a server channel reuses the existing chat machinery unchanged — the header,
+composer, history, send, reactions, and grouping all "just work" because a server channel
+is still a channel. Verified single-client E2E (create server → add channel → post) and
+by eye (`07-server.png`: three clean sidebar sections, accordion, active server channel).
+
+Reflections:
+- **A multi-source dialog QA needs answer routing.** browser.mjs had one fixed prompt
+  answer; the server flow has two prompts (server name, channel name) with the *same*
+  message text as the existing channel prompt, so message-text routing wouldn't work. Made
+  the dialog handler read a mutable `promptAnswer` set before each action — the clean
+  pattern for a flow that prompts more than once. Reuse it for future multi-prompt flows.
+- **"It's still a channel" kept the UI tiny.** Because DMs and server channels are both
+  just channels with access control, three different sidebar sources (global, DM, server)
+  all feed the *same* `channelId` → one chat view. Resolving the active channel's display
+  name across all three sources (`current ?? activeServerChannel`, plus `activeDM`) was the
+  only header/composer change. Modeling the access layer in the backend paid off in the UI.
+- **Next QA growth:** a two-client server flow — A creates a server, shares its id, B joins
+  and sees the channel + a live message (the realtime analogue of the single-client test);
+  and a non-member-can't-see-it isolation check through the UI.
+- **Polish (P1, logged):** the Servers section is dense at the bottom of a tall sidebar; a
+  Discord-style left server rail is the eventual shape. Fine for the MVP; not a P0.
+
 ## 2026-06-13 (iter 27) — Servers/guilds backend; an idempotent-migration bug the suite caught
 
 Shipped the servers/guilds backend foundation (servers + members + server-scoped

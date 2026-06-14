@@ -1,4 +1,4 @@
-import type { Channel, DMChannel, User } from './types'
+import type { Channel, DMChannel, Server, User } from './types'
 
 interface AuthResponse {
   token: string
@@ -32,6 +32,57 @@ export async function fetchChannels(token: string): Promise<Channel[]> {
 
 export async function createChannel(token: string, name: string): Promise<Channel> {
   const res = await fetch('/api/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
+  return data as Channel
+}
+
+export async function fetchServers(token: string): Promise<Server[]> {
+  const res = await fetch('/api/servers', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error('could not load servers')
+  return res.json()
+}
+
+export async function createServer(token: string, name: string): Promise<Server> {
+  const res = await fetch('/api/servers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create server')
+  return data as Server
+}
+
+export async function joinServer(token: string, serverId: number): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/join`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not join server')
+  }
+}
+
+export async function fetchServerChannels(token: string, serverId: number): Promise<Channel[]> {
+  const res = await fetch(`/api/servers/${serverId}/channels`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('could not load server channels')
+  return res.json()
+}
+
+export async function createServerChannel(
+  token: string,
+  serverId: number,
+  name: string,
+): Promise<Channel> {
+  const res = await fetch(`/api/servers/${serverId}/channels`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ name }),

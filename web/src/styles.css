@@ -196,6 +196,62 @@ button:disabled {
   user-select: none;
 }
 
+/* Servers — an accordion: each server names itself, then lists its channels. */
+.server-list {
+  flex: 0 1 auto;
+}
+
+.server-group {
+  margin-bottom: 6px;
+}
+
+.server-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px 2px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.server-id {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.channel-item.server-channel {
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.server-add-channel {
+  margin: 2px 0 0 8px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.server-add-channel:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.server-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.server-actions .add-channel {
+  flex: 1;
+  font-size: 13px;
+}
+
 .add-channel {
   margin: 8px;
   padding: 9px;

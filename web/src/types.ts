@@ -17,6 +17,15 @@ export interface DMChannel {
   user: { id: number; username: string }
 }
 
+// A server (guild) groups channels under a shared membership. Its channels are
+// fetched separately (GET /api/servers/{id}/channels) and are members-only.
+export interface Server {
+  id: number
+  name: string
+  ownerId: number
+  createdAt: string
+}
+
 export interface Reaction {
   emoji: string
   count: number
