@@ -55,6 +55,8 @@ CREATE INDEX IF NOT EXISTS reactions_message_id_idx ON reactions (message_id);
 -- Direct messages (v0.2): a DM is a channel of kind 'dm' with exactly two members.
 -- Public channels keep kind='public' and have no membership rows (open to everyone).
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'public';
+-- Channel topic (v0.3): a short description shown in the channel header (server channels).
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT '';
 -- DM channels are unnamed, so name must be nullable (the UNIQUE constraint still
 -- holds: Postgres permits many NULLs).
 ALTER TABLE channels ALTER COLUMN name DROP NOT NULL;

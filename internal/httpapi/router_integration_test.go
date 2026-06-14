@@ -294,3 +294,68 @@ func TestRouterSPARoutingIntegration(t *testing.T) {
 		t.Fatalf("/healthz body = %q, want health JSON", strings.TrimSpace(wh.Body.String()))
 	}
 }
+
+// TestRouterChannelTopicIntegration covers PATCH /channels/{id} for the topic field:
+// admin-gated, length-bounded, backward-compatible with the postPolicy-only request,
+// and the topic is returned in the server channel list.
+func TestRouterChannelTopicIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	member, memberTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Topic Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	code, err := hs.store.CreateInvite(ctx, srv.ID, owner.ID)
+	if err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	if _, err := hs.store.RedeemInvite(ctx, code, member.ID); err != nil {
+		t.Fatalf("redeem: %v", err)
+	}
+	ch, err := hs.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	p := fmt.Sprintf("/api/channels/%d", ch.ID)
+
+	t.Run("admin sets topic", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", p, ownerTok, `{"topic":"Welcome to general"}`), http.StatusNoContent, "owner sets topic")
+	})
+	t.Run("non-admin cannot set topic", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", p, memberTok, `{"topic":"hax"}`), http.StatusForbidden, "member sets topic")
+	})
+	t.Run("over-long topic is rejected", func(t *testing.T) {
+		long := `{"topic":"` + strings.Repeat("x", 1025) + `"}`
+		wantStatus(t, hs.req(t, "PATCH", p, ownerTok, long), http.StatusBadRequest, "1025-char topic")
+	})
+	t.Run("empty patch is rejected", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", p, ownerTok, `{}`), http.StatusBadRequest, "no fields")
+	})
+	t.Run("postPolicy still works (backward compat)", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", p, ownerTok, `{"postPolicy":"admins"}`), http.StatusNoContent, "owner sets policy")
+	})
+	t.Run("topic is returned in the channel list", func(t *testing.T) {
+		w := hs.req(t, "GET", fmt.Sprintf("/api/servers/%d/channels", srv.ID), ownerTok, "")
+		wantStatus(t, w, http.StatusOK, "list server channels")
+		var chans []chat.Channel
+		if err := json.Unmarshal(w.Body.Bytes(), &chans); err != nil {
+			t.Fatalf("decode channels: %v", err)
+		}
+		var found *chat.Channel
+		for i := range chans {
+			if chans[i].ID == ch.ID {
+				found = &chans[i]
+			}
+		}
+		if found == nil {
+			t.Fatalf("channel %d not in list", ch.ID)
+		}
+		if found.Topic != "Welcome to general" {
+			t.Fatalf("topic = %q, want %q", found.Topic, "Welcome to general")
+		}
+	})
+}

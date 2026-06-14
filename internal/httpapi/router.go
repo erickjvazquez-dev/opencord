@@ -52,7 +52,9 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Get("/auth/me", authsvc.HandleMe)
 			r.Get("/channels", chat.HandleChannels(store))
 			r.Post("/channels", chat.HandleCreateChannel(store))
-			// Set a server channel's posting policy ('everyone'|'admins') — admins only.
+			// Update a server channel — posting policy ('everyone'|'admins') and/or
+			// topic. Admins only. Fields are optional (pointers): each is applied only
+			// when present, so old {postPolicy} clients keep working.
 			r.Patch("/channels/{id}", func(w http.ResponseWriter, r *http.Request) {
 				me, _ := auth.UserFrom(r.Context())
 				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -61,22 +63,44 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					return
 				}
 				var in struct {
-					PostPolicy string `json:"postPolicy"`
+					PostPolicy *string `json:"postPolicy"`
+					Topic      *string `json:"topic"`
 				}
 				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
 					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 					return
 				}
-				switch err := store.SetChannelPostPolicy(r.Context(), id, me.ID, in.PostPolicy); {
-				case errors.Is(err, chat.ErrInvalidPolicy):
-					http.Error(w, `{"error":"policy must be everyone or admins"}`, http.StatusBadRequest)
-				case errors.Is(err, chat.ErrForbidden):
-					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-				case err != nil:
-					http.Error(w, `{"error":"could not set policy"}`, http.StatusInternalServerError)
-				default:
-					w.WriteHeader(http.StatusNoContent)
+				if in.PostPolicy == nil && in.Topic == nil {
+					http.Error(w, `{"error":"no fields to update"}`, http.StatusBadRequest)
+					return
 				}
+				if in.PostPolicy != nil {
+					switch err := store.SetChannelPostPolicy(r.Context(), id, me.ID, *in.PostPolicy); {
+					case errors.Is(err, chat.ErrInvalidPolicy):
+						http.Error(w, `{"error":"policy must be everyone or admins"}`, http.StatusBadRequest)
+						return
+					case errors.Is(err, chat.ErrForbidden):
+						http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+						return
+					case err != nil:
+						http.Error(w, `{"error":"could not set policy"}`, http.StatusInternalServerError)
+						return
+					}
+				}
+				if in.Topic != nil {
+					switch err := store.SetChannelTopic(r.Context(), id, me.ID, *in.Topic); {
+					case errors.Is(err, chat.ErrTopicTooLong):
+						http.Error(w, `{"error":"topic too long (max 1024 chars)"}`, http.StatusBadRequest)
+						return
+					case errors.Is(err, chat.ErrForbidden):
+						http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+						return
+					case err != nil:
+						http.Error(w, `{"error":"could not set topic"}`, http.StatusInternalServerError)
+						return
+					}
+				}
+				w.WriteHeader(http.StatusNoContent)
 			})
 			r.Get("/dms", chat.HandleListDMs(store))
 			r.Post("/dms", chat.HandleCreateDM(store))

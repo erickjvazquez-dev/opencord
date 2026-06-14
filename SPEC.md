@@ -374,3 +374,18 @@ production needs just the one binary + Postgres (no nginx, no private networking
 
 Verified locally: one binary on `$PORT` serves `/healthz`, the SPA at `/`, hashed
 assets, the `/login` SPA fallback, and `POST /api/auth/register` — all 200.
+
+## Channel topics — backend slice (v0.3, 2026-06-14)
+
+Server channels gain a `topic` (header description). Backend-only this tick (header UI
+follows, per the backend-first pattern).
+
+- Schema: `ALTER TABLE channels ADD COLUMN IF NOT EXISTS topic TEXT NOT NULL DEFAULT ''`.
+- `chat.Channel.Topic` (json `topic,omitempty`); `ListServerChannels` returns it.
+- `Store.SetChannelTopic(channelID, actorID, topic)` — server admins only, `ErrForbidden`
+  for non-admin/unknown/non-server channel, `ErrTopicTooLong` over 1024 chars (Rule B).
+- `PATCH /api/channels/{id}` now takes optional `postPolicy` and/or `topic` (pointer
+  fields, applied only when present → old postPolicy-only clients unaffected); empty patch
+  → 400.
+- Tests: admin sets topic (204), non-admin (403), >1024 (400), empty patch (400),
+  postPolicy backward-compat (204), topic echoed in the channel list. DATABASE_URL-gated.

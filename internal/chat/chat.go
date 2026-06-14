@@ -106,6 +106,8 @@ type Channel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	// PostPolicy is 'everyone' or 'admins' (read-only). Populated for server channels.
 	PostPolicy string `json:"postPolicy,omitempty"`
+	// Topic is a short channel description shown in the header (server channels).
+	Topic string `json:"topic,omitempty"`
 }
 
 type Store struct{ pool *pgxpool.Pool }
@@ -170,6 +172,37 @@ func (s *Store) SetChannelPostPolicy(ctx context.Context, channelID, actorID int
 		return ErrForbidden
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE channels SET post_policy = $2 WHERE id = $1`, channelID, policy)
+	return err
+}
+
+// maxTopicLen bounds a channel topic (Rule B: bound every stored value).
+const maxTopicLen = 1024
+
+// ErrTopicTooLong is returned when a channel topic exceeds maxTopicLen.
+var ErrTopicTooLong = errors.New("channel topic too long")
+
+// SetChannelTopic sets a server channel's topic (header description). Server
+// admins only; ErrTopicTooLong for an over-long value; ErrForbidden for a
+// non-admin, an unknown channel, or a non-server channel.
+func (s *Store) SetChannelTopic(ctx context.Context, channelID, actorID int64, topic string) error {
+	if len(topic) > maxTopicLen {
+		return ErrTopicTooLong
+	}
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT server_id FROM channels WHERE id = $1`, channelID).Scan(&serverID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && serverID == nil) {
+		return ErrForbidden // unknown channel or not a server channel
+	}
+	if err != nil {
+		return err
+	}
+	if ok, err := s.IsServerAdmin(ctx, *serverID, actorID); err != nil {
+		return err
+	} else if !ok {
+		return ErrForbidden
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE channels SET topic = $2 WHERE id = $1`, channelID, topic)
 	return err
 }
 
@@ -641,7 +674,7 @@ func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name st
 // ListServerChannels returns the channels under serverID, oldest first.
 func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at, post_policy FROM channels WHERE server_id = $1 ORDER BY id`,
+		`SELECT id, name, created_at, post_policy, topic FROM channels WHERE server_id = $1 ORDER BY id`,
 		serverID)
 	if err != nil {
 		return nil, err
@@ -650,7 +683,7 @@ func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Chann
 	out := make([]Channel, 0)
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
