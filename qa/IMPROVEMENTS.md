@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 53) — Pinned messages (backend); reused the moderation authz model
+
+Shipped pin/unpin backend: `messages.pinned`, `SetMessagePinned`, `PUT/DELETE /messages/{id}/pin`
+with a broadcast, flag surfaced in `Recent`. Backend-first (UI next), matching the channel-topics
+two-tick pattern.
+
+Reflections:
+- **A new action should reuse the project's *existing* authorization shape, not invent a new one.**
+  Pinning's gate mirrors moderation-delete: resolve the message's `server_id`, require server-admin
+  for server channels, fall back to channel-access for serverless ones. Same query, same error
+  sentinels (`ErrMessageNotFound`/`ErrForbidden`), same 404-no-leak behavior. Consistency = fewer
+  surprises for clients and a smaller test surface.
+- **Backend-first keeps long-context risk low and the slice independently verifiable** — schema +
+  tested endpoint now; the UI (pin action + pinned panel/badge, handle the `message-pinned` WS event)
+  is a clean separate tick. The `message-pinned` event ships now but is harmlessly ignored until the
+  client handles it.
+- **Round-trip the new flag through a real read path in the test** — I asserted pinned=true/false via
+  `store.Recent` (the same query the app serves history with), not just the UPDATE's return, so the
+  new SELECT column is proven wired, not assumed.
+
 ## 2026-06-14 (iter 52) — Autolink URLs; security-by-construction over sanitization
 
 Clickable `http(s)` links in messages (a chat table-stakes gap — pasted URLs were dead text). One
