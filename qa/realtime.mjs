@@ -108,6 +108,31 @@ async function main() {
   check((await rcount(aMsg)) === '2', 'A sees the count climb to 2 after B reacts (live)')
   check(await bMsg.locator('.reaction.mine').isVisible(), "B's chip becomes 'mine' after B reacts")
 
+  // 4 — Direct messages: A opens a private DM with B and sends a message; B reloads,
+  // finds the DM in their sidebar, and reads it. Proves the DM UI end-to-end.
+  step('A opens a DM with B (+ New DM) and sends a private message')
+  a.on('dialog', (d) => d.accept(userB)) // answer the "which user?" prompt
+  await a.getByRole('button', { name: '+ New DM' }).click()
+  const dmComposer = a.getByPlaceholder('Message @' + userB)
+  await dmComposer.waitFor({ timeout: 8000 })
+  check(
+    (await a.locator('.brand .channel').textContent())?.includes('@' + userB),
+    'A header shows @' + userB + ' for the DM',
+  )
+  const dmBody = 'private hello ' + sfx
+  await dmComposer.fill(dmBody)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(dmBody).waitFor({ timeout: 8000 })
+  await a.screenshot({ path: join(SHOTS, 'rt-04-alice-dm.png') })
+  check(await a.getByText(dmBody).isVisible(), 'A sees the message in the DM view')
+
+  step('B reloads, opens the DM from the sidebar, and reads the private message')
+  await b.reload({ waitUntil: 'domcontentloaded' })
+  await b.getByRole('button', { name: new RegExp(userA) }).click()
+  await b.getByText(dmBody).waitFor({ timeout: 8000 })
+  await b.screenshot({ path: join(SHOTS, 'rt-05-bob-dm.png') })
+  check(await b.getByText(dmBody).isVisible(), 'B opens the DM and reads the private message')
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

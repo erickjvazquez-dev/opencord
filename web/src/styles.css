@@ -178,6 +178,24 @@ button:disabled {
   color: var(--text-muted);
 }
 
+/* The DM list sizes to its content so the channel list above keeps the main space. */
+.dm-list {
+  flex: 0 1 auto;
+}
+
+.dm-avatar {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  user-select: none;
+}
+
 .add-channel {
   margin: 8px;
   padding: 9px;

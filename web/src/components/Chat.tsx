@@ -5,9 +5,11 @@ import {
   deleteMessage,
   editMessage,
   fetchChannels,
+  fetchDMs,
+  openDM,
   removeReaction,
 } from '../api'
-import type { Channel, Message, Reaction, ServerEvent, User } from '../types'
+import type { Channel, DMChannel, Message, Reaction, ServerEvent, User } from '../types'
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -49,6 +51,7 @@ export function Chat({
   onLogout: () => void
 }) {
   const [channels, setChannels] = useState<Channel[]>([])
+  const [dms, setDms] = useState<DMChannel[]>([])
   const [channelId, setChannelId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [online, setOnline] = useState(0)
@@ -73,6 +76,7 @@ export function Chat({
         setChannelId((cur) => cur ?? cs.find((c) => c.name === 'general')?.id ?? cs[0]?.id ?? null)
       })
       .catch(() => {})
+    fetchDMs(token).then(setDms).catch(() => {})
   }, [token])
 
   useEffect(() => {
@@ -160,6 +164,18 @@ export function Chat({
     }
   }
 
+  const startDM = async () => {
+    const username = window.prompt('Direct message which user? (their username)')?.trim()
+    if (!username) return
+    try {
+      const dm = await openDM(token, username)
+      setDms((cur) => (cur.some((d) => d.id === dm.id) ? cur : [...cur, dm]))
+      setChannelId(dm.id)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not open DM')
+    }
+  }
+
   const startEdit = (m: Message) => {
     setEditingId(m.id)
     setEditDraft(m.body)
@@ -224,6 +240,7 @@ export function Chat({
   }
 
   const current = channels.find((c) => c.id === channelId)
+  const activeDM = dms.find((d) => d.id === channelId)
 
   return (
     <div className="app">
@@ -244,12 +261,38 @@ export function Chat({
         <button className="add-channel" onClick={addChannel}>
           + New channel
         </button>
+
+        <div className="sidebar-head">Direct Messages</div>
+        <nav className="channel-list dm-list">
+          {dms.map((d) => (
+            <button
+              key={d.id}
+              className={d.id === channelId ? 'channel-item active' : 'channel-item'}
+              onClick={() => setChannelId(d.id)}
+            >
+              <span
+                className="dm-avatar"
+                style={{ backgroundColor: avatarColor(d.user.username) }}
+                aria-hidden
+              >
+                {initials(d.user.username)}
+              </span>
+              {d.user.username}
+            </button>
+          ))}
+        </nav>
+        <button className="add-channel" onClick={startDM}>
+          + New DM
+        </button>
       </aside>
 
       <div className="chat">
         <header className="chat-header">
           <div className="brand">
-            Opencord <span className="channel">#{current?.name ?? '…'}</span>
+            Opencord{' '}
+            <span className="channel">
+              {activeDM ? `@${activeDM.user.username}` : `#${current?.name ?? '…'}`}
+            </span>
           </div>
           <div className="meta">
             <span className={connected ? 'dot online' : 'dot offline'} />
@@ -375,7 +418,13 @@ export function Chat({
         )}
         <form className="composer" onSubmit={send}>
           <input
-            placeholder={connected ? `Message #${current?.name ?? ''}` : 'connecting…'}
+            placeholder={
+              connected
+                ? activeDM
+                  ? `Message @${activeDM.user.username}`
+                  : `Message #${current?.name ?? ''}`
+                : 'connecting…'
+            }
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value)

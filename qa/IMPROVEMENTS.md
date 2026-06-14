@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 25) — DM UI + a QA-harness P0: the harness was testing STALE code
+
+Shipped the DM UI (sidebar "Direct Messages" section, "+ New DM" flow, DM-aware
+header/composer) — a DM just selects its channel, so the existing chat machinery
+(history/send/edit/react/typing) works unchanged. Verified two-user E2E: A opens a DM
+with B, sends; B reloads, opens it from the sidebar, reads it (`rt-04`/`rt-05`, mirror
+views, both titled with the *other* user).
+
+**The real find — a QA-harness P0 that had been silently lying.** The DM browser QA
+failed at first; the server log showed `:8080 bind: address already in use`. Root cause:
+`qa/run.sh` started the server with `go run ./cmd/server`, which spawns a **temp child
+binary**; the cleanup `pkill -f "cmd/server"` killed the `go run` parent but not the
+child, so an **orphaned server held :8080 across runs**. Every subsequent `run.sh` failed
+to bind, and the QA silently tested the *stale* backend. It went unnoticed for ticks 20–23
+only because those changes were frontend/QA-only; the DM UI was the first to need *new
+backend*, which the stale server lacked.
+
+Fixes (Track 0, high value): `run.sh` now (a) frees :8080/:5173 before starting, (b)
+**builds a real binary and runs that** (killable by PID, no orphan), and (c) **fails loud**
+if `/healthz` isn't up — never again silently runs against a stale server.
+
+Reflections:
+- **"Tests pass" can mean "tests ran against the wrong build."** A health check on the
+  thing-under-test (is OUR server actually up?) belongs in every harness, not just checks
+  on the feature. The loop's iter-14-style "verify on the live thing" must include "verify
+  it's the *current* live thing."
+- **`go run` is a QA footgun** — its orphan child outlives naive `pkill`. Build+exec, or
+  kill by port, in any throwaway-server harness.
+- **Next:** live DM-list updates (today B must reload to see a new DM — push a WS event on
+  DM creation); a three-user UI isolation check once a 3rd context is worth the cost.
+
 ## 2026-06-13 (iter 24) — Direct messages: backend slice + the first access-control surface
 
 First big v0.2 feature, built backend-first (reactions pattern). A DM is a new channel

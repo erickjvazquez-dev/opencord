@@ -9,6 +9,14 @@ export interface Channel {
   createdAt: string
 }
 
+// A direct-message channel as seen by one participant: the channel id plus the
+// *other* user in it. DM messages flow through the same per-channel WS as channels.
+export interface DMChannel {
+  id: number
+  createdAt: string
+  user: { id: number; username: string }
+}
+
 export interface Reaction {
   emoji: string
   count: number

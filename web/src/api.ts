@@ -1,4 +1,4 @@
-import type { Channel, User } from './types'
+import type { Channel, DMChannel, User } from './types'
 
 interface AuthResponse {
   token: string
@@ -39,6 +39,23 @@ export async function createChannel(token: string, name: string): Promise<Channe
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
   return data as Channel
+}
+
+export async function fetchDMs(token: string): Promise<DMChannel[]> {
+  const res = await fetch('/api/dms', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error('could not load DMs')
+  return res.json()
+}
+
+export async function openDM(token: string, username: string): Promise<DMChannel> {
+  const res = await fetch('/api/dms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ username }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not open DM')
+  return data as DMChannel
 }
 
 export async function editMessage(token: string, id: number, body: string): Promise<void> {
