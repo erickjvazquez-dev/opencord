@@ -32,8 +32,30 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	return nil, pingErr
 }
 
-// Migrate applies the embedded schema.
+// migrateLockKey is an arbitrary, app-scoped key for the advisory lock that
+// serializes Migrate across connections.
+const migrateLockKey int64 = 0x6F70656E63 // "openc"
+
+// Migrate applies the embedded schema. It first takes a session-level Postgres
+// advisory lock so concurrent callers serialize: `CREATE TABLE/INDEX IF NOT
+// EXISTS` is NOT atomic against simultaneous creation, so two unsynchronized
+// migrations (e.g. parallel `go test ./...` packages, or multiple instances
+// booting at once) can collide in the catalog with a pg_class duplicate-key
+// error (SQLSTATE 23505). The lock makes the schema apply exactly once at a time;
+// each serialized run is idempotent (the IF-NOT-EXISTS statements no-op).
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, schema)
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", migrateLockKey); err != nil {
+		return err
+	}
+	defer func() {
+		// Release on a fresh context so a cancelled ctx can't strand the lock.
+		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrateLockKey)
+	}()
+	_, err = conn.Exec(ctx, schema)
 	return err
 }
