@@ -3,6 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 43) — Multi-line composer; "check the input path can type the syntax"
+
+Set out to finish Markdown (blockquote/spoiler) and discovered the composer was a single-line
+`<input>` — so blockquotes and multi-line code blocks were **untypeable**, and there were no
+multi-line messages at all. Fixed the foundation first: the composer is now an auto-growing
+`<textarea>` with Enter=send / Shift+Enter=newline (the Discord convention). Verified E2E
+(browser QA types two lines via Shift+Enter, asserts they land in one message and that the first
+line wasn't sent alone) + AI-vision of `03d-multiline.png`.
+
+Reflections:
+- **A renderer for syntax users can't enter is dead code — check the INPUT path before adding
+  output features.** Last tick's "next" list had blockquote/spoiler; building them onto a
+  single-line input would have shipped Markdown nobody could trigger. The fix was the composer,
+  not more parse rules. **Rule: verify the whole user path (type → send → render), not just the
+  render half, before extending a feature.**
+- **Foundational UX unblocks several backlog items at once:** multi-line input now enables
+  blockquote, multi-line code blocks, and just plain paragraph messages — one change, several
+  features unblocked. Prefer the enabling fix over a cosmetic one.
+- **Next (now genuinely unblocked):** Markdown blockquote (`> `) + spoiler (`||x||`, click to
+  reveal); both are typeable now and worth a focused tick.
+
 ## 2026-06-14 (iter 42) — Closed the iter-39 edit/reaction HTTP gap; caught a self-made phantom gap
 
 Two things this tick. (1) Closed a *real* logged gap: the message **edit** and **reaction** REST
