@@ -3,6 +3,25 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 50) — Channel topics (backend slice); a schema change done safely
+
+Shipped a real parity item's backend: server channels get a `topic` (admin-set, ≤1024 chars,
+returned in the API). New schema column, `SetChannelTopic`, and `PATCH /channels/{id}` extended
+to take optional `postPolicy` and/or `topic`. UI follows next tick (backend-first pattern).
+
+Reflections:
+- **Extend an endpoint without breaking its existing clients: make new fields optional pointers.**
+  PATCH used to require `postPolicy`; switching both fields to `*string` means each is applied only
+  when present, so the read-only-channel UI's `{postPolicy}` requests still work unchanged. I added a
+  backward-compat test asserting exactly that — the cheapest insurance against a silent break.
+- **A schema change is safe here because two earlier invariants hold:** the ALTER is idempotent
+  (`ADD COLUMN IF NOT EXISTS … DEFAULT ''`) and `Migrate` is serialized by the advisory lock (iter 40),
+  so the new column adds cleanly even under concurrent boots/test packages. Past hardening paid off.
+- **Verified on a *fresh* DB** (`docker compose down -v`) so the new column actually exercises the
+  first-creation path CI will hit — the iter-40 lesson, applied by habit now.
+- **Sized to the context:** still backend-only (no frontend) on a long session; the visible header UI
+  is a clean separate tick.
+
 ## 2026-06-14 (iter 49) — @everyone/@here highlighting; a feature tick (not more tests)
 
 After several test/QA ticks, deliberately advanced a user-visible parity item instead of adding
