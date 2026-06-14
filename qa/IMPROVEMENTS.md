@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 47) — Deployed to Railway; then guarded the deploy-critical routing
+
+Out-of-band this session: shipped a single-binary prod build (Go serves the embedded SPA) and
+**deployed Opencord to Railway** — live at opencord-production-1b00.up.railway.app, verified
+in-cloud (register/login/SPA/asset/401 + a browser screenshot of the login screen). This tick
+added the missing tests for that new code.
+
+Reflections:
+- **Ship the guard for what you just shipped — especially deploy-path code.** The `/*` SPA
+  catch-all and the embed handler went out with the deploy but had no tests; a refactor could
+  silently make `/api/bogus` serve index.html (masking real 404s) or break the SPA. Added a
+  webui unit test + an httpapi guard asserting the catch-all serves client routes but never
+  shadows the API. New code that reaches production gets a test in the very next tick.
+- **A good test taught me real `net/http` behavior:** `http.FileServer` 301-canonicalizes
+  `/index.html`→`/`. My first assertion was wrong (expected 200); the failure was the test
+  being naive, not the handler. Fixed the test, kept the meaningful cases. Tests that fail on
+  framework semantics are still teaching you something — read the failure, don't paper over it.
+- **Deploy gotchas logged in memory, not just here:** Railway's managed-DB plugin returns
+  "Unauthorized" (CLI token lacks DB-create scope; `railway login` can't run in the session's
+  non-interactive `!` shell). Worked around with a Postgres Docker-image service. CAVEAT: no
+  volume yet → data is ephemeral. (See [[project_opencord]].)
+- **Next:** add a persistent volume to the cloud DB (offered to owner); a CI `docker build` of
+  the root Dockerfile would guard the image build itself (the one deploy-path step CI doesn't
+  cover — go+web are built separately but not the combined image).
+
 ## 2026-06-14 (iter 46) — Tested the rate limiter (the abuse defense I only knew worked by accident)
 
 Added `TestServeWSRateLimitIntegration`: one connection floods 30 messages; the test asserts the
