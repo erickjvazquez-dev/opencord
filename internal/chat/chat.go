@@ -830,6 +830,30 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 	return msgs, nil
 }
 
+// PinnedMessages returns the channel's pinned (non-deleted) messages, oldest first.
+// Access is gated by the caller (HandlePins) before this runs.
+func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
+		   FROM messages m JOIN users u ON u.id = m.user_id
+		  WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted_at IS NULL
+		  ORDER BY m.id`, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Message, 0)
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt); err != nil {
+			return nil, err
+		}
+		m.Pinned = true
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // SearchMessages returns up to limit non-deleted messages in channelID whose body
 // contains query (case-insensitive), in chronological order. The query's LIKE
 // wildcards are escaped so it matches literally — a user typing '%' can't turn the
@@ -910,6 +934,29 @@ func HandleRecent(store *Store) http.HandlerFunc {
 		msgs, err := store.Recent(r.Context(), channelID, viewer.ID, 50)
 		if err != nil {
 			http.Error(w, `{"error":"could not load messages"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(msgs)
+	}
+}
+
+// HandlePins serves a channel's pinned messages (access-gated), for the pins panel.
+func HandlePins(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channelID, err := ChannelIDFromQuery(r, store)
+		if err != nil {
+			http.Error(w, `{"error":"invalid channel"}`, http.StatusBadRequest)
+			return
+		}
+		viewer, _ := auth.UserFrom(r.Context())
+		if ok, err := store.CanAccessChannel(r.Context(), channelID, viewer.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		msgs, err := store.PinnedMessages(r.Context(), channelID)
+		if err != nil {
+			http.Error(w, `{"error":"could not load pins"}`, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

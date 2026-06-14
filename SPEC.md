@@ -415,3 +415,11 @@ Messages can be pinned in their channel. Backend slice (UI follows).
   unpin 204 → pinned=false (round-trip via Recent). DATABASE_URL-gated.
 
 _UI shipped 2026-06-14 (iter 54): pin/unpin in the message hover actions (shown to admins in server channels, any member elsewhere via `canPin`), a "📌 pinned" badge, and a `message-pinned` WS handler for live updates; browser QA `07g-pin.png` + AI-vision verified._
+
+## Pins list endpoint (v0.3, 2026-06-14)
+
+`GET /api/messages/pins?channel=<id>` returns a channel's pinned (non-deleted) messages, oldest
+first — so a "view all pins" panel sees every pin, not just those in the loaded last-50 history.
+Access-gated to channel members (403 otherwise), mirroring `HandleRecent`. `Store.PinnedMessages`
+is the backing query. Tested: non-member 403; owner gets exactly the pinned message (pinned=true),
+the non-pinned one excluded. (Pins panel UI next.)

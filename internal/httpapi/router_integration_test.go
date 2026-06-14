@@ -419,3 +419,51 @@ func TestRouterPinIntegration(t *testing.T) {
 		t.Fatal("message still pinned after admin DELETE")
 	}
 }
+
+// TestRouterPinsListIntegration covers GET /messages/pins: it returns only the
+// channel's pinned messages, and is access-gated to channel members.
+func TestRouterPinsListIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Pins List Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := hs.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	pinned, err := hs.store.Save(ctx, ch.ID, owner.ID, owner.Username, "pinned one")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := hs.store.Save(ctx, ch.ID, owner.ID, owner.Username, "not pinned"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := hs.store.SetMessagePinned(ctx, pinned.ID, owner.ID, true); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/messages/pins?channel=%d", ch.ID)
+
+	// A non-member can't read the channel's pins.
+	wantStatus(t, hs.req(t, "GET", path, strangerTok, ""), http.StatusForbidden, "stranger reads pins")
+
+	// The owner gets exactly the pinned message.
+	w := hs.req(t, "GET", path, ownerTok, "")
+	wantStatus(t, w, http.StatusOK, "owner reads pins")
+	var pins []chat.Message
+	if err := json.Unmarshal(w.Body.Bytes(), &pins); err != nil {
+		t.Fatalf("decode pins: %v", err)
+	}
+	if len(pins) != 1 {
+		t.Fatalf("got %d pins, want 1", len(pins))
+	}
+	if pins[0].ID != pinned.ID || !pins[0].Pinned {
+		t.Fatalf("pins[0] = {id:%d pinned:%v}, want {id:%d pinned:true}", pins[0].ID, pins[0].Pinned, pinned.ID)
+	}
+}
