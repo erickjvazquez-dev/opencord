@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 31) — Two-client server flow: invite → redeem → live chat (the deferred QA)
+
+Closed the two-client server QA I'd logged pending for three ticks. realtime.mjs now,
+after the DM flow: A creates a server + channel, mints an invite (code captured from the
+shown prompt), posts a message; B redeems the code, auto-lands in the server channel,
+reads A's history, and then receives A's *next* message live (`rt-06-bob-server.png`).
+This is the realtime, through-the-UI proof of the whole servers+invites stack — the
+backend/HTTP checks couldn't show the cross-user live path. Pure QA (only realtime.mjs)
+— no production risk.
+
+Reflections:
+- **A flow that prompts more than once per page needs per-page mutable answers.** The DM
+  step had hard-wired `a.on('dialog', d => d.accept(userB))`, which would have answered
+  the server-name prompt with a username. Refactored to an `ans = {a, b}` holder set
+  before each action, plus `aDefault` to capture the invite code the prompt pre-fills.
+  Same pattern as browser.mjs — now both harnesses share it.
+- **Redeem auto-navigates, so the QA didn't need to click the channel** — `joinServerPrompt`
+  selects the server's first channel after redeem, so B just lands there. Testing the
+  real handler's side effects (not re-implementing navigation in the test) kept it short.
+- **Coverage milestone:** every members-only surface (DM, server channel) now has BOTH a
+  backend adversarial "outsider is blocked" test AND a two-client "member gets in and
+  chats live" UI test. That pairing is the template for the next private feature.
+- **Next:** roles & permissions (the big v0.3 item — spec-first, backend then UI) and search.
+
 ## 2026-06-13 (iter 30) — Server invites: a feature that closes a gap I shipped
 
 The first servers slice (iter 27) shipped an **open** `POST /servers/{id}/join` — anyone

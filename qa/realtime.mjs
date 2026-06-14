@@ -42,6 +42,15 @@ async function main() {
       failed++
     })
   }
+  // Per-page mutable prompt answers (set before an action that prompts); aDefault
+  // captures a prompt's pre-filled value (e.g. the invite code A is shown).
+  const ans = { a: '', b: '' }
+  let aDefault = ''
+  a.on('dialog', (d) => {
+    if (d.type() === 'prompt') aDefault = d.defaultValue()
+    d.accept(d.type() === 'prompt' ? ans.a : undefined)
+  })
+  b.on('dialog', (d) => d.accept(d.type() === 'prompt' ? ans.b : undefined))
 
   const sfx = String(Date.now()).slice(-7)
   const userA = 'alice' + sfx
@@ -111,7 +120,7 @@ async function main() {
   // 4 — Direct messages: A opens a private DM with B and sends a message; B reloads,
   // finds the DM in their sidebar, and reads it. Proves the DM UI end-to-end.
   step('A opens a DM with B (+ New DM) and sends a private message')
-  a.on('dialog', (d) => d.accept(userB)) // answer the "which user?" prompt
+  ans.a = userB // answer the "which user?" prompt
   await a.getByRole('button', { name: '+ New DM' }).click()
   const dmComposer = a.getByPlaceholder('Message @' + userB)
   await dmComposer.waitFor({ timeout: 8000 })
@@ -132,6 +141,47 @@ async function main() {
   await b.getByText(dmBody).waitFor({ timeout: 8000 })
   await b.screenshot({ path: join(SHOTS, 'rt-05-bob-dm.png') })
   check(await b.getByText(dmBody).isVisible(), 'B opens the DM and reads the private message')
+
+  // 5 — Servers across two users: A creates a server + channel, mints an invite, B
+  // redeems it, lands in the channel, reads history, and receives a live message.
+  step('A creates a server, a channel in it, and an invite code')
+  ans.a = 'team ' + sfx
+  await a.getByRole('button', { name: '+ New server' }).click()
+  await a.locator('.server-name', { hasText: 'team ' + sfx }).waitFor({ timeout: 8000 })
+  const srvChan = 'sc' + sfx.slice(-5)
+  ans.a = srvChan
+  await a
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .getByRole('button', { name: '+ channel' })
+    .click()
+  await a.getByRole('button', { name: new RegExp(srvChan) }).waitFor({ timeout: 8000 })
+  aDefault = ''
+  await a
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .getByRole('button', { name: 'invite' })
+    .click()
+  for (let i = 0; i < 50 && aDefault.length < 6; i++) await a.waitForTimeout(100)
+  const inviteCode = aDefault
+  check(inviteCode.length >= 6, 'A mints an invite code to share')
+
+  const srvMsg1 = 'server msg one ' + sfx
+  await a.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(srvMsg1)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(srvMsg1).waitFor({ timeout: 8000 })
+
+  step('B redeems the invite → lands in the server channel → reads history')
+  ans.b = inviteCode
+  await b.getByRole('button', { name: 'Join server' }).click()
+  await b.getByText(srvMsg1).waitFor({ timeout: 10000 })
+  await b.screenshot({ path: join(SHOTS, 'rt-06-bob-server.png') })
+  check(await b.getByText(srvMsg1).isVisible(), 'B joins via invite and reads the server history')
+
+  step('A posts again → B sees it live in the shared server channel')
+  const srvMsg2 = 'server msg two ' + sfx
+  await a.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(srvMsg2)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await b.getByText(srvMsg2).waitFor({ timeout: 8000 })
+  check(await b.getByText(srvMsg2).isVisible(), 'B receives a live message in the shared server channel')
 
   await browser.close()
   console.log(
