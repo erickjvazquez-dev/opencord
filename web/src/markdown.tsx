@@ -69,14 +69,13 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
 
   if (rule.kind === 'mention') {
     const name = m[1]
-    const isMe = !!ctx.me && name.toLowerCase() === ctx.me.toLowerCase()
-    out.push(
-      React.createElement(
-        'span',
-        { key: `md${ctx.n++}`, className: isMe ? 'mention mention-me' : 'mention' },
-        '@' + name,
-      ),
-    )
+    const lower = name.toLowerCase()
+    const isMe = !!ctx.me && lower === ctx.me.toLowerCase()
+    const isAll = lower === 'everyone' || lower === 'here'
+    // @everyone/@here ping you too, so they share the highlighted style; the extra
+    // `mention-all` class distinguishes them in the DOM.
+    const cls = isMe ? 'mention mention-me' : isAll ? 'mention mention-me mention-all' : 'mention'
+    out.push(React.createElement('span', { key: `md${ctx.n++}`, className: cls }, '@' + name))
   } else {
     const children = rule.literal ? [m[1]] : renderInline(m[1], ctx)
     out.push(React.createElement(rule.el as string, { key: `md${ctx.n++}` }, ...children))

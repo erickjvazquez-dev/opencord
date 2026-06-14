@@ -156,7 +156,7 @@ async function main() {
   step('send a message mentioning self + another → self-mention is highlighted')
   await page.waitForTimeout(3000) // let the rate-limit bucket refill before this send
   await composer.click()
-  await composer.fill(`hey @${user} and @someone_else`)
+  await composer.fill(`hey @${user} and @someone_else and @everyone`)
   await composer.press('Enter')
   const mineMention = page.locator('.message .body .mention.mention-me', { hasText: `@${user}` }).last()
   await mineMention.waitFor({ timeout: 8000 })
@@ -166,6 +166,8 @@ async function main() {
     .locator('.message .body .mention:not(.mention-me)', { hasText: '@someone_else' })
     .last()
   check(await otherMention.isVisible(), 'a mention of someone else renders as a plain mention')
+  const everyoneMention = page.locator('.message .body .mention.mention-all', { hasText: '@everyone' }).last()
+  check(await everyoneMention.isVisible(), '@everyone renders as a highlighted (mention-all) mention')
 
   const msg = page.locator('.message', { hasText: body }).first()
 
