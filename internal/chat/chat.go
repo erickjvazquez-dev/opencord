@@ -123,17 +123,36 @@ var ErrMessageNotFound = errors.New("message not found")
 // DeleteMessage soft-deletes the caller's own message and returns a stub (id +
 // channel + deleted flag) suitable for broadcasting the removal to the channel.
 func (s *Store) DeleteMessage(ctx context.Context, id, userID int64) (Message, error) {
-	m := Message{ID: id, Deleted: true, Body: "[deleted]"}
+	// Resolve the live message's channel, author, and (if any) server.
+	var channelID, authorID int64
+	var serverID *int64
 	err := s.pool.QueryRow(ctx,
-		`UPDATE messages SET deleted_at = now()
-		   WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-		   RETURNING channel_id`,
-		id, userID,
-	).Scan(&m.ChannelID)
+		`SELECT m.channel_id, m.user_id, c.server_id
+		   FROM messages m JOIN channels c ON c.id = m.channel_id
+		  WHERE m.id = $1 AND m.deleted_at IS NULL`, id).Scan(&channelID, &authorID, &serverID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Message{}, ErrMessageNotFound
 	}
-	return m, err
+	if err != nil {
+		return Message{}, err
+	}
+	// Allowed if the author, or an admin of the channel's server (moderation).
+	if userID != authorID {
+		allowed := false
+		if serverID != nil {
+			if allowed, err = s.IsServerAdmin(ctx, *serverID, userID); err != nil {
+				return Message{}, err
+			}
+		}
+		if !allowed {
+			return Message{}, ErrMessageNotFound
+		}
+	}
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE messages SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`, id); err != nil {
+		return Message{}, err
+	}
+	return Message{ID: id, ChannelID: channelID, Deleted: true, Body: "[deleted]"}, nil
 }
 
 // EditMessage updates the body of the caller's own (non-deleted) message, stamps

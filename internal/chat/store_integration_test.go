@@ -625,6 +625,54 @@ func TestServerRolesIntegration(t *testing.T) {
 	}
 }
 
+func TestMessageModerationIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, _ := store.CreateServer(ctx, owner.ID, "Mod Guild")
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	ch, _ := store.CreateServerChannel(ctx, srv.ID, "general")
+
+	// The member posts; a non-admin (a non-member stranger) can't delete it.
+	m, err := store.Save(ctx, ch.ID, member.ID, member.Username, "member message")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := store.DeleteMessage(ctx, m.ID, stranger.ID); !errors.Is(err, chat.ErrMessageNotFound) {
+		t.Fatalf("non-admin delete err = %v, want ErrMessageNotFound", err)
+	}
+	// The owner (admin) CAN delete the member's message (moderation).
+	if del, err := store.DeleteMessage(ctx, m.ID, owner.ID); err != nil || !del.Deleted || del.ChannelID != ch.ID {
+		t.Fatalf("owner moderation delete failed: %+v err %v", del, err)
+	}
+
+	// A plain member can't moderate the owner's message — until promoted to admin.
+	om, _ := store.Save(ctx, ch.ID, owner.ID, owner.Username, "owner message")
+	if _, err := store.DeleteMessage(ctx, om.ID, member.ID); !errors.Is(err, chat.ErrMessageNotFound) {
+		t.Fatalf("plain-member moderation err = %v, want ErrMessageNotFound", err)
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, member.ID, "admin"); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if _, err := store.DeleteMessage(ctx, om.ID, member.ID); err != nil {
+		t.Fatalf("promoted admin should be able to moderate: %v", err)
+	}
+
+	// In a public (serverless) channel there is no moderation: a non-author can't delete.
+	pub, _ := store.CreateChannel(ctx, uniqueChannel())
+	pm, _ := store.Save(ctx, pub.ID, member.ID, member.Username, "public message")
+	if _, err := store.DeleteMessage(ctx, pm.ID, owner.ID); !errors.Is(err, chat.ErrMessageNotFound) {
+		t.Fatalf("public-channel non-author delete err = %v, want ErrMessageNotFound", err)
+	}
+	if _, err := store.DeleteMessage(ctx, pm.ID, member.ID); err != nil {
+		t.Fatalf("author should delete their own public message: %v", err)
+	}
+}
+
 func hasServer(servers []chat.Server, id int64) bool {
 	for _, s := range servers {
 		if s.ID == id {

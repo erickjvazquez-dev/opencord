@@ -96,7 +96,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
 | `GET`    | `/api/messages/search?channel=<id>&q=` | bearer | Search a channel's messages (members only) |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
-| `DELETE` | `/api/messages/{id}`           | bearer | Delete your own message (soft)                 |
+| `DELETE` | `/api/messages/{id}`           | bearer | Delete a message (author, or a server admin)   |
 | `PUT`    | `/api/messages/{id}/reactions` | bearer | React with an emoji `{emoji}`                   |
 | `DELETE` | `/api/messages/{id}/reactions/{emoji}` | bearer | Remove your reaction                   |
 | `WS`     | `/ws?token=<jwt>&channel=<id>` | token  | Real-time channel (history · send · typing)    |

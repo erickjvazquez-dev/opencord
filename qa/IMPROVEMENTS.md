@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 35) — Message moderation: server admins can delete others' messages
+
+`DeleteMessage` now allows the author OR an admin of the message's channel's server (the
+moderation core). Backend-only this tick — the admin delete *button* is the next UI slice.
+Full Rule-15 cycle live: a plain member deleting another's server message → 404; the owner
+(and a promoted admin) → 204; public/serverless channels are unaffected (non-author → 404,
+the original behaviour).
+
+Reflections:
+- **Widening a permission means re-checking the rows that relied on it being narrow.** The
+  old delete was a one-line `UPDATE ... WHERE id AND user_id`. Loosening it (author OR
+  admin) required a SELECT-then-authorize-then-UPDATE — and the existing
+  `TestDeleteMessageIntegration` (non-author → not-found) had to keep passing. It did,
+  because for a *public* channel there's no server admin path; I verified that explicitly
+  rather than assuming the refactor preserved it.
+- **Return the same error for "not allowed" as for "not found" on a delete** — a member
+  probing message ids shouldn't learn which exist in a channel they can moderate-but-not.
+  Kept `ErrMessageNotFound` for the unauthorized path (→ 404) rather than a distinct 403,
+  matching the existing non-leak behaviour.
+- **Edit deliberately left author-only.** Moderation is about *removing* abuse, not
+  rewriting someone's words — admins can delete but not edit others' messages. Scoping a
+  permission tightly is itself a security decision.
+- **Next:** the moderation UI (show the delete button on others' messages when I'm an admin
+  of the active channel's server — needs the client to know its role per server, via a
+  `role` on the servers list), then per-channel permission overrides.
+
 ## 2026-06-14 (iter 34) — Roles UI: members panel + the owner's promote control
 
 Made last tick's roles backend usable in-app: `GET /servers/{id}/members` + a members
