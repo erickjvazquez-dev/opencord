@@ -124,6 +124,34 @@ async function main() {
     'Shift+Enter did not send "line one" as its own message',
   )
 
+  // 3e — Blockquote (> ) renders; spoiler (||x||) is hidden until clicked.
+  step('send a > blockquote + ||spoiler|| → blockquote renders, spoiler reveals on click')
+  // Pace first: this is the ~5th WS frame from this client and the per-connection
+  // rate limiter (burst 5, +2/s; every message OR typing frame costs a token) would
+  // otherwise drop it. Wait for the token bucket to refill so the send lands.
+  await page.waitForTimeout(3000)
+  await composer.click()
+  await composer.fill('> a quoted line')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('||a secret||')
+  await composer.press('Enter')
+  const bq = page.locator('.message .body blockquote', { hasText: 'a quoted line' }).last()
+  await bq.waitFor({ timeout: 8000 })
+  check(await bq.isVisible(), 'blockquote (> ) renders as <blockquote>')
+  const spoiler = page.locator('.message .body .spoiler', { hasText: 'a secret' }).last()
+  await spoiler.waitFor({ timeout: 8000 })
+  check(
+    !(await spoiler.evaluate((el) => el.classList.contains('shown'))),
+    'spoiler starts hidden (not revealed)',
+  )
+  await shot('03e-spoiler-hidden.png')
+  await spoiler.click()
+  check(
+    await spoiler.evaluate((el) => el.classList.contains('shown')),
+    'spoiler reveals on click',
+  )
+  await shot('03e-spoiler-shown.png')
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).

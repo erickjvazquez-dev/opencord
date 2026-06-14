@@ -76,8 +76,9 @@ item from here as the structural milestones above land.
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators
 - [x] Reactions (emoji) — add/remove, per-viewer counts, live WS, client UI (quick palette + chips)
 - [ ] Custom emoji · stickers · GIF picker
-- [~] Markdown — bold/italic/strikethrough + inline & fenced code, XSS-safe (React
-  elements, no innerHTML); E2E + AI-vision verified. (blockquote/spoiler still TODO)
+- [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
+  and `||spoilers||` (click to reveal); XSS-safe (React elements, no innerHTML);
+  E2E + AI-vision verified.
 - [ ] Mentions @user/@role/@everyone/@here (+ notifications) · replies · threads
 - [ ] File / image / video attachments · link embeds + previews
 - [ ] Pinned + bookmarked messages · read state / unread / mention badges

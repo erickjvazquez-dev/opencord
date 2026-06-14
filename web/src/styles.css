@@ -419,6 +419,26 @@ button:disabled {
 .message .body del {
   opacity: 0.7;
 }
+.message .body blockquote {
+  margin: 2px 0;
+  padding: 1px 0 1px 10px;
+  border-left: 3px solid var(--accent, rgba(127, 127, 127, 0.5));
+  color: var(--text-muted, inherit);
+}
+.message .body .spoiler {
+  background: var(--text, #111);
+  color: transparent;
+  border-radius: 3px;
+  padding: 0 3px;
+  cursor: pointer;
+  user-select: none;
+}
+.message .body .spoiler.shown {
+  background: var(--bg-elevated, rgba(127, 127, 127, 0.18));
+  color: inherit;
+  cursor: default;
+  user-select: text;
+}
 
 .edited {
   font-size: 11px;

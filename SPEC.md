@@ -326,3 +326,18 @@ Bodies already render with `white-space: pre-wrap`, so newlines display.
 **Verification:** `qa/browser.mjs` types two lines via Shift+Enter, sends with Enter, and
 asserts both lines land in ONE message (and that "line one" wasn't sent on its own) —
 proving Shift+Enter doesn't submit. AI-vision review of `03d-multiline.png` confirms it.
+
+## Markdown — blockquote + spoiler (v0.3, 2026-06-14)
+
+Completes the Markdown subset now that the composer is multi-line. `markdown.tsx` gained
+block-level parsing: consecutive `> `-prefixed lines become one `<blockquote>`, and a
+stateful `Spoiler` component renders `||text||` as a click-to-reveal span (hidden via CSS
+`color: transparent` until clicked). Still React-elements-only (XSS-safe). CSS for
+`blockquote` + `.spoiler`/`.spoiler.shown` added.
+
+**QA note (meta):** `browser.mjs` initially saw this 5th message silently dropped — the
+per-connection **rate limiter** (`rateBurst=5`, `+2/s`; every message *or* typing frame
+costs a token) had emptied under the bot's rapid sends. The product is correct (limiter
+working, renderer proven via react-dom/server); the QA now paces (waits for the bucket to
+refill) before the send. Lesson: an automated client sends faster than a human and can trip
+real abuse limits — pace the QA, don't weaken the limit.
