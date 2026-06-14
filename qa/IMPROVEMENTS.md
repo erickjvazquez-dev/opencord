@@ -3,6 +3,23 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 54) — Pin UI; mirrored the server authz rule in the client gate
+
+Completed pinned messages: pin/unpin hover action, 📌 badge, live `message-pinned` WS handler.
+Two-tick slice done (backend iter 53 → UI iter 54).
+
+Reflections:
+- **The client's "can I do this?" gate should mirror the server's authz, not guess.** `canPin =
+  !activeServerChannel || canModerate` is the exact client-side reflection of the store rule (admins
+  in server channels, any member elsewhere). The server still enforces it (the UI gate is just UX), but
+  matching them means the button only shows when the action will actually succeed — no misleading
+  controls that 403.
+- **Lean on the existing live-update path instead of optimistic state.** Pin calls the API and lets the
+  `message-pinned` broadcast update the flag for everyone — same pattern as delete. One source of truth
+  (the broadcast), and the sender sees the same update as everyone else, so no optimistic/rollback code.
+- **The pin badge sits outside the (group-collapsed) message head** so a pinned message still shows it
+  even when grouped under the same author — a small correctness check the screenshot confirmed.
+
 ## 2026-06-14 (iter 53) — Pinned messages (backend); reused the moderation authz model
 
 Shipped pin/unpin backend: `messages.pinned`, `SetMessagePinned`, `PUT/DELETE /messages/{id}/pin`
