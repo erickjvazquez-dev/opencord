@@ -13,6 +13,7 @@ import (
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
 	"github.com/erickjvazquez-dev/opencord/internal/chat"
 	"github.com/erickjvazquez-dev/opencord/internal/config"
+	"github.com/erickjvazquez-dev/opencord/internal/webui"
 	"github.com/erickjvazquez-dev/opencord/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -197,6 +198,11 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 	})
 
 	r.Get("/ws", ws.ServeWS(hub, authsvc, store))
+
+	// Everything not matched above is the SPA: real assets when they exist, else
+	// index.html (client-side routing). /api, /ws and /healthz are matched first,
+	// so this only catches frontend paths.
+	r.Handle("/*", webui.Handler())
 
 	return r
 }

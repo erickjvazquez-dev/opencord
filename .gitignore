@@ -6,6 +6,9 @@
 # Node / web
 web/node_modules/
 web/dist/
+# Embedded SPA build output — only the committed placeholder index.html is tracked;
+# the real index.html + assets/ are produced at Docker build time.
+internal/webui/dist/assets/
 # TypeScript build artifacts (emitted by `tsc -b`)
 *.tsbuildinfo
 web/vite.config.js

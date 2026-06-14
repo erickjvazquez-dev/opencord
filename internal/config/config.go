@@ -17,8 +17,14 @@ type Config struct {
 }
 
 func Load() Config {
+	// Platforms like Railway/Heroku inject $PORT and expect the app to bind it;
+	// it takes precedence over OPENCORD_ADDR when present.
+	addr := env("OPENCORD_ADDR", ":8080")
+	if p := os.Getenv("PORT"); p != "" {
+		addr = ":" + p
+	}
 	return Config{
-		Addr:        env("OPENCORD_ADDR", ":8080"),
+		Addr:        addr,
 		DatabaseURL: env("DATABASE_URL", "postgres://opencord:opencord@localhost:5432/opencord?sslmode=disable"),
 		JWTSecret:   []byte(env("JWT_SECRET", "dev-insecure-change-me")),
 		TokenTTL:    7 * 24 * time.Hour,

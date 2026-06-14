@@ -356,3 +356,21 @@ email like `foo@bar` renders `@bar` as a mention (no left-boundary check); accep
 MVP slice. **Verification:** browser QA sends `hey @<self> and @someone_else`, asserts the
 self-mention gets `mention-me` and the other a plain `mention`; AI-vision of `03f-mention.png`
 confirms the amber vs accent styling. Renderer also proven via react-dom/server.
+
+## Single-binary production build — Go serves the embedded SPA (2026-06-14)
+
+For cloud/one-binary deploys, the Go server now serves the built web SPA itself, so
+production needs just the one binary + Postgres (no nginx, no private networking).
+
+- `internal/webui` embeds `dist/` (`//go:embed all:dist`) and serves it: real assets
+  when the path maps to a file, else `index.html` (SPA fallback for client routes).
+- `router.go` mounts it as the `/*` catch-all — `/api`, `/ws`, `/healthz` match first.
+- A committed placeholder `internal/webui/dist/index.html` keeps `go build` green in CI;
+  the real `index.html` + `assets/` are produced by the web build and copied in at
+  Docker build time (root `Dockerfile`, multi-stage: node build → go build → distroless).
+- `config.go` binds `$PORT` when set (Railway/Heroku), else `OPENCORD_ADDR` (:8080).
+- The existing `docker compose up` (separate nginx `web` + `server` + `db`) still works
+  for local self-host; this single-image path is additive, used by the cloud deploy.
+
+Verified locally: one binary on `$PORT` serves `/healthz`, the SPA at `/`, hashed
+assets, the `/login` SPA fallback, and `POST /api/auth/register` — all 200.

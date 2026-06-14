@@ -3,6 +3,9 @@
 bin
 web/node_modules
 web/dist
+qa/node_modules
+qa/qa-screenshots
+internal/webui/dist/assets
 **/.DS_Store
 .env
 .ccf
