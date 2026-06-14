@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 57) — Markdown lists; the delimiter ambiguity that needed care
+
+Added `- `/`* ` and `1. ` lists to the renderer. The interesting bit is the `*` ambiguity: `* item`
+(bullet) vs `*italic*` (emphasis). Requiring a trailing space on the bullet rule (`/^[-*]\s+/`)
+disambiguates them, and I probed both to confirm `*italic*` still renders as `<em>`, not a one-item
+list.
+
+Reflections:
+- **When a new rule shares a delimiter with an existing one, prove the OLD behavior still holds.** The
+  risk in adding `*`-bullets wasn't the new feature — it was silently breaking `*italic*`. The probe's
+  `italic-not-a-bullet` case is the regression guard for that interaction; I wrote it before trusting
+  the rule.
+- **block vs inline is the right axis for this parser.** Lists/blockquotes are line-grouped in
+  `renderBlocks`; bold/italic/code/links/mentions are span-level in `renderInline`. Keeping that split
+  clean meant lists slotted in without touching any inline logic.
+- **This likely closes the markdown arc.** bold/italic/strike/code/fence/blockquote/spoiler/lists/
+  mentions/links is a complete-enough set; further markdown (tables, headers) would be diminishing
+  returns. Next ticks should move to a *different* surface (e.g. moderation, presence, account) rather
+  than keep enriching one renderer — watch for that drift.
+
 ## 2026-06-14 (iter 56) — Pins panel UI; reused the panel pattern, kept panels exclusive
 
 Shipped the pins panel (header "pins" button → list of the channel's pins), completing pinned
