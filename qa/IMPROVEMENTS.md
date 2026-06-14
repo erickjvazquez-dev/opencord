@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 39) — HTTP-layer authz coverage: testing router.go, not just the store
+
+`internal/httpapi/router.go` (the entire REST surface) had **zero** test files while
+`auth`/`chat`/`ws` all had suites. The store layer's authorization was well covered by
+`chat/store_integration_test.go`, but the *HTTP wiring* — JWT middleware, the inline
+`IsServerMember`/`IsServerAdmin` gates in `mountServerRoutes`, and the `error → HTTP
+status` mapping — was untested. A bug there (wrong code, a missing gate) is a security
+hole the store tests can't see. Added `router_integration_test.go`: a `DATABASE_URL`-gated
+suite that drives the *real* chi router via `httptest` and walks an attacker through every
+boundary (401 unauth · 403 non-member/non-admin · 404 no-existence-leak on moderation ·
+400 bad role/policy/id · 2xx for the legitimate owner/admin). Verified against a local
+postgres (7/7 subtests) and runs in CI's postgres service.
+
+Reflections:
+- **"Tested" must name the layer.** The store being green hid that the HTTP layer mapping
+  it to status codes had no guard at all. Coverage gaps live at seams between packages —
+  the next audit target is the **WS layer's** REST-adjacent access checks (`ServeWS`
+  channel-access gating) tested through a real upgrade, not just `ws` unit tests.
+- **Reuse the established pattern, don't reinvent.** Mirrored the store suite's
+  skip-without-`DATABASE_URL` convention so `go test ./...` stays green locally and the
+  test is a real CI guard — not a second bespoke harness.
+- **Next QA growth:** extend this suite to the message edit/reaction endpoints (PUT/DELETE
+  reactions, PATCH body) and assert the read-only `Save`→403 path through HTTP once a
+  message-send REST route exists (today messages are sent over WS).
+
 ## 2026-06-14 (iter 38) — Read-only channel UI: finishing the last feature's front end
 
 Completed the read-only-channel feature shipped backend-only last tick. The client now
