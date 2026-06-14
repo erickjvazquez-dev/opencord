@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 56) — Pins panel UI; reused the panel pattern, kept panels exclusive
+
+Shipped the pins panel (header "pins" button → list of the channel's pins), completing pinned
+messages end to end.
+
+Reflections:
+- **Reusing the search-results panel made this a tiny diff** — same container/markup, just a different
+  data source (`fetchPins`) and header. The expensive part of a panel (layout/CSS/message rendering)
+  was already built; the new feature is mostly state + a fetch. Recognizing "this is the search panel
+  with different data" is what kept it small.
+- **Three mutually-exclusive overlays need explicit exclusivity, or they fight.** members / search /
+  pins all render over the message list. I made opening any one clear the others (and a channel switch
+  clear pins), and ordered the render conditions by priority — so you never get two panels stacked or a
+  stale one re-appearing when you close another. Enumerated the interactions rather than hoping.
+- **Pinned messages is now a complete vertical feature** across 4 ticks (iter 53 backend → 54 UI → 55
+  list endpoint → 56 panel), each slice independently shipped, tested, and (for UI) AI-vision-checked —
+  a good template for medium features in a long session: small, verifiable increments over one big PR.
+
 ## 2026-06-14 (iter 55) — Pins list endpoint; correctness over the cheap in-memory filter
 
 Added `GET /messages/pins` so a future pins panel sees ALL pins, not just those among the loaded
