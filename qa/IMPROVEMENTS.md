@@ -3,6 +3,22 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 45) — @mention rendering; applied last tick's lesson proactively
+
+Shipped the first @mention slice: `@user` chips with the viewer's own mention highlighted
+distinctly (amber `mention-me` vs accent). Client-only, XSS-safe, GOAL Mentions now `[~]`.
+
+Reflections:
+- **Applied iter-44's "isolate the unit" lesson *before* the slow path, not after.** Rather than
+  build → run the ~2-min full browser QA → debug, I first proved the renderer via react-dom/server
+  (`@alice`→mention-me, `@bob`→mention, `foo@bar`→`@bar` quirk) in ~1s, *then* ran the E2E once with
+  confidence. A debugging lesson is only banked when it changes the *next* tick's order of operations.
+- **Paced the new send by default.** Knowing the rate-limiter trap (iter 44), the mention step waits
+  for the bucket before sending — no flaky discovery this time. The meta-QA gap noted last tick (steps
+  accumulate WS frames) is now handled per-step; a future cleanup could factor a `sendPaced()` helper.
+- **Logged the scope honestly:** rendering only (no resolution/notifications/autocomplete) and the
+  `foo@bar` email quirk are in SPEC + the commit, so the `[~]` is truthful, not optimistic.
+
 ## 2026-06-14 (iter 44) — Markdown blockquote + spoiler; isolate the unit when E2E fails
 
 Completed the Markdown subset: `> ` blockquotes (block-level line grouping) and `||spoiler||`
