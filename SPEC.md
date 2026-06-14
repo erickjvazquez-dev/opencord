@@ -413,3 +413,5 @@ Messages can be pinned in their channel. Backend slice (UI follows).
   `message-pinned` event to the channel.
 - Tests: bad id 400, non-admin 403 (server channel), admin pin 204 → pinned=true →
   unpin 204 → pinned=false (round-trip via Recent). DATABASE_URL-gated.
+
+_UI shipped 2026-06-14 (iter 54): pin/unpin in the message hover actions (shown to admins in server channels, any member elsewhere via `canPin`), a "📌 pinned" badge, and a `message-pinned` WS handler for live updates; browser QA `07g-pin.png` + AI-vision verified._

@@ -312,6 +312,15 @@ async function main() {
     'channel topic appears in the header after editing',
   )
 
+  // 7g — Pin: the admin pins the server-channel message; a pin badge appears (live WS).
+  step('admin pins a message → pin badge appears')
+  const srvMsg = page.locator('.message', { hasText: srvBody }).first()
+  await srvMsg.hover()
+  await srvMsg.getByRole('button', { name: 'pin', exact: true }).click()
+  await srvMsg.locator('.pin-badge').waitFor({ timeout: 8000 })
+  await shot('07g-pin.png')
+  check(await srvMsg.locator('.pin-badge').isVisible(), 'pinned message shows the pin badge')
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

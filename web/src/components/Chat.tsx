@@ -18,6 +18,7 @@ import {
   searchMessages,
   setChannelPolicy,
   setChannelTopic,
+  setMessagePinned,
   setServerMemberRole,
 } from '../api'
 import type {
@@ -177,6 +178,9 @@ export function Chat({
         setMessages((prev) =>
           prev.map((x) => (x.id === id ? { ...x, deleted: true, body: '[deleted]' } : x)),
         )
+      } else if (data.type === 'message-pinned' && data.message) {
+        const { id, pinned } = data.message
+        setMessages((prev) => prev.map((x) => (x.id === id ? { ...x, pinned } : x)))
       } else if (data.type === 'typing' && data.username && data.username !== user.username) {
         const who = data.username
         setTyping((prev) => (prev.includes(who) ? prev : [...prev, who]))
@@ -326,6 +330,14 @@ export function Chat({
     }
   }
 
+  const togglePin = async (m: Message) => {
+    try {
+      await setMessagePinned(token, m.id, !m.pinned) // the WS broadcast updates the flag
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not change pin')
+    }
+  }
+
   // Toggle the viewer's reaction on a message. Optimistically flips local "mine"
   // and nudges the count; the WS `reaction` broadcast reconciles counts. Reverts
   // on HTTP failure.
@@ -379,6 +391,8 @@ export function Chat({
   const canModerate = myActiveRole === 'owner' || myActiveRole === 'admin'
   const activeIsReadOnly = activeServerChannel?.postPolicy === 'admins'
   const canPost = !activeIsReadOnly || canModerate
+  // Pinning matches the server's rule: admins in a server channel, any member elsewhere.
+  const canPin = !activeServerChannel || canModerate
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -687,6 +701,9 @@ export function Chat({
                       {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
                     </div>
                   )}
+                  {m.pinned && !m.deleted && (
+                    <span className="pin-badge" title="pinned message">📌 pinned</span>
+                  )}
                   {!m.deleted && editingId !== m.id && (
                     <span className="msg-actions">
                       {m.userId === user.id && (
@@ -694,6 +711,9 @@ export function Chat({
                       )}
                       {(m.userId === user.id || canModerate) && (
                         <button onClick={() => remove(m)}>delete</button>
+                      )}
+                      {canPin && (
+                        <button onClick={() => void togglePin(m)}>{m.pinned ? 'unpin' : 'pin'}</button>
                       )}
                       <button onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}>
                         react

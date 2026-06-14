@@ -83,7 +83,8 @@ item from here as the structural milestones above land.
   highlighted as all-mentions; E2E + AI-vision verified. (@role, autocomplete,
   delivery/notifications, replies, threads still TODO)
 - [ ] File / image / video attachments · link embeds + previews
-- [ ] Pinned + bookmarked messages · read state / unread / mention badges
+- [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
+  WS update; E2E + AI-vision verified. (bookmarks, read state / unread / mention badges TODO)
 - [ ] Message search (from/in/has/before/after) · polls · timestamp grouping
 
 ### Voice / Video

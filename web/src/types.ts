@@ -56,6 +56,7 @@ export interface Message {
   createdAt: string
   editedAt?: string
   deleted?: boolean
+  pinned?: boolean
   reactions?: Reaction[]
 }
 
@@ -65,6 +66,7 @@ export interface ServerEvent {
     | 'message'
     | 'message-edited'
     | 'message-deleted'
+    | 'message-pinned'
     | 'reaction'
     | 'typing'
     | 'presence'

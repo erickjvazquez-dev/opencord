@@ -142,6 +142,21 @@ export async function setChannelPolicy(
   }
 }
 
+export async function setMessagePinned(
+  token: string,
+  messageId: number,
+  pinned: boolean,
+): Promise<void> {
+  const res = await fetch(`/api/messages/${messageId}/pin`, {
+    method: pinned ? 'PUT' : 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not change pin')
+  }
+}
+
 export async function setChannelTopic(
   token: string,
   channelId: number,
