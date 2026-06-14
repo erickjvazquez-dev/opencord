@@ -258,3 +258,39 @@ func TestRouterMessageEndpointsIntegration(t *testing.T) {
 		wantStatus(t, hs.req(t, "DELETE", del, memberTok, ""), http.StatusOK, "member removes reaction")
 	})
 }
+
+// TestRouterSPARoutingIntegration guards the single-binary deploy wiring: the SPA
+// catch-all serves index.html for "/" and unknown client routes, but must NOT
+// shadow the API — an unknown /api path is still a 404 (JSON-ish), not the SPA —
+// and /healthz still returns its JSON.
+func TestRouterSPARoutingIntegration(t *testing.T) {
+	hs := newHarness(t)
+
+	isHTML := func(w *httptest.ResponseRecorder) bool {
+		return strings.Contains(w.Header().Get("Content-Type"), "text/html")
+	}
+
+	// "/" and unknown client routes → the SPA shell (HTML).
+	for _, path := range []string{"/", "/login", "/channels/123"} {
+		w := hs.req(t, "GET", path, "", "")
+		wantStatus(t, w, http.StatusOK, "SPA "+path)
+		if !isHTML(w) {
+			t.Fatalf("GET %s should serve the SPA (text/html), got %q", path, w.Header().Get("Content-Type"))
+		}
+	}
+
+	// The catch-all must NOT swallow the API: an unknown /api route is a 404, not
+	// the SPA HTML. (Regression guard for the /* mount added with the embed.)
+	w := hs.req(t, "GET", "/api/definitely-not-a-route", "", "")
+	wantStatus(t, w, http.StatusNotFound, "unknown /api path")
+	if isHTML(w) {
+		t.Fatal("unknown /api path served the SPA shell — catch-all is shadowing the API")
+	}
+
+	// /healthz is still the health endpoint, not the SPA.
+	wh := hs.req(t, "GET", "/healthz", "", "")
+	wantStatus(t, wh, http.StatusOK, "healthz")
+	if !strings.Contains(wh.Body.String(), `"status":"ok"`) {
+		t.Fatalf("/healthz body = %q, want health JSON", strings.TrimSpace(wh.Body.String()))
+	}
+}
