@@ -103,6 +103,27 @@ async function main() {
     'no <script> element was injected into the DOM (XSS-safe)',
   )
 
+  // 3d — Multi-line composer: Shift+Enter inserts a newline, Enter sends.
+  step('type two lines with Shift+Enter, send with Enter')
+  const composer = page.getByPlaceholder(/Message #/)
+  await composer.click()
+  await composer.fill('line one')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('line two')
+  await composer.press('Enter')
+  const multi = page.locator('.message .body', { hasText: 'line two' }).last()
+  await multi.waitFor({ timeout: 8000 })
+  await shot('03d-multiline.png')
+  const multiText = await multi.innerText()
+  check(
+    multiText.includes('line one') && multiText.includes('line two'),
+    'Shift+Enter keeps both lines in one message; Enter sends it',
+  )
+  check(
+    (await page.locator('.message .body', { hasText: 'line one' }).count()) === 1,
+    'Shift+Enter did not send "line one" as its own message',
+  )
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).

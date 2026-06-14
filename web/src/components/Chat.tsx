@@ -198,12 +198,16 @@ export function Chat({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const send = (e: FormEvent) => {
-    e.preventDefault()
+  const submitDraft = () => {
     const body = draft.trim()
     if (!body || wsRef.current?.readyState !== WebSocket.OPEN) return
     wsRef.current.send(JSON.stringify({ body }))
     setDraft('')
+  }
+
+  const send = (e: FormEvent) => {
+    e.preventDefault()
+    submitDraft()
   }
 
   const addChannel = async () => {
@@ -732,7 +736,9 @@ export function Chat({
           </div>
         )}
         <form className="composer" onSubmit={send}>
-          <input
+          <textarea
+            className="composer-input"
+            rows={1}
             placeholder={
               !connected
                 ? 'connecting…'
@@ -745,10 +751,21 @@ export function Chat({
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value)
+              // Auto-grow with the content, bounded by CSS max-height.
+              e.target.style.height = 'auto'
+              e.target.style.height = `${e.target.scrollHeight}px`
               const now = Date.now()
               if (wsRef.current?.readyState === WebSocket.OPEN && now - lastTypingSent.current > 2000) {
                 lastTypingSent.current = now
                 wsRef.current.send(JSON.stringify({ type: 'typing' }))
+              }
+            }}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter inserts a newline (Discord convention).
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                submitDraft()
+                e.currentTarget.style.height = 'auto'
               }
             }}
             disabled={!connected || !canPost}

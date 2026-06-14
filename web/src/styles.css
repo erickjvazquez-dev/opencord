@@ -69,7 +69,8 @@ input {
 }
 
 .auth-card input,
-.composer input {
+.composer input,
+.composer textarea {
   background: var(--bg-input);
   border: 1px solid transparent;
   color: var(--text);
@@ -78,8 +79,18 @@ input {
   outline: none;
 }
 
+/* Multi-line composer: grows with content (JS sets height), bounded here. */
+.composer textarea {
+  resize: none;
+  font: inherit;
+  line-height: 1.4;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
 .auth-card input:focus,
-.composer input:focus {
+.composer input:focus,
+.composer textarea:focus {
   border-color: var(--accent);
 }
 
@@ -560,12 +571,14 @@ button:disabled {
 
 .composer {
   display: flex;
+  align-items: flex-end;
   gap: 10px;
   padding: 8px 18px 16px;
   background: var(--bg);
 }
 
-.composer input {
+.composer input,
+.composer textarea {
   flex: 1;
 }
 

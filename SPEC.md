@@ -311,3 +311,18 @@ keep the plain `[deleted]` stub). CSS for `code`/`pre`/`del` added to `styles.cs
 **Verification:** `qa/browser.mjs` sends `**bold** and \`code\` and <script>alert(1)</script>` and
 asserts the `<strong>`/`<code>` render while the `<script>` shows as literal text with no injected
 script element (XSS guard); AI-vision review of the screenshot confirms it looks right.
+
+## Multi-line message composer (v0.3, 2026-06-14)
+
+**Goal:** the composer was a single-line `<input>`, so users couldn't send multi-line
+messages (and Markdown blockquotes / multi-line code blocks were untypeable).
+
+**Change:** the composer is now a `<textarea>` (`Chat.tsx`) that auto-grows with its
+content (JS sets `height = scrollHeight`, bounded by `max-height: 40vh` in CSS).
+Keyboard: **Enter sends**, **Shift+Enter inserts a newline** (Discord convention).
+`submitDraft()` is shared by the form `onSubmit` (Send button) and the Enter handler.
+Bodies already render with `white-space: pre-wrap`, so newlines display.
+
+**Verification:** `qa/browser.mjs` types two lines via Shift+Enter, sends with Enter, and
+asserts both lines land in ONE message (and that "line one" wasn't sent on its own) —
+proving Shift+Enter doesn't submit. AI-vision review of `03d-multiline.png` confirms it.
