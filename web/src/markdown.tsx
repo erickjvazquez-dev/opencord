@@ -104,27 +104,49 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
 
 // QUOTE matches a leading `>` (with an optional space) on a line.
 const QUOTE = /^>\s?/
+const BULLET = /^[-*]\s+/ // "- item" or "* item" (the space distinguishes it from *italic*)
+const NUMBERED = /^\d+\.\s+/ // "1. item"
 
-// renderBlocks does line-level parsing on a (code-block-free) chunk: consecutive
-// `>`-prefixed lines become one <blockquote>; everything else is inline-rendered as
-// a run (newlines preserved by the body's white-space: pre-wrap).
+type LineKind = 'quote' | 'bullet' | 'numbered' | 'para'
+function lineKind(line: string): LineKind {
+  if (QUOTE.test(line)) return 'quote'
+  if (BULLET.test(line)) return 'bullet'
+  if (NUMBERED.test(line)) return 'numbered'
+  return 'para'
+}
+
+// renderBlocks does line-level parsing on a (code-block-free) chunk: a run of `>`
+// lines becomes a <blockquote>; a run of `- `/`* ` or `1. ` lines becomes a
+// <ul>/<ol>; everything else is inline-rendered as a paragraph run (newlines
+// preserved by the body's white-space: pre-wrap).
 function renderBlocks(text: string, ctx: Ctx): ReactNode[] {
   const lines = text.split('\n')
   const out: ReactNode[] = []
   let i = 0
   while (i < lines.length) {
-    if (QUOTE.test(lines[i])) {
+    const kind = lineKind(lines[i])
+    if (kind === 'quote') {
       const quoted: string[] = []
-      while (i < lines.length && QUOTE.test(lines[i])) {
+      while (i < lines.length && lineKind(lines[i]) === 'quote') {
         quoted.push(lines[i].replace(QUOTE, ''))
         i++
       }
       out.push(
         React.createElement('blockquote', { key: `md${ctx.n++}` }, ...renderInline(quoted.join('\n'), ctx)),
       )
+    } else if (kind === 'bullet' || kind === 'numbered') {
+      const re = kind === 'bullet' ? BULLET : NUMBERED
+      const items: ReactNode[] = []
+      while (i < lines.length && lineKind(lines[i]) === kind) {
+        items.push(
+          React.createElement('li', { key: `md${ctx.n++}` }, ...renderInline(lines[i].replace(re, ''), ctx)),
+        )
+        i++
+      }
+      out.push(React.createElement(kind === 'bullet' ? 'ul' : 'ol', { key: `md${ctx.n++}` }, ...items))
     } else {
       const para: string[] = []
-      while (i < lines.length && !QUOTE.test(lines[i])) {
+      while (i < lines.length && lineKind(lines[i]) === 'para') {
         para.push(lines[i])
         i++
       }

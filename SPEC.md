@@ -425,3 +425,10 @@ is the backing query. Tested: non-member 403; owner gets exactly the pinned mess
 the non-pinned one excluded. (Pins panel UI next.)
 
 _Panel UI shipped 2026-06-14 (iter 56): a "pins" header button opens a panel (reusing the search-results panel) that lists the channel's pins via `fetchPins`; mutually exclusive with the search/members panels; browser QA `07h-pins-panel.png` + AI-vision verified._
+
+## Markdown lists (v0.3, 2026-06-14)
+
+Bulleted (`- `/`* `) and numbered (`1. `) lists render as `<ul>`/`<ol>` via `renderBlocks`
+(line-grouped like blockquotes). The bullet rule requires a space (`- `/`* `) so `*italic*`
+(no space) stays inline. Verified via react-dom/server probe (bullets, `*`, numbered, italic-not-
+a-bullet, mixed) + browser QA (`.body ul li` count) + AI-vision.

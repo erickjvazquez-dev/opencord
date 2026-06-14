@@ -424,6 +424,14 @@ button:disabled {
   text-decoration: underline;
   word-break: break-all;
 }
+.message .body ul,
+.message .body ol {
+  margin: 2px 0;
+  padding-left: 22px;
+}
+.message .body li {
+  margin: 1px 0;
+}
 .message .body blockquote {
   margin: 2px 0;
   padding: 1px 0 1px 10px;

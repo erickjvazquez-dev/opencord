@@ -140,6 +140,10 @@ async function main() {
   await composer.fill('> a quoted line')
   await composer.press('Shift+Enter')
   await composer.pressSequentially('||a secret||')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('- item one')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('- item two')
   await composer.press('Enter')
   const bq = page.locator('.message .body blockquote', { hasText: 'a quoted line' }).last()
   await bq.waitFor({ timeout: 8000 })
@@ -157,6 +161,12 @@ async function main() {
     'spoiler reveals on click',
   )
   await shot('03e-spoiler-shown.png')
+  // Same message carries a bullet list (the lines after the spoiler).
+  const listMsg = page.locator('.message', { hasText: 'item one' }).last()
+  check(
+    (await listMsg.locator('.body ul li').count()) === 2,
+    'bullet list renders as <ul> with two <li>',
+  )
 
   // 3f — @mention: a mention of yourself is highlighted distinctly from others.
   step('send a message mentioning self + another → self-mention is highlighted')

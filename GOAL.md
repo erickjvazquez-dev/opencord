@@ -77,8 +77,8 @@ item from here as the structural milestones above land.
 - [x] Reactions (emoji) — add/remove, per-viewer counts, live WS, client UI (quick palette + chips)
 - [ ] Custom emoji · stickers · GIF picker
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
-  and `||spoilers||` (click to reveal); XSS-safe (React elements, no innerHTML);
-  E2E + AI-vision verified.
+  `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
+  (React elements, no innerHTML); E2E + AI-vision verified.
 - [~] Mentions — `@user` chips (your own highlighted), plus `@everyone`/`@here`
   highlighted as all-mentions; E2E + AI-vision verified. (@role, autocomplete,
   delivery/notifications, replies, threads still TODO)
