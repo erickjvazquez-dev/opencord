@@ -104,6 +104,8 @@ type Channel struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"createdAt"`
+	// PostPolicy is 'everyone' or 'admins' (read-only). Populated for server channels.
+	PostPolicy string `json:"postPolicy,omitempty"`
 }
 
 type Store struct{ pool *pgxpool.Pool }
@@ -622,7 +624,7 @@ func (s *Store) AddServerMember(ctx context.Context, serverID, userID int64) err
 
 // CreateServerChannel creates a members-only channel under a server.
 func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name string) (Channel, error) {
-	c := Channel{Name: name}
+	c := Channel{Name: name, PostPolicy: "everyone"}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO channels (name, server_id) VALUES ($1, $2) RETURNING id, created_at`,
 		name, serverID).Scan(&c.ID, &c.CreatedAt)
@@ -639,7 +641,8 @@ func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name st
 // ListServerChannels returns the channels under serverID, oldest first.
 func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at FROM channels WHERE server_id = $1 ORDER BY id`, serverID)
+		`SELECT id, name, created_at, post_policy FROM channels WHERE server_id = $1 ORDER BY id`,
+		serverID)
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +650,7 @@ func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Chann
 	out := make([]Channel, 0)
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

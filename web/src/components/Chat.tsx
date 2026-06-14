@@ -16,6 +16,7 @@ import {
   redeemInvite,
   removeReaction,
   searchMessages,
+  setChannelPolicy,
   setServerMemberRole,
 } from '../api'
 import type {
@@ -183,6 +184,7 @@ export function Chat({
           delete typingTimers.current[who]
         }, 3000)
       } else if (data.type === 'presence') setOnline(data.online ?? 0)
+      else if (data.type === 'error' && data.error) window.alert(data.error)
     }
     return () => {
       ws.close()
@@ -369,6 +371,8 @@ export function Chat({
     ? servers.find((s) => s.id === Number(activeServerId))?.role
     : undefined
   const canModerate = myActiveRole === 'owner' || myActiveRole === 'admin'
+  const activeIsReadOnly = activeServerChannel?.postPolicy === 'admins'
+  const canPost = !activeIsReadOnly || canModerate
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -389,6 +393,24 @@ export function Chat({
   const clearSearch = () => {
     setSearchResults(null)
     setSearchQuery('')
+  }
+
+  // Admin toggle: flip the active server channel between open and read-only ('admins').
+  const toggleReadOnly = async () => {
+    if (!activeServerChannel || activeServerId == null) return
+    const sid = Number(activeServerId)
+    const next = activeServerChannel.postPolicy === 'admins' ? 'everyone' : 'admins'
+    try {
+      await setChannelPolicy(token, activeServerChannel.id, next)
+      setServerChannels((cur) => ({
+        ...cur,
+        [sid]: (cur[sid] ?? []).map((c) =>
+          c.id === activeServerChannel.id ? { ...c, postPolicy: next } : c,
+        ),
+      }))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not change channel policy')
+    }
   }
 
   return (
@@ -496,7 +518,17 @@ export function Chat({
             <span className="channel">
               {activeDM ? `@${activeDM.user.username}` : `#${activeChannelName ?? '…'}`}
             </span>
+            {activeIsReadOnly && (
+              <span className="readonly-badge" title="read-only — only admins can post">
+                🔒 read-only
+              </span>
+            )}
           </div>
+          {activeServerChannel && canModerate && (
+            <button className="link readonly-toggle" onClick={() => void toggleReadOnly()}>
+              {activeIsReadOnly ? 'allow everyone' : 'make read-only'}
+            </button>
+          )}
           <form className="search-form" onSubmit={runSearch}>
             <input
               className="search-input"
@@ -701,11 +733,13 @@ export function Chat({
         <form className="composer" onSubmit={send}>
           <input
             placeholder={
-              connected
-                ? activeDM
-                  ? `Message @${activeDM.user.username}`
-                  : `Message #${activeChannelName ?? ''}`
-                : 'connecting…'
+              !connected
+                ? 'connecting…'
+                : !canPost
+                  ? 'read-only — only admins can post'
+                  : activeDM
+                    ? `Message @${activeDM.user.username}`
+                    : `Message #${activeChannelName ?? ''}`
             }
             value={draft}
             onChange={(e) => {
@@ -716,9 +750,9 @@ export function Chat({
                 wsRef.current.send(JSON.stringify({ type: 'typing' }))
               }
             }}
-            disabled={!connected}
+            disabled={!connected || !canPost}
           />
-          <button disabled={!connected || !draft.trim()}>Send</button>
+          <button disabled={!connected || !canPost || !draft.trim()}>Send</button>
         </form>
       </div>
     </div>

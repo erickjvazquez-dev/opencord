@@ -126,6 +126,22 @@ export async function createServerChannel(
   return data as Channel
 }
 
+export async function setChannelPolicy(
+  token: string,
+  channelId: number,
+  postPolicy: string,
+): Promise<void> {
+  const res = await fetch(`/api/channels/${channelId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ postPolicy }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not change channel policy')
+  }
+}
+
 export async function searchMessages(
   token: string,
   channelId: number,

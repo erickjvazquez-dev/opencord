@@ -7,6 +7,8 @@ export interface Channel {
   id: number
   name: string
   createdAt: string
+  // 'everyone' or 'admins' (read-only); present for server channels.
+  postPolicy?: string
 }
 
 // A direct-message channel as seen by one participant: the channel id plus the

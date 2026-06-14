@@ -565,6 +565,18 @@ button:disabled {
   border-color: var(--accent);
 }
 
+.readonly-badge {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.readonly-toggle {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .search-results-head {
   display: flex;
   align-items: center;

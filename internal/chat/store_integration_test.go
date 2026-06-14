@@ -709,6 +709,10 @@ func TestChannelPostPolicyIntegration(t *testing.T) {
 	if err := store.SetChannelPostPolicy(ctx, ch.ID, owner.ID, "admins"); err != nil {
 		t.Fatalf("owner set policy: %v", err)
 	}
+	// ListServerChannels reflects the policy (drives the read-only UI badge/composer).
+	if sc, _ := store.ListServerChannels(ctx, srv.ID); len(sc) == 0 || sc[0].PostPolicy != "admins" {
+		t.Fatalf("ListServerChannels should report the channel's post policy: %+v", sc)
+	}
 	if ok, _ := store.CanPostInChannel(ctx, ch.ID, member.ID); ok {
 		t.Fatal("member should NOT be able to post in an admins-only channel")
 	}

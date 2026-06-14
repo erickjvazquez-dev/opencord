@@ -196,6 +196,17 @@ async function main() {
   check(await page.locator('.role-badge.role-owner').isVisible(), 'members panel shows the owner role')
   await page.getByRole('button', { name: 'close' }).click()
 
+  // 7e — Read-only: the owner toggles the server channel read-only.
+  step('toggle the server channel read-only')
+  await page.getByRole('button', { name: 'make read-only' }).click()
+  await page.locator('.readonly-badge').waitFor({ timeout: 8000 })
+  await shot('07e-readonly.png')
+  check(await page.locator('.readonly-badge').isVisible(), 'channel shows the read-only badge after toggle')
+  check(
+    await page.getByRole('button', { name: 'allow everyone' }).isVisible(),
+    'toggle flips to "allow everyone"',
+  )
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 38) — Read-only channel UI: finishing the last feature's front end
+
+Completed the read-only-channel feature shipped backend-only last tick. The client now
+gets each channel's `postPolicy` (added to the Channel JSON), so: an admin sees a
+"make read-only / allow everyone" header toggle + a 🔒 badge; a non-admin in a read-only
+channel gets a disabled composer ("read-only — only admins can post"); and the WS `error`
+frame is finally surfaced (alert). Single-client QA toggles it and grades the badge by eye.
+
+Reflections:
+- **A backend permission needs its state on the resource for the UI to reflect it.** Just
+  like roles needed `Server.role`, read-only needed `Channel.postPolicy` on the channel
+  list — the UI can't disable a composer for a policy it can't see. Pattern across this
+  whole arc: enforce server-side, then expose the deciding field on the thing the client
+  already fetches.
+- **Known limitation, logged not hidden:** toggling read-only doesn't live-propagate to
+  other connected clients (no `channel-updated` broadcast) — they see it on next load. The
+  enforcement is still correct (server-side); only the *composer-disable hint* lags. A
+  `channel-updated` WS event is the fix when it matters; noted, not silently shipped.
+- **UI-hint vs server-gate, again:** the composer disable + Send-disable are affordances;
+  `Save`'s `ErrForbidden` (iter 37) is the real gate. Three features now follow this split
+  (moderation, read-only, post-policy) — it's the house pattern for permissions here.
+- **Roadmap is now 100% built AND fully wired through the UI.** Every parity item from
+  GOAL.md is shipped, verified, and usable in-app. Next work is genuinely net-new (threads,
+  attachments, voice, read state) — bigger, fresh-context features, not roadmap cleanup.
+
 ## 2026-06-14 (iter 37) — Read-only channels: per-channel posting policy (last roadmap slice)
 
 The final roadmap item: `channels.post_policy` ('everyone'|'admins') — an admins-only
