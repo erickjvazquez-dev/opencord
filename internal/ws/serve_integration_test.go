@@ -192,3 +192,62 @@ func TestServeWSAccessControlIntegration(t *testing.T) {
 		}
 	})
 }
+
+// TestServeWSRateLimitIntegration is the abuse-protection guard (Rule 15): a single
+// connection that floods the gateway must be throttled by the per-connection token
+// bucket (burst rateBurst, +rateRefillPerSec/s) so most of a rapid burst is dropped
+// before it is persisted. Without the limiter every frame would be saved.
+func TestServeWSRateLimitIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := h.user(t)
+	srv, err := h.store.CreateServer(ctx, owner.ID, "Flood Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := h.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+
+	conn, status := h.dial(t, fmt.Sprintf("?channel=%d&token=%s", ch.ID, ownerTok))
+	if conn == nil {
+		t.Fatalf("dial failed (status %d)", status)
+	}
+	defer conn.Close()
+	// Drain server->client frames so the server's writePump never blocks on us.
+	go func() {
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Flood far beyond the burst budget as fast as the socket allows.
+	const flood = 30
+	for i := 0; i < flood; i++ {
+		if err := conn.WriteMessage(gws.TextMessage, []byte(fmt.Sprintf(`{"body":"flood-%d"}`, i))); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	time.Sleep(400 * time.Millisecond) // let the server process the burst
+
+	msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 100)
+	if err != nil {
+		t.Fatalf("recent: %v", err)
+	}
+	saved := 0
+	for _, m := range msgs {
+		if strings.HasPrefix(m.Body, "flood-") {
+			saved++
+		}
+	}
+	if saved >= flood {
+		t.Fatalf("rate limiter dropped nothing: saved %d of %d sent", saved, flood)
+	}
+	if saved < 3 {
+		t.Fatalf("rate limiter dropped too much (burst should let ~%d through): saved %d", int(5), saved)
+	}
+	t.Logf("rate limiter: %d of %d flooded messages persisted, rest throttled", saved, flood)
+}
