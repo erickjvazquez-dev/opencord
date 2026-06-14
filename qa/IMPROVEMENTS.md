@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 52) — Autolink URLs; security-by-construction over sanitization
+
+Clickable `http(s)` links in messages (a chat table-stakes gap — pasted URLs were dead text). One
+new inline rule; XSS-safe because only `https?://` is matched (href can't be `javascript:`/`data:`)
+and React escapes the attribute — plus `rel="noopener noreferrer"` for tab-nabbing.
+
+Reflections:
+- **The allowlist regex *is* the security control — no separate sanitizer needed.** Rather than match
+  any `scheme:` and then filter dangerous schemes (a blocklist that rots), the rule only ever matches
+  `https?://`, so an unsafe href is unrepresentable. Probed the `javascript:`/`data:` cases explicitly
+  to prove they fall through to plain text. Prefer "can't express the unsafe thing" to "remember to
+  strip it."
+- **Edge cases are where autolink earns trust:** trailing `).` punctuation, underscores inside the URL
+  (must not become italics), and URLs inside inline code (must stay literal). The earliest-match parser
+  handled the last two for free; the punctuation trim was the one deliberate touch. Probed all three.
+- **Verification cost stayed ~zero:** folded the URL into the existing markdown QA message (no extra WS
+  send → no rate-limit pacing) and reused the react-dom/server probe. The ladder keeps paying off.
+
 ## 2026-06-14 (iter 51) — Channel-topic UI; completed the two-tick vertical slice
 
 Shipped the frontend half from last tick: the header shows a server channel's topic and admins
