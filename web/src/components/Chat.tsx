@@ -10,13 +10,24 @@ import {
   fetchChannels,
   fetchDMs,
   fetchServerChannels,
+  fetchServerMembers,
   fetchServers,
   openDM,
   redeemInvite,
   removeReaction,
   searchMessages,
+  setServerMemberRole,
 } from '../api'
-import type { Channel, DMChannel, Message, Reaction, Server, ServerEvent, User } from '../types'
+import type {
+  Channel,
+  DMChannel,
+  Message,
+  Reaction,
+  Server,
+  ServerEvent,
+  ServerMember,
+  User,
+} from '../types'
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -79,6 +90,10 @@ export function Chat({
   // In-channel search: `results` non-null means the message list shows matches instead.
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Message[] | null>(null)
+  // Server members panel: non-null shows the member list (with the owner's role controls).
+  const [membersOf, setMembersOf] = useState<{ serverId: number; members: ServerMember[] } | null>(
+    null,
+  )
   const wsRef = useRef<WebSocket | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -121,6 +136,7 @@ export function Chat({
     setPickerFor(null)
     setSearchResults(null)
     setSearchQuery('')
+    setMembersOf(null)
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(
       `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
@@ -246,6 +262,22 @@ export function Chat({
     }
   }
 
+  const openMembers = async (serverId: number) => {
+    try {
+      setMembersOf({ serverId, members: await fetchServerMembers(token, serverId) })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not load members')
+    }
+  }
+  const changeRole = async (serverId: number, userId: number, role: string) => {
+    try {
+      await setServerMemberRole(token, serverId, userId, role)
+      setMembersOf({ serverId, members: await fetchServerMembers(token, serverId) })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not change role')
+    }
+  }
+
   const addServerChannel = async (serverId: number) => {
     const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
     if (!name) return
@@ -327,6 +359,8 @@ export function Chat({
     .flat()
     .find((c) => c.id === channelId)
   const activeChannelName = current?.name ?? activeServerChannel?.name
+  const iAmServerOwner =
+    membersOf?.members.find((x) => x.userId === user.id)?.role === 'owner'
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -423,6 +457,9 @@ export function Chat({
                 <button className="server-add-channel" onClick={() => void inviteToServer(s.id)}>
                   invite
                 </button>
+                <button className="server-add-channel" onClick={() => void openMembers(s.id)}>
+                  members
+                </button>
               </div>
             </div>
           ))}
@@ -470,7 +507,44 @@ export function Chat({
         </header>
 
         <main className="messages">
-          {searchResults !== null && (
+          {membersOf !== null && (
+            <div className="search-results">
+              <div className="search-results-head">
+                <span>Members ({membersOf.members.length})</span>
+                <button className="link" onClick={() => setMembersOf(null)}>
+                  ✕ close
+                </button>
+              </div>
+              {membersOf.members.map((mb) => (
+                <div key={mb.userId} className="member-row">
+                  <div
+                    className="avatar"
+                    style={{ backgroundColor: avatarColor(mb.username) }}
+                    aria-hidden
+                  >
+                    {initials(mb.username)}
+                  </div>
+                  <span className="author">{mb.username}</span>
+                  <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
+                  {iAmServerOwner && mb.role !== 'owner' && (
+                    <button
+                      className="link role-toggle"
+                      onClick={() =>
+                        void changeRole(
+                          membersOf.serverId,
+                          mb.userId,
+                          mb.role === 'admin' ? 'member' : 'admin',
+                        )
+                      }
+                    >
+                      {mb.role === 'admin' ? 'demote' : 'make admin'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {membersOf === null && searchResults !== null && (
             <div className="search-results">
               <div className="search-results-head">
                 <span>
@@ -502,7 +576,8 @@ export function Chat({
               ))}
             </div>
           )}
-          {searchResults === null &&
+          {membersOf === null &&
+            searchResults === null &&
             messages.map((m, i) => {
             const prev = i > 0 ? messages[i - 1] : null
             // Group consecutive messages from the same author within 5 min (Discord-style):

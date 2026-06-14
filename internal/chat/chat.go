@@ -63,6 +63,13 @@ type Server struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// ServerMember is a participant in a server with their role.
+type ServerMember struct {
+	UserID   int64  `json:"userId"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
 func ValidChannelName(name string) bool { return channelNameRe.MatchString(name) }
 
@@ -489,6 +496,28 @@ func (s *Store) SetServerRole(ctx context.Context, serverID, actorID, targetID i
 		return ErrUserNotFound // target isn't a member of this server
 	}
 	return nil
+}
+
+// ListServerMembers returns a server's members with roles, owner/admin first.
+func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT m.user_id, u.username, m.role
+		   FROM server_members m JOIN users u ON u.id = m.user_id
+		  WHERE m.server_id = $1
+		  ORDER BY (m.role = 'owner') DESC, (m.role = 'admin') DESC, u.username`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ServerMember, 0)
+	for rows.Next() {
+		var m ServerMember
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // IsServerMember reports whether userID belongs to serverID.

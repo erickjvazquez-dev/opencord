@@ -306,6 +306,25 @@ func mountServerRoutes(r chi.Router, store *chat.Store) {
 		}
 		writeJSON(w, http.StatusCreated, c)
 	})
+	// List a server's members with their roles (members only).
+	r.Get("/servers/{id}/members", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		members, err := store.ListServerMembers(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not load members"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, members)
+	})
 	// Promote/demote a member (owner only): {userId, role:'admin'|'member'}.
 	r.Post("/servers/{id}/roles", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())

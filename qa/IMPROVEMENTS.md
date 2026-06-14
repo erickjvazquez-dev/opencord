@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 34) — Roles UI: members panel + the owner's promote control
+
+Made last tick's roles backend usable in-app: `GET /servers/{id}/members` + a members
+panel (avatar · name · role badge), with an owner-only make-admin/demote toggle per
+non-owner member. Verified two ways: single-client browser QA (owner sees the OWNER
+badge) and a **two-client** realtime test — A (owner) opens the panel and promotes B
+(member) → B's badge flips to ADMIN live (`rt-07-roles.png`).
+
+Reflections:
+- **The panel pattern paid off a third time.** Search, then... actually the members panel
+  reuses the exact "replace the message area + ✕ close" structure as search — same
+  `.search-results` shell. Three overlays (search, members) now share it; a shared
+  `<Panel title onClose>` component is the obvious next refactor if a fourth appears.
+- **CI-coverage gap caught:** the members list is exercised by the browser/realtime QA,
+  which DON'T run in CI (they need a live browser). So `ListServerMembers` would have had
+  zero CI coverage — extended `TestServerRolesIntegration` to assert it (owner-first
+  ordering + the promoted admin). Rule: anything only the Playwright QA touches still needs
+  a Go integration test, or CI is blind to it.
+- **Roles is now usable end-to-end** (create server → invite → join → owner promotes in the
+  UI → admin can create channels). Remaining roles slices: message moderation (admins delete
+  others' messages — needs the client to know its role in the active channel's server) and
+  per-channel permission overrides.
+
 ## 2026-06-14 (iter 33) — Server roles, first slice (the big v0.3 feature, bounded)
 
 Began roles & permissions with a deliberately small, Discord-shaped slice instead of the

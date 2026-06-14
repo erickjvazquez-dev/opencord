@@ -183,6 +183,21 @@ async function main() {
   await b.getByText(srvMsg2).waitFor({ timeout: 8000 })
   check(await b.getByText(srvMsg2).isVisible(), 'B receives a live message in the shared server channel')
 
+  // 6 — Roles: A (owner) opens the members panel and promotes B (member) to admin.
+  step('A opens members and promotes B to admin')
+  await a
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .getByRole('button', { name: 'members' })
+    .click()
+  const bRow = a.locator('.member-row', { hasText: userB })
+  await bRow.getByRole('button', { name: 'make admin' }).click()
+  await bRow.locator('.role-badge.role-admin').waitFor({ timeout: 8000 })
+  await a.screenshot({ path: join(SHOTS, 'rt-07-roles.png') })
+  check(
+    await bRow.locator('.role-badge.role-admin').isVisible(),
+    'owner promotes B to admin via the members panel',
+  )
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

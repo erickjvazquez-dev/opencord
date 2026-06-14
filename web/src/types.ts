@@ -26,6 +26,13 @@ export interface Server {
   createdAt: string
 }
 
+// A server member with their role (owner | admin | member).
+export interface ServerMember {
+  userId: number
+  username: string
+  role: string
+}
+
 export interface Reaction {
   emoji: string
   count: number

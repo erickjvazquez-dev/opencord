@@ -582,6 +582,39 @@ button:disabled {
   font-style: italic;
 }
 
+/* Server members panel rows + role badges. */
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.role-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+}
+
+.role-badge.role-owner {
+  color: #fff;
+  background: var(--accent);
+}
+
+.role-badge.role-admin {
+  color: var(--online);
+  background: rgba(35, 165, 90, 0.15);
+}
+
+.role-toggle {
+  margin-left: auto;
+}
+
 .search-results .message {
   margin-bottom: 14px;
 }

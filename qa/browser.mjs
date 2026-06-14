@@ -185,6 +185,17 @@ async function main() {
   await page.getByRole('button', { name: 'clear' }).click()
   check((await page.locator('.search-results').count()) === 0, 'clearing search returns to the channel')
 
+  // 7d — Members panel: the server owner sees themselves with the owner role.
+  step('open the server members panel')
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: 'members' })
+    .click()
+  await page.locator('.member-row').first().waitFor({ timeout: 8000 })
+  await shot('07d-members.png')
+  check(await page.locator('.role-badge.role-owner').isVisible(), 'members panel shows the owner role')
+  await page.getByRole('button', { name: 'close' }).click()
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

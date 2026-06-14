@@ -1,4 +1,4 @@
-import type { Channel, DMChannel, Message, Server, User } from './types'
+import type { Channel, DMChannel, Message, Server, ServerMember, User } from './types'
 
 interface AuthResponse {
   token: string
@@ -76,6 +76,31 @@ export async function redeemInvite(token: string, code: string): Promise<Server>
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not redeem invite')
   return data as Server
+}
+
+export async function fetchServerMembers(token: string, serverId: number): Promise<ServerMember[]> {
+  const res = await fetch(`/api/servers/${serverId}/members`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('could not load members')
+  return res.json()
+}
+
+export async function setServerMemberRole(
+  token: string,
+  serverId: number,
+  userId: number,
+  role: string,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/roles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ userId, role }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not change role')
+  }
 }
 
 export async function fetchServerChannels(token: string, serverId: number): Promise<Channel[]> {

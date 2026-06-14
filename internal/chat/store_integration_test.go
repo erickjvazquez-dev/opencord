@@ -605,6 +605,24 @@ func TestServerRolesIntegration(t *testing.T) {
 	if ok, _ := store.IsServerAdmin(ctx, srv.ID, member.ID); !ok {
 		t.Fatal("promoted member should be admin")
 	}
+
+	// ListServerMembers reflects the roles, owner first.
+	ms, err := store.ListServerMembers(ctx, srv.ID)
+	if err != nil || len(ms) != 2 {
+		t.Fatalf("ListServerMembers = %+v err %v (want 2 members)", ms, err)
+	}
+	if ms[0].Role != "owner" || ms[0].UserID != owner.ID {
+		t.Fatalf("first listed member should be the owner: %+v", ms[0])
+	}
+	var sawAdmin bool
+	for _, m := range ms {
+		if m.UserID == member.ID && m.Role == "admin" {
+			sawAdmin = true
+		}
+	}
+	if !sawAdmin {
+		t.Fatalf("the promoted member should be listed as admin: %+v", ms)
+	}
 }
 
 func hasServer(servers []chat.Server, id int64) bool {
