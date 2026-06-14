@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
@@ -592,6 +593,69 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 		msgs[i].Reactions = byMsg[msgs[i].ID]
 	}
 	return msgs, nil
+}
+
+// SearchMessages returns up to limit non-deleted messages in channelID whose body
+// contains query (case-insensitive), in chronological order. The query's LIKE
+// wildcards are escaped so it matches literally — a user typing '%' can't turn the
+// search into match-all.
+func (s *Store) SearchMessages(ctx context.Context, channelID int64, query string, limit int) ([]Message, error) {
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	rows, err := s.pool.Query(ctx,
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
+		   FROM messages m JOIN users u ON u.id = m.user_id
+		  WHERE m.channel_id = $1 AND m.deleted_at IS NULL
+		    AND m.body ILIKE '%' || $2 || '%'
+		  ORDER BY m.id DESC LIMIT $3`, channelID, esc, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	msgs := make([]Message, 0, limit)
+	for rows.Next() {
+		var m Message
+		var editedAt *time.Time
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &editedAt); err != nil {
+			return nil, err
+		}
+		m.EditedAt = editedAt
+		msgs = append(msgs, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	return msgs, nil
+}
+
+// HandleSearch serves message search within a channel: ?channel=<id>&q=<text>.
+func HandleSearch(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		channelID, err := ChannelIDFromQuery(r, store)
+		if err != nil {
+			http.Error(w, `{"error":"invalid channel"}`, http.StatusBadRequest)
+			return
+		}
+		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		if query == "" || len(query) > 200 {
+			http.Error(w, `{"error":"q must be 1-200 chars"}`, http.StatusBadRequest)
+			return
+		}
+		viewer, _ := auth.UserFrom(r.Context())
+		if ok, err := store.CanAccessChannel(r.Context(), channelID, viewer.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		msgs, err := store.SearchMessages(r.Context(), channelID, query, 50)
+		if err != nil {
+			http.Error(w, `{"error":"could not search"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(msgs)
+	}
 }
 
 // HandleRecent serves recent history for a channel over REST. The channel is

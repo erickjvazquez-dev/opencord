@@ -172,6 +172,19 @@ async function main() {
   for (let i = 0; i < 50 && lastPromptDefault.length < 6; i++) await page.waitForTimeout(100)
   check(lastPromptDefault.length >= 6, 'invite button produces a shareable code')
 
+  // 7c — Search the current channel and confirm the matching message shows.
+  step('search the channel → matching message appears, clear returns to live')
+  await page.getByPlaceholder('Search this channel').fill('server')
+  await page.getByPlaceholder('Search this channel').press('Enter')
+  await page.locator('.search-results').waitFor({ timeout: 8000 })
+  await shot('07c-search.png')
+  check(
+    await page.locator('.search-results').getByText(srvBody).isVisible(),
+    'search finds the matching message',
+  )
+  await page.getByRole('button', { name: 'clear' }).click()
+  check((await page.locator('.search-results').count()) === 0, 'clearing search returns to the channel')
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

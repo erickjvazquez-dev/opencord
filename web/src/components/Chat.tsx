@@ -14,6 +14,7 @@ import {
   openDM,
   redeemInvite,
   removeReaction,
+  searchMessages,
 } from '../api'
 import type { Channel, DMChannel, Message, Reaction, Server, ServerEvent, User } from '../types'
 
@@ -75,6 +76,9 @@ export function Chat({
   const [pickerFor, setPickerFor] = useState<number | null>(null)
   // Mobile: the sidebar is an off-canvas drawer toggled by the header menu button.
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // In-channel search: `results` non-null means the message list shows matches instead.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Message[] | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -115,6 +119,8 @@ export function Chat({
     setTyping([])
     setMyReactions(new Set())
     setPickerFor(null)
+    setSearchResults(null)
+    setSearchQuery('')
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(
       `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
@@ -328,6 +334,21 @@ export function Chat({
     setSidebarOpen(false)
   }
 
+  const runSearch = async (e: FormEvent) => {
+    e.preventDefault()
+    const q = searchQuery.trim()
+    if (!q || channelId == null) return
+    try {
+      setSearchResults(await searchMessages(token, channelId, q))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not search')
+    }
+  }
+  const clearSearch = () => {
+    setSearchResults(null)
+    setSearchQuery('')
+  }
+
   return (
     <div className={sidebarOpen ? 'app sidebar-open' : 'app'}>
       {sidebarOpen && (
@@ -431,6 +452,14 @@ export function Chat({
               {activeDM ? `@${activeDM.user.username}` : `#${activeChannelName ?? '…'}`}
             </span>
           </div>
+          <form className="search-form" onSubmit={runSearch}>
+            <input
+              className="search-input"
+              placeholder="Search this channel…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </form>
           <div className="meta">
             <span className={connected ? 'dot online' : 'dot offline'} />
             {online} online · {user.username}
@@ -441,7 +470,40 @@ export function Chat({
         </header>
 
         <main className="messages">
-          {messages.map((m, i) => {
+          {searchResults !== null && (
+            <div className="search-results">
+              <div className="search-results-head">
+                <span>
+                  {searchResults.length} result{searchResults.length === 1 ? '' : 's'} for “
+                  {searchQuery}”
+                </span>
+                <button className="link" onClick={clearSearch}>
+                  ✕ clear
+                </button>
+              </div>
+              {searchResults.length === 0 && <div className="search-empty">No matches.</div>}
+              {searchResults.map((m) => (
+                <div key={m.id} className="message">
+                  <div
+                    className="avatar"
+                    style={{ backgroundColor: avatarColor(m.username) }}
+                    aria-hidden
+                  >
+                    {initials(m.username)}
+                  </div>
+                  <div className="message-content">
+                    <div className="message-head">
+                      <span className="author">{m.username}</span>
+                      <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                    </div>
+                    <div className="body">{m.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {searchResults === null &&
+            messages.map((m, i) => {
             const prev = i > 0 ? messages[i - 1] : null
             // Group consecutive messages from the same author within 5 min (Discord-style):
             // hide the repeated avatar + name. A deleted message breaks the run.

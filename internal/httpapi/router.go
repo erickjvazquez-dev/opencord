@@ -55,6 +55,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Post("/dms", chat.HandleCreateDM(store))
 			mountServerRoutes(r, store)
 			r.Get("/messages", chat.HandleRecent(store))
+			r.Get("/messages/search", chat.HandleSearch(store))
 			// Delete one's own message (soft delete) → broadcast the removal to the channel.
 			r.Delete("/messages/{id}", func(w http.ResponseWriter, r *http.Request) {
 				u, _ := auth.UserFrom(r.Context())

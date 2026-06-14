@@ -218,3 +218,22 @@ server" now prompts for a CODE (not an id) and redeems it.
 
 **Tests (DB integration):** create invite → redeem makes a non-member a member with access;
 invalid code → ErrInvalidInvite; the redeemed server is returned.
+
+## Message search (v0.3, 2026-06-14) — in-channel
+
+Search messages within a channel by text. Minimal slice: scoped to one channel (the one
+you're viewing), members-only via the same access gate; channel-spanning search is later.
+
+**Store:** `SearchMessages(channelID, viewerID, query, limit)` — `body ILIKE %query%`,
+excludes deleted, newest-first then reversed to chronological. The query is parameterized
+AND its `%`/`_`/`\` are escaped so a user typing `%` can't turn the search into match-all
+(Rule B — wildcard-injection hardening). Empty/over-long queries are rejected.
+
+**REST:** `GET /api/messages/search?channel=<id>&q=<text>` (auth'd) → `CanAccessChannel`
+gate (403 for non-members of a DM/server channel) → matching messages. Bad/empty q → 400.
+
+**UI:** a search box in the chat header; submitting shows a results panel (count + each
+match: author · time · body) replacing the message list, with a clear (✕) to return live.
+
+**Tests (DB integration):** matches case-insensitively; excludes deleted; a `%` query
+matches literally (not everything); respects the limit. Access gate covered via CanAccessChannel.

@@ -502,6 +502,56 @@ func TestServerInvitesIntegration(t *testing.T) {
 	}
 }
 
+func TestSearchMessagesIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+	mustSave := func(body string) chat.Message {
+		m, err := store.Save(ctx, ch.ID, u.ID, u.Username, body)
+		if err != nil {
+			t.Fatalf("save %q: %v", body, err)
+		}
+		return m
+	}
+	mustSave("the quick brown fox")
+	mustSave("QUICK silver")
+	mustSave("nothing relevant")
+	mustSave("100% sure")
+	doomed := mustSave("quick deleted")
+	if _, err := store.DeleteMessage(ctx, doomed.ID, u.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Case-insensitive substring match; the deleted and non-matching ones are excluded.
+	res, err := store.SearchMessages(ctx, ch.ID, "quick", 50)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	bodies := map[string]bool{}
+	for _, m := range res {
+		bodies[m.Body] = true
+	}
+	if !bodies["the quick brown fox"] || !bodies["QUICK silver"] {
+		t.Fatalf("expected case-insensitive matches, got %v", bodies)
+	}
+	if bodies["quick deleted"] {
+		t.Fatal("a deleted message must not appear in search results")
+	}
+	if bodies["nothing relevant"] {
+		t.Fatal("a non-matching message should not appear")
+	}
+
+	// A '%' query matches LITERALLY (only the message containing '%'), not everything —
+	// the LIKE wildcards are escaped (Rule B).
+	pct, err := store.SearchMessages(ctx, ch.ID, "%", 50)
+	if err != nil {
+		t.Fatalf("search %%: %v", err)
+	}
+	if len(pct) != 1 || pct[0].Body != "100% sure" {
+		t.Fatalf("'%%' should match only the literal-%% message, got %+v", pct)
+	}
+}
+
 func hasServer(servers []chat.Server, id int64) bool {
 	for _, s := range servers {
 		if s.ID == id {

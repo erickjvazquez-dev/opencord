@@ -3,6 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 32) — In-channel search, with LIKE-wildcard hardening
+
+Added message search within a channel: `GET /api/messages/search?channel&q`, a header
+search box, and a results panel (count + matches, ✕ clear). Access-gated like every read
+path. Verified at three layers: store test, browser-QA (find + clear) + vision, and a live
+HTTP adversarial run (member 200, empty q 400, non-member 403).
+
+Reflections:
+- **A LIKE/ILIKE search is an injection surface even when parameterized.** The query is a
+  bound parameter (no SQL injection), but `%`/`_` are LIKE *wildcards* — a user typing `%`
+  would otherwise match-all. Escaped them (`\ % _` → `\\ \% \_`) so the term matches
+  literally; encoded the exact case as a test (`%` → only the literal-`%` message) and a
+  live check (`%25` → 0 matches). Rule B isn't just "bound params"; it's "what does each
+  metacharacter mean in the sink?"
+- **Self-inflicted process slip (caught, no harm):** the standalone live-search probe failed
+  ECONNREFUSED because the *previous* qa/run.sh had torn the DB down and I didn't re-boot it.
+  Reminder for ad-hoc live checks: they don't inherit the harness's stack — boot db + server
+  + assert /healthz first (the same fail-loud lesson from the iter-25 harness fix, applied to
+  one-off probes).
+- **Next:** roles & permissions (the big v0.3 item — spec-first, fresh context); later,
+  channel-spanning search (search all channels you can access, grouped by channel).
+
 ## 2026-06-14 (iter 31) — Two-client server flow: invite → redeem → live chat (the deferred QA)
 
 Closed the two-client server QA I'd logged pending for three ticks. realtime.mjs now,

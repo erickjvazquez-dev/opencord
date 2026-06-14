@@ -544,6 +544,48 @@ button:disabled {
   flex: 1;
 }
 
+/* In-channel search box (header) + results panel. */
+.search-form {
+  flex: 0 1 240px;
+  min-width: 0;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  outline: none;
+  font-size: 13px;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.search-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.search-results .message {
+  margin-bottom: 14px;
+}
+
 /* Mobile menu toggle + drawer backdrop — hidden on desktop, shown ≤640px. */
 .menu-toggle {
   display: none;

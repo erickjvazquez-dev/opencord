@@ -14,8 +14,9 @@ run one command, and you have your own real-time chat server.
 > real-time routing (create + switch in a sidebar) · **servers/guilds** (group
 > channels under a members-only server) · **direct messages** (private, members-only) ·
 > live messaging with **edit & delete** (owner-only) · **emoji reactions** (live
-> counts) · **grouped messages** (consecutive same-author) · **typing indicators** ·
-> online presence · **initials avatars** · **mobile-responsive** (sidebar drawer) ·
+> counts) · **grouped messages** (consecutive same-author) · **message search**
+> (in-channel) · **typing indicators** · online presence · **initials avatars** ·
+> **mobile-responsive** (sidebar drawer) ·
 > per-connection **rate limiting** · one-command Docker stack · CI with a Postgres
 > service running DB integration tests.
 
@@ -91,6 +92,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/servers/{id}/channels`   | bearer | A server's channels (members only)             |
 | `POST`   | `/api/servers/{id}/channels`   | bearer | Create a channel in a server (members only)    |
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
+| `GET`    | `/api/messages/search?channel=<id>&q=` | bearer | Search a channel's messages (members only) |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
 | `DELETE` | `/api/messages/{id}`           | bearer | Delete your own message (soft)                 |
 | `PUT`    | `/api/messages/{id}/reactions` | bearer | React with an emoji `{emoji}`                   |

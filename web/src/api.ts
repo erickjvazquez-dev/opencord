@@ -1,4 +1,4 @@
-import type { Channel, DMChannel, Server, User } from './types'
+import type { Channel, DMChannel, Message, Server, User } from './types'
 
 interface AuthResponse {
   token: string
@@ -99,6 +99,20 @@ export async function createServerChannel(
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
   return data as Channel
+}
+
+export async function searchMessages(
+  token: string,
+  channelId: number,
+  q: string,
+): Promise<Message[]> {
+  const res = await fetch(
+    `/api/messages/search?channel=${channelId}&q=${encodeURIComponent(q)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not search')
+  return data as Message[]
 }
 
 export async function fetchDMs(token: string): Promise<DMChannel[]> {

@@ -36,7 +36,7 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [x] Rate limiting + abuse protection — per-connection WS token bucket (Rule 15)
 - [ ] Roles & permissions (owner/admin/member, per-channel)
 - [x] Invites — invite-code join (replaces the open join-by-id gap): members mint codes, redeeming admits you; non-member can't mint/guess (403/404), adversarially verified. (Membership mgmt: kick/roles still TODO)
-- [ ] Search
+- [x] Search — in-channel message search (case-insensitive, access-gated, LIKE-wildcards escaped per Rule B), header search box + results panel (channel-spanning search later)
 - [x] Message grouping (collapse consecutive same-author messages within 5 min) — flagged then closed by browser AI-vision QA 2026-06-13
 - [x] Mobile-responsive layout — sidebar collapses into an off-canvas drawer behind a header menu toggle (≤640px); chat goes full-width; backdrop + close-on-select (E2E + vision verified)
 
