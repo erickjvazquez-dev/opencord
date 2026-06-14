@@ -321,6 +321,15 @@ async function main() {
   await shot('07g-pin.png')
   check(await srvMsg.locator('.pin-badge').isVisible(), 'pinned message shows the pin badge')
 
+  // 7h — Pins panel: the "pins" header button lists the channel's pinned messages.
+  step('open the pins panel → it lists the pinned message')
+  await page.getByRole('button', { name: 'pins', exact: true }).click()
+  const pinsPanel = page.locator('.search-results', { hasText: 'pinned message' })
+  await pinsPanel.waitFor({ timeout: 8000 })
+  await shot('07h-pins-panel.png')
+  check(await pinsPanel.getByText(srvBody).isVisible(), 'pins panel lists the pinned message')
+  await pinsPanel.getByRole('button', { name: /close/ }).click()
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

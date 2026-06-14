@@ -84,7 +84,8 @@ item from here as the structural milestones above land.
   delivery/notifications, replies, threads still TODO)
 - [ ] File / image / video attachments · link embeds + previews
 - [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
-  WS update; E2E + AI-vision verified. (bookmarks, read state / unread / mention badges TODO)
+  WS update, and a "pins" panel listing all of a channel's pins; E2E + AI-vision
+  verified. (bookmarks, read state / unread / mention badges TODO)
 - [ ] Message search (from/in/has/before/after) · polls · timestamp grouping
 
 ### Voice / Video

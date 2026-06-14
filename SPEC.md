@@ -423,3 +423,5 @@ first — so a "view all pins" panel sees every pin, not just those in the loade
 Access-gated to channel members (403 otherwise), mirroring `HandleRecent`. `Store.PinnedMessages`
 is the backing query. Tested: non-member 403; owner gets exactly the pinned message (pinned=true),
 the non-pinned one excluded. (Pins panel UI next.)
+
+_Panel UI shipped 2026-06-14 (iter 56): a "pins" header button opens a panel (reusing the search-results panel) that lists the channel's pins via `fetchPins`; mutually exclusive with the search/members panels; browser QA `07h-pins-panel.png` + AI-vision verified._

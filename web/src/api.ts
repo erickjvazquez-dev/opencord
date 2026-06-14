@@ -187,6 +187,15 @@ export async function searchMessages(
   return data as Message[]
 }
 
+export async function fetchPins(token: string, channelId: number): Promise<Message[]> {
+  const res = await fetch(`/api/messages/pins?channel=${channelId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not load pins')
+  return data as Message[]
+}
+
 export async function fetchDMs(token: string): Promise<DMChannel[]> {
   const res = await fetch('/api/dms', { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error('could not load DMs')

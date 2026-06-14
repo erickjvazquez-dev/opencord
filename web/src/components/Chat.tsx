@@ -10,6 +10,7 @@ import {
   fetchChannels,
   fetchDMs,
   fetchServerChannels,
+  fetchPins,
   fetchServerMembers,
   fetchServers,
   openDM,
@@ -94,6 +95,8 @@ export function Chat({
   // In-channel search: `results` non-null means the message list shows matches instead.
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Message[] | null>(null)
+  // Pins panel: non-null shows the channel's pinned messages.
+  const [pins, setPins] = useState<Message[] | null>(null)
   // Server members panel: non-null shows the member list (with the owner's role controls).
   const [membersOf, setMembersOf] = useState<{ serverId: number; members: ServerMember[] } | null>(
     null,
@@ -276,11 +279,27 @@ export function Chat({
 
   const openMembers = async (serverId: number) => {
     try {
+      setPins(null)
       setMembersOf({ serverId, members: await fetchServerMembers(token, serverId) })
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not load members')
     }
   }
+
+  // Pins panel: load and show the channel's pinned messages (mutually exclusive with
+  // the search/members panels).
+  const openPins = async () => {
+    if (channelId == null) return
+    try {
+      setMembersOf(null)
+      setSearchResults(null)
+      setSearchQuery('')
+      setPins(await fetchPins(token, channelId))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not load pins')
+    }
+  }
+  const closePins = () => setPins(null)
   const changeRole = async (serverId: number, userId: number, role: string) => {
     try {
       await setServerMemberRole(token, serverId, userId, role)
@@ -398,6 +417,7 @@ export function Chat({
   const selectChannel = (id: number) => {
     setChannelId(id)
     setSidebarOpen(false)
+    setPins(null) // a panel from the previous channel shouldn't linger
   }
 
   const runSearch = async (e: FormEvent) => {
@@ -405,6 +425,7 @@ export function Chat({
     const q = searchQuery.trim()
     if (!q || channelId == null) return
     try {
+      setPins(null)
       setSearchResults(await searchMessages(token, channelId, q))
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not search')
@@ -578,6 +599,11 @@ export function Chat({
               edit topic
             </button>
           )}
+          {channelId != null && (
+            <button className="link pins-open" onClick={() => void openPins()}>
+              pins
+            </button>
+          )}
           <form className="search-form" onSubmit={runSearch}>
             <input
               className="search-input"
@@ -665,8 +691,42 @@ export function Chat({
               ))}
             </div>
           )}
+          {membersOf === null && searchResults === null && pins !== null && (
+            <div className="search-results">
+              <div className="search-results-head">
+                <span>
+                  📌 {pins.length} pinned message{pins.length === 1 ? '' : 's'}
+                </span>
+                <button className="link" onClick={closePins}>
+                  ✕ close
+                </button>
+              </div>
+              {pins.length === 0 && <div className="search-empty">No pinned messages yet.</div>}
+              {pins.map((m) => (
+                <div key={m.id} className="message">
+                  <div
+                    className="avatar"
+                    style={{ backgroundColor: avatarColor(m.username) }}
+                    aria-hidden
+                  >
+                    {initials(m.username)}
+                  </div>
+                  <div className="message-content">
+                    <div className="message-head">
+                      <span className="author">{m.username}</span>
+                      <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                    </div>
+                    <div className="body">
+                      {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {membersOf === null &&
             searchResults === null &&
+            pins === null &&
             messages.map((m, i) => {
             const prev = i > 0 ? messages[i - 1] : null
             // Group consecutive messages from the same author within 5 min (Discord-style):
