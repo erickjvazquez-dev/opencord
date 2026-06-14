@@ -28,6 +28,8 @@ var (
 	// ErrForbidden is returned when a user acts on a channel they can't access
 	// (e.g. reacting to a message in a DM they're not a member of).
 	ErrForbidden = errors.New("forbidden")
+	// ErrServerNotFound is returned for an unknown server id.
+	ErrServerNotFound = errors.New("server not found")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
@@ -45,6 +47,17 @@ type DMChannel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	User      DMUser    `json:"user"`
 }
+
+// Server is a guild grouping channels under a shared membership.
+type Server struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	OwnerID   int64     `json:"ownerId"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
+func ValidChannelName(name string) bool { return channelNameRe.MatchString(name) }
 
 type Message struct {
 	ID        int64     `json:"id"`
@@ -236,7 +249,10 @@ func (s *Store) ReactionsForMessage(ctx context.Context, messageID, viewerID int
 // DefaultChannelID returns the id of the default `general` channel.
 func (s *Store) DefaultChannelID(ctx context.Context) (int64, error) {
 	var id int64
-	err := s.pool.QueryRow(ctx, `SELECT id FROM channels WHERE name = 'general'`).Scan(&id)
+	// The default room is the GLOBAL general; per-server channels may also be named
+	// "general", so scope to server_id IS NULL to keep this unambiguous.
+	err := s.pool.QueryRow(ctx,
+		`SELECT id FROM channels WHERE name = 'general' AND server_id IS NULL`).Scan(&id)
 	return id, err
 }
 
@@ -253,9 +269,15 @@ func (s *Store) ChannelExists(ctx context.Context, id int64) (bool, error) {
 func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT c.kind <> 'dm'
-		     OR EXISTS (SELECT 1 FROM channel_members m
-		                 WHERE m.channel_id = c.id AND m.user_id = $2)
+		`SELECT CASE
+		          WHEN c.kind = 'dm' THEN
+		            EXISTS (SELECT 1 FROM channel_members m
+		                     WHERE m.channel_id = c.id AND m.user_id = $2)
+		          WHEN c.server_id IS NOT NULL THEN
+		            EXISTS (SELECT 1 FROM server_members sm
+		                     WHERE sm.server_id = c.server_id AND sm.user_id = $2)
+		          ELSE TRUE
+		        END
 		   FROM channels c WHERE c.id = $1`, channelID, userID).Scan(&ok)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -362,6 +384,112 @@ func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) 
 	return dms, rows.Err()
 }
 
+// CreateServer creates a server owned by ownerID and adds the owner as its first
+// member, atomically.
+func (s *Store) CreateServer(ctx context.Context, ownerID int64, name string) (Server, error) {
+	srv := Server{Name: name, OwnerID: ownerID}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Server{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO servers (name, owner_id) VALUES ($1, $2) RETURNING id, created_at`,
+		name, ownerID).Scan(&srv.ID, &srv.CreatedAt); err != nil {
+		return Server{}, err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id) VALUES ($1, $2)`, srv.ID, ownerID); err != nil {
+		return Server{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Server{}, err
+	}
+	return srv, nil
+}
+
+// ListServers returns the servers userID is a member of.
+func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT s.id, s.name, s.owner_id, s.created_at
+		   FROM servers s
+		   JOIN server_members m ON m.server_id = s.id AND m.user_id = $1
+		  ORDER BY s.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Server, 0)
+	for rows.Next() {
+		var srv Server
+		if err := rows.Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, srv)
+	}
+	return out, rows.Err()
+}
+
+// IsServerMember reports whether userID belongs to serverID.
+func (s *Store) IsServerMember(ctx context.Context, serverID, userID int64) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id = $1 AND user_id = $2)`,
+		serverID, userID).Scan(&ok)
+	return ok, err
+}
+
+// AddServerMember adds userID to serverID (idempotent), ErrServerNotFound if absent.
+func (s *Store) AddServerMember(ctx context.Context, serverID, userID int64) error {
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM servers WHERE id = $1)`, serverID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrServerNotFound
+	}
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		serverID, userID)
+	return err
+}
+
+// CreateServerChannel creates a members-only channel under a server.
+func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name string) (Channel, error) {
+	c := Channel{Name: name}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO channels (name, server_id) VALUES ($1, $2) RETURNING id, created_at`,
+		name, serverID).Scan(&c.ID, &c.CreatedAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique within the server
+			return Channel{}, ErrChannelExists
+		}
+		return Channel{}, err
+	}
+	return c, nil
+}
+
+// ListServerChannels returns the channels under serverID, oldest first.
+func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, name, created_at FROM channels WHERE server_id = $1 ORDER BY id`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Channel, 0)
+	for rows.Next() {
+		var c Channel
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // Recent returns up to limit messages from the given channel in chronological
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
@@ -447,7 +575,8 @@ func ChannelIDFromQuery(r *http.Request, store *Store) (int64, error) {
 // ListChannels returns all channels in creation order.
 func (s *Store) ListChannels(ctx context.Context) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at FROM channels WHERE kind = 'public' ORDER BY id`)
+		`SELECT id, name, created_at FROM channels
+		  WHERE kind = 'public' AND server_id IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}

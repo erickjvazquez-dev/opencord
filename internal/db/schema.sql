@@ -7,7 +7,12 @@ CREATE TABLE IF NOT EXISTS channels (
     name       TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-INSERT INTO channels (name) VALUES ('general') ON CONFLICT (name) DO NOTHING;
+-- Idempotent seed that does NOT depend on a UNIQUE(name) constraint: servers replace
+-- that constraint with partial indexes later, so `ON CONFLICT (name)` would break on
+-- re-runs. (server_id doesn't exist yet at this point, so the guard can't reference it;
+-- the global general is created on the first boot and persists, so this stays correct.)
+INSERT INTO channels (name)
+SELECT 'general' WHERE NOT EXISTS (SELECT 1 FROM channels WHERE name = 'general');
 
 CREATE TABLE IF NOT EXISTS users (
     id            BIGSERIAL PRIMARY KEY,
@@ -62,3 +67,29 @@ CREATE TABLE IF NOT EXISTS channel_members (
     PRIMARY KEY (channel_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS channel_members_user_id_idx ON channel_members (user_id);
+
+-- Servers / guilds (v0.2): channels can be grouped under a named server with its own
+-- membership. A channel with server_id IS NULL stays a global public room (the current
+-- behaviour); a channel with a server_id is visible only to that server's members.
+CREATE TABLE IF NOT EXISTS servers (
+    id         BIGSERIAL PRIMARY KEY,
+    name       TEXT NOT NULL,
+    owner_id   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS server_members (
+    server_id  BIGINT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (server_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS server_members_user_id_idx ON server_members (user_id);
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS server_id BIGINT REFERENCES servers(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
+-- Channel names are unique per scope, not globally: each server can have its own
+-- #general. Replace the table-wide UNIQUE(name) with two partial unique indexes.
+ALTER TABLE channels DROP CONSTRAINT IF EXISTS channels_name_key;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
+    ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
+    ON channels (server_id, name) WHERE server_id IS NOT NULL;

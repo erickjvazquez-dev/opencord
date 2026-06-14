@@ -148,3 +148,41 @@ members-only). UI ships in a later tick (reactions pattern: backend → UI).
 **Tests (DB integration):** create-or-get idempotency (same channel twice); ListDMs returns
 the other user; CanAccessChannel (public→anyone, dm→members only, non-member→false); unknown
 channel→false; ListChannels excludes DMs.
+
+## Servers / guilds — backend foundation slice (v0.2, 2026-06-13)
+
+Group channels under a named server with membership, the way Discord guilds work.
+Built additively so the existing global channels keep working: a channel with
+`server_id IS NULL` stays a global public room (current behaviour); a channel with a
+`server_id` belongs to that server and is visible only to its members. UI ships later
+(backend-first, the DM pattern). This is the third access-control surface, after DMs.
+
+**Schema (idempotent):**
+- `servers (id, name, owner_id → users, created_at)`.
+- `server_members (server_id, user_id, PRIMARY KEY)` — who can see a server's channels.
+- `channels.server_id BIGINT REFERENCES servers(id)` (nullable; NULL = global room).
+
+**Store:**
+- `CreateServer(owner, name)` — insert the server + owner membership in a tx; returns it.
+- `ListServers(user)` — the servers the user is a member of.
+- `CreateServerChannel(serverID, name)` — a channel scoped to a server (members-only).
+- `ListServerChannels(serverID)` — that server's channels.
+- `IsServerMember(serverID, userID)` / join via `AddServerMember` (invites come later;
+  for now a creator is the sole member, plus an explicit join endpoint for testing/MVP).
+- `CanAccessChannel` extended: dm → channel membership; server-scoped → server membership;
+  else (global public) → open. `ListChannels` now also requires `server_id IS NULL` so
+  server channels never leak into the global list.
+
+**REST (auth-gated):**
+- `POST /api/servers {name}` → create (owner auto-joins). `GET /api/servers` → mine.
+- `POST /api/servers/{id}/channels {name}` → create a channel in a server (members only).
+- `GET /api/servers/{id}/channels` → that server's channels (members only; 403 otherwise).
+- `POST /api/servers/{id}/join` → join a server (MVP; invite flow is a later slice).
+
+**Access control (Rule 15):** a non-member's read of a server channel (WS upgrade + REST
+history, already gated by `CanAccessChannel`) and the server-channel endpoints all return
+403. Reproduced + re-attacked at the store and live-HTTP layers; integration test guards it.
+
+**Tests (DB integration):** create server → owner is a member; create a channel under it;
+member can access, non-member cannot; ListServers/ListServerChannels; global ListChannels
+excludes server channels; join makes a non-member able to access.

@@ -382,6 +382,94 @@ func TestDMReactionAccessControlIntegration(t *testing.T) {
 	}
 }
 
+func TestServersIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	outsider := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "My Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if srv.ID == 0 || srv.OwnerID != owner.ID || srv.Name != "My Guild" {
+		t.Fatalf("server wrong: %+v", srv)
+	}
+	// The owner is auto-joined; an outsider is not.
+	if ok, _ := store.IsServerMember(ctx, srv.ID, owner.ID); !ok {
+		t.Fatal("owner should be a member of their own server")
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, outsider.ID); ok {
+		t.Fatal("outsider should not be a member")
+	}
+
+	// A channel under the server is members-only.
+	ch, err := store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, owner.ID); !ok {
+		t.Fatal("member should access the server channel")
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, outsider.ID); ok {
+		t.Fatal("outsider must NOT access the server channel")
+	}
+
+	// Server channels never leak into the global public list; ListServerChannels has it.
+	publics, _ := store.ListChannels(ctx)
+	for _, c := range publics {
+		if c.ID == ch.ID {
+			t.Fatalf("server channel %d leaked into the global channel list", ch.ID)
+		}
+	}
+	if sc, _ := store.ListServerChannels(ctx, srv.ID); len(sc) != 1 || sc[0].ID != ch.ID {
+		t.Fatalf("ListServerChannels wrong: %+v", sc)
+	}
+
+	// ListServers is per-member.
+	if ms, _ := store.ListServers(ctx, owner.ID); !hasServer(ms, srv.ID) {
+		t.Fatalf("owner's servers should include %d", srv.ID)
+	}
+	if ms, _ := store.ListServers(ctx, outsider.ID); hasServer(ms, srv.ID) {
+		t.Fatal("outsider should not see the server")
+	}
+
+	// Joining grants access; join is idempotent; unknown server → not found.
+	if err := store.AddServerMember(ctx, srv.ID, outsider.ID); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, outsider.ID); !ok {
+		t.Fatal("after joining, the outsider should access the server channel")
+	}
+	if err := store.AddServerMember(ctx, srv.ID, outsider.ID); err != nil {
+		t.Fatalf("idempotent join: %v", err)
+	}
+	if err := store.AddServerMember(ctx, 1<<40, owner.ID); !errors.Is(err, chat.ErrServerNotFound) {
+		t.Fatalf("join unknown server err = %v, want ErrServerNotFound", err)
+	}
+
+	// Per-server channel naming: a second server can also have its own #general,
+	// but a duplicate within ONE server conflicts, and the global #general survives.
+	srv2, _ := store.CreateServer(ctx, owner.ID, "Another")
+	if _, err := store.CreateServerChannel(ctx, srv2.ID, "general"); err != nil {
+		t.Fatalf("a second server should allow its own #general: %v", err)
+	}
+	if _, err := store.CreateServerChannel(ctx, srv.ID, "general"); !errors.Is(err, chat.ErrChannelExists) {
+		t.Fatalf("duplicate channel in one server err = %v, want ErrChannelExists", err)
+	}
+	if gid, err := store.DefaultChannelID(ctx); err != nil || gid == 0 {
+		t.Fatalf("global #general should still resolve unambiguously: id=%d err=%v", gid, err)
+	}
+}
+
+func hasServer(servers []chat.Server, id int64) bool {
+	for _, s := range servers {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func hasDM(dms []chat.DMChannel, channelID, otherUserID int64) bool {
 	for _, d := range dms {
 		if d.ID == channelID && d.User.ID == otherUserID {

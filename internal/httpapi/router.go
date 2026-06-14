@@ -53,6 +53,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Post("/channels", chat.HandleCreateChannel(store))
 			r.Get("/dms", chat.HandleListDMs(store))
 			r.Post("/dms", chat.HandleCreateDM(store))
+			mountServerRoutes(r, store)
 			r.Get("/messages", chat.HandleRecent(store))
 			// Delete one's own message (soft delete) → broadcast the removal to the channel.
 			r.Delete("/messages/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -184,4 +185,119 @@ func broadcastReactions(w http.ResponseWriter, r *http.Request, store *chat.Stor
 	hub.BroadcastEvent(ws.Event{Type: "reaction", Message: &chat.Message{ID: msgID, ChannelID: channelID, Reactions: sums}})
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"messageId": msgID, "reactions": sums})
+}
+
+// writeJSON writes v as a JSON response with the given status.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// serverIDParam parses the {id} path segment as a server id.
+func serverIDParam(r *http.Request) (int64, error) {
+	return strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+}
+
+// mountServerRoutes wires the servers/guilds REST surface (auth applied by the
+// caller's group). Server channels are members-only — non-members get 403. Routes
+// are registered flat to avoid chi's trailing-slash matching on a sub-router.
+func mountServerRoutes(r chi.Router, store *chat.Store) {
+	r.Get("/servers", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		servers, err := store.ListServers(r.Context(), me.ID)
+		if err != nil {
+			http.Error(w, `{"error":"could not load servers"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, servers)
+	})
+	r.Post("/servers", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		var in struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		name := strings.TrimSpace(in.Name)
+		if name == "" || len(name) > 64 {
+			http.Error(w, `{"error":"server name must be 1-64 chars"}`, http.StatusBadRequest)
+			return
+		}
+		srv, err := store.CreateServer(r.Context(), me.ID, name)
+		if err != nil {
+			http.Error(w, `{"error":"could not create server"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, srv)
+	})
+	r.Post("/servers/{id}/join", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.AddServerMember(r.Context(), id, me.ID); {
+		case errors.Is(err, chat.ErrServerNotFound):
+			http.Error(w, `{"error":"server not found"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not join server"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	r.Get("/servers/{id}/channels", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		chans, err := store.ListServerChannels(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not load channels"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, chans)
+	})
+	r.Post("/servers/{id}/channels", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		var in struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if !chat.ValidChannelName(in.Name) {
+			http.Error(w, `{"error":"channel name must be 2-32 chars of [a-z0-9_-]"}`, http.StatusBadRequest)
+			return
+		}
+		c, err := store.CreateServerChannel(r.Context(), id, in.Name)
+		if errors.Is(err, chat.ErrChannelExists) {
+			http.Error(w, `{"error":"channel name already taken in this server"}`, http.StatusConflict)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"could not create channel"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, c)
+	})
 }

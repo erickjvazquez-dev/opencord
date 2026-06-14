@@ -83,6 +83,11 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |
 | `GET`    | `/api/dms`                     | bearer | List your direct-message channels              |
 | `POST`   | `/api/dms`                     | bearer | Open/get a DM with `{username}`                |
+| `GET`    | `/api/servers`                 | bearer | List servers you belong to                     |
+| `POST`   | `/api/servers`                 | bearer | Create a server `{name}` (you auto-join)       |
+| `POST`   | `/api/servers/{id}/join`       | bearer | Join a server                                  |
+| `GET`    | `/api/servers/{id}/channels`   | bearer | A server's channels (members only)             |
+| `POST`   | `/api/servers/{id}/channels`   | bearer | Create a channel in a server (members only)    |
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
 | `DELETE` | `/api/messages/{id}`           | bearer | Delete your own message (soft)                 |

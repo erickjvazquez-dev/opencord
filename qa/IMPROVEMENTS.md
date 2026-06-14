@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-13 (iter 27) — Servers/guilds backend; an idempotent-migration bug the suite caught
+
+Shipped the servers/guilds backend foundation (servers + members + server-scoped
+channels, per-server channel names, REST create/list/join, members-only access). Built
+additively so global channels still work (a channel with `server_id IS NULL` stays a
+global room). Verified at all three layers: store (`TestServersIntegration`), live HTTP
+(owner 200 / outsider 403 on a server's channels + message read), and live WS (outsider
+403, owner 101, join→101); global list excludes server channels.
+
+**The bug the test suite caught — a non-idempotent migration.** Allowing each server its
+own `#general` meant replacing the table-wide `UNIQUE(channels.name)` with partial unique
+indexes. But the default-channel seed used `INSERT ... ON CONFLICT (name)`, which has no
+arbiter once the constraint is dropped — so the *second* `db.Migrate` (every test re-runs
+it) failed with `42P10`. Caught because the integration tests each migrate a shared db, so
+the 2nd test failed loudly. Fix: a constraint-independent guarded seed
+(`INSERT ... SELECT ... WHERE NOT EXISTS`). Re-verified by an 8×-migrate run on a fresh db.
+
+Reflections:
+- **A migration must survive running twice — test that explicitly.** The suite caught it by
+  luck (shared db, sequential migrates). A dedicated "migrate twice, assert no error" test
+  would catch this class deterministically; worth adding for any schema that drops/renames.
+- **Blast radius of a uniqueness change:** dropping `UNIQUE(name)` silently broke
+  `DefaultChannelID` (its `WHERE name='general'` became ambiguous across per-server
+  generals). Grepped every `name =` lookup and scoped it to `server_id IS NULL`. When you
+  change a constraint, grep every query that relied on it.
+- **Node 23 `fetch` can't set `Connection: Upgrade`** (undici rejects it) — for WS-status
+  probes use `curl` (it worked for both the DM and server WS 403 checks). Node's built-in
+  `WebSocket` is for real WS sessions, not status-only probes.
+- **Next:** the servers **UI** (server rail + per-server channel list + create/join), then
+  a two-client server-isolation browser flow.
+
 ## 2026-06-13 (iter 26) — Closed the DM reaction-access gap (full Rule-15 cycle)
 
 Closed the security follow-up logged when DMs shipped: reactions weren't access-checked,
