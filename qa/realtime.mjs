@@ -147,6 +147,27 @@ async function main() {
   await bMention.waitFor({ timeout: 8000 })
   check(await bMention.isVisible(), 'the sent @mention renders as a highlighted chip for B')
 
+  // 1e — WebSocket auto-reconnect: a dropped socket (flaky network / sleep / a proxy
+  // closing an idle connection) must re-establish so chat keeps working — the gap
+  // behind "chat stops working / screen share never reaches the other person".
+  step('WS auto-reconnect: A drops offline → comes back → still receives live messages')
+  await a.context().setOffline(true)
+  await a.locator('.dot.online').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  await a.context().setOffline(false)
+  const reconnected = await a
+    .locator('.dot.online')
+    .waitFor({ timeout: 20000 })
+    .then(() => true)
+    .catch(() => false)
+  check(reconnected, 'A’s connection re-establishes after going back online')
+  const afterReconnect = 'after-reconnect ' + sfx
+  await b.getByPlaceholder(/Message #/).fill(afterReconnect)
+  await b.getByRole('button', { name: 'Send' }).click()
+  check(
+    await a.getByText(afterReconnect).waitFor({ timeout: 12000 }).then(() => true).catch(() => false),
+    'A receives a live message sent after the reconnect (socket truly recovered)',
+  )
+
   const aMsg = a.locator('.message', { hasText: body }).first()
   const bMsg = b.locator('.message', { hasText: body }).first()
 

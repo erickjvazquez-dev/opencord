@@ -249,14 +249,34 @@ export function Chat({
     setSearchQuery('')
     setMembersOf(null)
     setMentionMatches([])
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(
-      `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
-    )
-    wsRef.current = ws
-    ws.onopen = () => setConnected(true)
-    ws.onclose = () => setConnected(false)
-    ws.onmessage = (ev) => {
+
+    // The channel WebSocket carries chat, presence, AND voice/screen-share signaling.
+    // Networks drop (Wi-Fi blips, sleep, a proxy closing an idle socket), so we
+    // RECONNECT with capped backoff instead of silently dying — otherwise a dropped
+    // socket kills chat and makes a screen share invisible to the other side (its
+    // renegotiation can't signal), even though already-connected P2P voice keeps going.
+    let stopped = false
+    let attempt = 0
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    const connect = () => {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      const ws = new WebSocket(
+        `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
+      )
+      wsRef.current = ws
+      ws.onopen = () => {
+        attempt = 0
+        setConnected(true)
+      }
+      ws.onclose = () => {
+        setConnected(false)
+        if (stopped) return // intentional close on channel switch / unmount
+        const delay = Math.min(1000 * 2 ** attempt, 15000)
+        attempt++
+        reconnectTimer = setTimeout(connect, delay)
+      }
+      ws.onmessage = (ev) => {
       const data = JSON.parse(ev.data) as ServerEvent
       if (data.type === 'history' && data.history) {
         const hist = data.history
@@ -305,12 +325,17 @@ export function Chat({
       ) {
         // Mesh-voice signaling (incl. screen-share start/stop) → the active call.
         void voiceRef.current?.handle(data)
-      } else if (data.type === 'presence') setOnline(data.online ?? 0)
-      else if (data.type === 'error' && data.error) window.alert(data.error)
+        } else if (data.type === 'presence') setOnline(data.online ?? 0)
+        else if (data.type === 'error' && data.error) window.alert(data.error)
+      }
     }
+    connect()
+
     return () => {
-      // Leaving the channel leaves any voice call on it (tell peers, free the mic)
-      // before the socket closes so the voice-leave frame still goes out.
+      // Channel switch / unmount: stop reconnecting, then leave any voice call
+      // (tell peers, free the mic) before the socket closes so voice-leave goes out.
+      stopped = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
       if (voiceRef.current) {
         voiceRef.current.stop()
         voiceRef.current = null
@@ -324,7 +349,7 @@ export function Chat({
         setBindingKey(false)
         setLocalScreen(null)
       }
-      ws.close()
+      wsRef.current?.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
       typingTimers.current = {}
     }
