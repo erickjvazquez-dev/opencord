@@ -3,16 +3,21 @@
 Local, self-paced self-improvement loop scoped to **Opencord and nothing else**.
 Config-driven via `.ccf/project.env`. Mirrors the Claude Code Framework
 self-improve structure (health → QA → improve → ship), but is fully isolated:
-it NEVER runs ContextForge/Railway commands and NEVER touches any other repo.
+it NEVER touches ContextForge (its repo, its Railway project, its CI) or any other
+repo. Opencord has its OWN Railway deploy (project `talented-curiosity`, service
+`opencord`, `CCF_LIVE_URL`) that this loop ships to via `git push origin main` and
+verifies — distinct from ContextForge's, which stays off-limits.
 
 ## Scope guard — read FIRST, every tick (hard stop if violated)
 
 - Work ONLY inside `CCF_PROJECT_DIR` (`~/Opencord`). Load config:
   `cd ~/Opencord && set -a && . .ccf/project.env && set +a`.
 - If `CCF_PROJECT_NAME` != `opencord`, **STOP immediately** — wrong project.
-- Do NOT `cd ~/contextforge`, read its deploy/CI state, run `pytest`, hit any
-  Railway URL, or push to any repo other than `origin` of this one. Use the
-  Homebrew toolchain: `export PATH="/opt/homebrew/bin:$PATH"`.
+- Do NOT `cd ~/contextforge`, read its deploy/CI state, run `pytest`, hit **its**
+  Railway URL, or push to any repo other than `origin` of this one. Opencord's own
+  `CCF_LIVE_URL` (the `opencord-production-*.up.railway.app` deploy) IS in scope —
+  curl it to verify the deploy; just never touch ContextForge's. Use the Homebrew
+  toolchain: `export PATH="/opt/homebrew/bin:$PATH"`.
 
 ## Each tick
 
@@ -70,10 +75,17 @@ it NEVER runs ContextForge/Railway commands and NEVER touches any other repo.
    server) and exercise it for real (e.g. the two-client WebSocket check) — never
    claim done on green tests alone. Tear the stack back down.
 
-5. **Ship.** If something real changed: ONE surgical Conventional-Commits commit,
-   then `git push origin main`. If `CCF_DEPLOY_CMD` is non-empty, run it (blank
-   here → never deploy). If nothing changed, log green and make **no commit**
-   (anti-churn, Rule 10).
+5. **Ship + confirm the deploy.** If something real changed: ONE surgical
+   Conventional-Commits commit, then `git push origin main`. **That push IS the
+   Railway deploy** — Railway's GitHub integration auto-builds the Dockerfile and
+   rolls out the new commit (owner directive 2026-06-14: "always push it to
+   railway"). So **never leave a shipping tick with unpushed commits** (the deploy
+   silently wouldn't happen). After pushing, **verify the rollout**: poll
+   `"${CCF_LIVE_URL}${CCF_HEALTH_PATH}"` until it's 200 (Railway takes ~1–3 min to
+   build); a deploy that doesn't come up healthy is a **P0** for next tick. If
+   `CCF_DEPLOY_CMD` is non-empty, run it (blank → push-only; Railway needs no CLI
+   step). If nothing changed, log green and make **no commit** (anti-churn, Rule
+   10) — and do NOT trigger a redeploy just to look busy.
 
 6. **Heartbeat (always, even on a green no-op tick)** — so the statusline shows
    this loop as `/self-improve opencord`, distinct from other projects' loops:

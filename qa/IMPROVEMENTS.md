@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 59b, owner-directed) — 3-peer N-way mesh test + the deploy was never actually verified
+
+Owner asks this turn: (1) add a 3rd peer to the voice test, (2) "always push it to railway opencord, it
+looks it wasn't last tick."
+
+**(1) 3-peer mesh.** `qa/voice.mjs` now drives THREE fake-media contexts and asserts each participant holds
+**2 connected links** (a genuine N-way mesh, not just a pair), each roster lists the other two, two live
+inbound audio tracks each, and — the new correctness check — **a partial leave collapses only its own
+links**: B leaving drops B from A's and C's rosters while the A↔C link survives; then C leaving empties A.
+Caught a self-inflicted bug doing it: a local `const join = …` helper **shadowed `path.join`**, so the
+screenshot got a Promise as its path (`path.lastIndexOf is not a function`). Renamed to `joinCall`. Lesson:
+in these test files, never name a local after an imported util.
+
+**(2) The deploy gap was a verification gap, not a push gap.** Investigated and found the `opencord` Railway
+service (project `talented-curiosity`) is wired to GitHub — **every `git push origin main` auto-builds the
+Dockerfile and rolls out**. So the loop *was* deploying on every shipping push; it just never *knew* it:
+`.ccf/project.env` had `CCF_LIVE_URL=""` + `CCF_DEPLOY_TARGET="local"`, so no tick ever health-checked the
+cloud, and the skill's scope guard forbade hitting "any Railway URL" (meant for ContextForge, but it also
+blocked Opencord's own). **Fixes:** set `CCF_LIVE_URL` to the live URL + `CCF_DEPLOY_TARGET=railway`;
+narrowed the scope guard to "ContextForge's Railway" (Opencord's own is in-scope to verify); rewrote Ship
+(step 5) to "push IS the deploy — never leave unpushed commits, then poll the live health until 200, a
+failed rollout is a P0." Process lesson: *a deploy you don't verify is a deploy you can't trust* — silence
+read as "deployed." The loop now proves it every tick.
+
 ## 2026-06-14 (iter 59) — Voice slice 2 shipped (mesh WebRTC client + device intelligence); the WS-race the E2E nearly hid
 
 Built voice **slice 2**: `web/src/voice.ts` (`VoiceSession`, one RTCPeerConnection per peer,
