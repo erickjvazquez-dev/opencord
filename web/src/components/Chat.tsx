@@ -18,6 +18,7 @@ import {
   removeReaction,
   searchMessages,
   sendAttachments,
+  uploadAvatar,
   setChannelPolicy,
   setChannelSlowmode,
   setChannelTopic,
@@ -37,6 +38,7 @@ import type {
 } from '../types'
 import { renderMarkdown } from '../markdown'
 import { AttachmentList } from './Attachment'
+import { Avatar } from './Avatar'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
 
@@ -106,35 +108,6 @@ function applyDelta(reactions: Reaction[] | undefined, emoji: string, delta: num
   return out
 }
 
-// Deterministic avatar color + initials from a username (no uploaded avatars yet).
-function avatarHue(name: string): number {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360
-  return h
-}
-function avatarColor(name: string): string {
-  return `hsl(${avatarHue(name)}, 55%, 45%)`
-}
-// Initials color picked for WCAG-AA contrast on the generated background: white on
-// dark hues (blue/red/purple), black on bright ones (yellow/green/cyan) — so the
-// initials are always readable regardless of the user's hue.
-function avatarTextColor(name: string): string {
-  const h = avatarHue(name) / 360
-  const s = 0.55
-  const l = 0.45
-  const a = s * Math.min(l, 1 - l)
-  const f = (n: number) => {
-    const k = (n + h * 12) % 12
-    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
-  }
-  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
-  const lum = 0.2126 * lin(f(0)) + 0.7152 * lin(f(8)) + 0.0722 * lin(f(4))
-  return lum > 0.18 ? '#000000' : '#ffffff'
-}
-function initials(name: string): string {
-  return name.slice(0, 2).toUpperCase()
-}
-
 export function Chat({
   token,
   user,
@@ -157,6 +130,8 @@ export function Chat({
   // Attachments staged in the composer (sent over HTTP multipart, not the WS).
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
+  // Bumped after the viewer uploads their own avatar → re-fetch the header avatar.
+  const [avatarVersion, setAvatarVersion] = useState(0)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
   // Reply target: non-null shows the "Replying to …" bar and tags the next send.
@@ -215,6 +190,7 @@ export function Chat({
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const mentionRange = useRef<{ start: number; len: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
@@ -418,6 +394,20 @@ export function Chat({
   const removePendingFile = (idx: number) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== idx))
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Upload the viewer's own avatar (header click → picker). On success, bump the
+  // version so the header avatar re-fetches the new image (cache-busted).
+  const onAvatarPicked = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      await uploadAvatar(token, file)
+      setAvatarVersion((v) => v + 1)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'could not upload avatar')
+    } finally {
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
   }
 
   const send = (e: FormEvent) => {
@@ -1012,13 +1002,7 @@ export function Chat({
               className={d.id === channelId ? 'channel-item active' : 'channel-item'}
               onClick={() => selectChannel(d.id)}
             >
-              <span
-                className="dm-avatar"
-                style={{ backgroundColor: avatarColor(d.user.username), color: avatarTextColor(d.user.username) }}
-                aria-hidden
-              >
-                {initials(d.user.username)}
-              </span>
+              <Avatar token={token} userId={d.user.id} username={d.user.username} className="dm-avatar" />
               {d.user.username}
             </button>
           ))}
@@ -1145,7 +1129,30 @@ export function Chat({
           </form>
           <div className="meta">
             <span className={connected ? 'dot online' : 'dot offline'} />
-            {online} online · {user.username}
+            {online} online ·
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="file-input-hidden"
+              onChange={(e) => void onAvatarPicked(e.target.files?.[0])}
+            />
+            <button
+              type="button"
+              className="self-avatar-btn"
+              title="Change your avatar"
+              aria-label="change your avatar"
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              <Avatar
+                token={token}
+                userId={user.id}
+                username={user.username}
+                className="avatar avatar-self"
+                bust={avatarVersion}
+              />
+              <span>{user.username}</span>
+            </button>
             <button className="link" onClick={onLogout}>
               log out
             </button>
@@ -1414,13 +1421,7 @@ export function Chat({
               </div>
               {membersOf.members.map((mb) => (
                 <div key={mb.userId} className="member-row">
-                  <div
-                    className="avatar"
-                    style={{ backgroundColor: avatarColor(mb.username), color: avatarTextColor(mb.username) }}
-                    aria-hidden
-                  >
-                    {initials(mb.username)}
-                  </div>
+                  <Avatar token={token} userId={mb.userId} username={mb.username} />
                   <span className="author">{mb.username}</span>
                   <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
                   {iAmServerOwner && mb.role !== 'owner' && (
@@ -1455,13 +1456,7 @@ export function Chat({
               {searchResults.length === 0 && <div className="search-empty">No matches.</div>}
               {searchResults.map((m) => (
                 <div key={m.id} className="message">
-                  <div
-                    className="avatar"
-                    style={{ backgroundColor: avatarColor(m.username), color: avatarTextColor(m.username) }}
-                    aria-hidden
-                  >
-                    {initials(m.username)}
-                  </div>
+                  <Avatar token={token} userId={m.userId} username={m.username} />
                   <div className="message-content">
                     <div className="message-head">
                       <span className="author">{m.username}</span>
@@ -1486,13 +1481,7 @@ export function Chat({
               {pins.length === 0 && <div className="search-empty">No pinned messages yet.</div>}
               {pins.map((m) => (
                 <div key={m.id} className="message">
-                  <div
-                    className="avatar"
-                    style={{ backgroundColor: avatarColor(m.username), color: avatarTextColor(m.username) }}
-                    aria-hidden
-                  >
-                    {initials(m.username)}
-                  </div>
+                  <Avatar token={token} userId={m.userId} username={m.username} />
                   <div className="message-content">
                     <div className="message-head">
                       <span className="author">{m.username}</span>
@@ -1527,13 +1516,7 @@ export function Chat({
                 {grouped ? (
                   <div className="avatar-spacer" aria-hidden />
                 ) : (
-                  <div
-                    className="avatar"
-                    style={{ backgroundColor: avatarColor(m.username), color: avatarTextColor(m.username) }}
-                    aria-hidden
-                  >
-                    {initials(m.username)}
-                  </div>
+                  <Avatar token={token} userId={m.userId} username={m.username} />
                 )}
                 <div className="message-content">
                   {!grouped && (
@@ -1794,16 +1777,7 @@ export function Chat({
                 </div>
                 {group.map((mb) => (
                   <div key={mb.userId} className="member-list-row" data-member={mb.userId}>
-                    <div
-                      className="avatar"
-                      style={{
-                        backgroundColor: avatarColor(mb.username),
-                        color: avatarTextColor(mb.username),
-                      }}
-                      aria-hidden
-                    >
-                      {initials(mb.username)}
-                    </div>
+                    <Avatar token={token} userId={mb.userId} username={mb.username} />
                     <span className="author">{mb.username}</span>
                     {mb.role !== 'member' && (
                       <span className={`role-badge role-${mb.role}`}>{mb.role}</span>

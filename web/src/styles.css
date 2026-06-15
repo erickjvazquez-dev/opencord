@@ -424,6 +424,34 @@ button:disabled {
   user-select: none;
 }
 
+/* Uploaded-avatar image variant: fill the circle without distortion. Inherits the
+   width/height/border-radius from .avatar / .dm-avatar. */
+.avatar-img {
+  object-fit: cover;
+}
+
+/* Header "change your avatar" button: the viewer's own avatar + name, inline. */
+.self-avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.avatar-self {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+.self-avatar-btn:hover .avatar-self {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .message-content {
   flex: 1;
   min-width: 0;

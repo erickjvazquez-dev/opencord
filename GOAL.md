@@ -62,7 +62,9 @@ tunnel, paid cloud only for 24/7 hosting.**
 - [x] Multiple channels — table, REST list + create, per-channel WS routing, sidebar UI (E2E + DB integration tests in CI)
 - [x] Message edit/delete (owner-only, live WS, soft delete)
 - [x] Typing indicators — read state still TODO
-- [x] Profiles: initials avatars — uploaded avatars/banners/status still TODO
+- [x] Profiles: initials avatars + **uploaded avatars** (local-disk, access-gated
+  serve, Avatar component renders the image or falls back to initials everywhere;
+  header click-to-upload; Rule-15 hardened + vision-verified). Banners/status TODO
 - [x] Servers/guilds — servers + members + server-scoped channels (per-server names, members-only access adversarially verified at HTTP+WS) + sidebar Servers accordion (create/join server, create channel, chat) — backend + UI, E2E verified
 - [x] Direct messages — DM channels + membership + per-channel access control (WS/REST 403 for non-members, adversarially verified) + sidebar DM list, new-DM flow, DM-aware header/composer (two-user E2E verified)
 
@@ -223,7 +225,9 @@ item from here as the structural milestones above land.
 
 ### Users / Profiles
 - [x] Avatars (initials)
-- [ ] Uploaded avatars + banners · custom status + activity ("playing X")
+- [~] Uploaded avatars — DONE (image upload, access-gated serve, renders everywhere
+  via the Avatar component, header upload entry). Banners · custom status + activity
+  ("playing X") still TODO
 - [ ] About me / pronouns / connections · per-server nicknames
 - [ ] Presence: online / idle / DnD / offline / invisible
 

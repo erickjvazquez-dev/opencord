@@ -126,6 +126,9 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Post("/messages", handleUploadMessage(cfg.UploadDir, store, hub))
 			// Access-gated serve of a message attachment's bytes.
 			r.Get("/attachments/{id}", handleServeAttachment(cfg.UploadDir, store))
+			// Uploaded avatars: set your own (JWT-derived); serve any user's (404 → initials).
+			r.Post("/avatar", handleUploadAvatar(cfg.UploadDir, store))
+			r.Get("/users/{id}/avatar", handleServeAvatar(cfg.UploadDir, store))
 			r.Get("/messages/search", chat.HandleSearch(store))
 			r.Get("/messages/pins", chat.HandlePins(store))
 			// Mint a join token for the optional LiveKit SFU (large voice calls).

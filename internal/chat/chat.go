@@ -307,6 +307,53 @@ func (s *Store) AttachmentsForMessages(ctx context.Context, messageIDs []int64) 
 	return out, rows.Err()
 }
 
+// ErrNoAvatar is returned when a user hasn't uploaded an avatar.
+var ErrNoAvatar = errors.New("no avatar")
+
+// SetAvatar sets userID's avatar (opaque storage key + sniffed image type) and
+// returns the PREVIOUS key (empty if none) so the caller can delete the old file on
+// replace. ErrUserNotFound if the user is gone.
+func (s *Store) SetAvatar(ctx context.Context, userID int64, key, contentType string) (string, error) {
+	var old *string
+	err := s.pool.QueryRow(ctx,
+		`WITH prev AS (SELECT avatar_key FROM users WHERE id = $1)
+		   UPDATE users SET avatar_key = $2, avatar_type = $3 WHERE id = $1
+		   RETURNING (SELECT avatar_key FROM prev)`,
+		userID, key, contentType).Scan(&old)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrUserNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if old != nil {
+		return *old, nil
+	}
+	return "", nil
+}
+
+// AvatarForServe returns userID's avatar on-disk key + sniffed content type, or
+// ErrNoAvatar if they haven't set one (the client then renders initials).
+// ErrUserNotFound if the user doesn't exist.
+func (s *Store) AvatarForServe(ctx context.Context, userID int64) (key, contentType string, err error) {
+	var k, ct *string
+	err = s.pool.QueryRow(ctx,
+		`SELECT avatar_key, avatar_type FROM users WHERE id = $1`, userID).Scan(&k, &ct)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrUserNotFound
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if k == nil || *k == "" {
+		return "", "", ErrNoAvatar
+	}
+	if ct != nil {
+		contentType = *ct
+	}
+	return *k, contentType, nil
+}
+
 // AttachmentForServe returns an attachment's on-disk storage key + display metadata
 // + the channel of the message it belongs to, for the access-gated serve handler.
 // ErrMessageNotFound when the attachment (or its message) doesn't exist.

@@ -280,6 +280,22 @@ export async function fetchAttachment(token: string, url: string): Promise<Blob>
   return res.blob()
 }
 
+// Upload the caller's own avatar (multipart, field "file"). The server derives the
+// user from the JWT — you can only ever set your own. Throws with the server's error.
+export async function uploadAvatar(token: string, file: File): Promise<void> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/avatar', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || `could not upload avatar (${res.status})`)
+  }
+}
+
 export async function editMessage(token: string, id: number, body: string): Promise<void> {
   const res = await fetch(`/api/messages/${id}`, {
     method: 'PATCH',

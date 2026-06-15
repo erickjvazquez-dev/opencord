@@ -907,3 +907,42 @@ removable chips above the input; Send uploads them (body optional). Messages ren
 images inline (capped size, click to open) and other files as a download chip
 (icon + name + size) below the body. History (`GET /api/messages`) includes each
 message's attachments so a reload still shows them.
+
+## Uploaded avatars (v0.4, 2026-06-15)
+
+Builds on the attachment storage from the prior slice: a user can upload a profile
+picture that replaces their generated initials everywhere their avatar shows. Still
+zero paid service (Rule A) — avatars live on local disk like attachments.
+
+### Design (zero payload changes)
+
+- **Storage:** reuses the attachment storage helpers (`storageKey`, `saveUpload`,
+  sniffed content type, opaque on-disk key under `OPENCORD_UPLOAD_DIR`). A user row
+  gains `avatar_key` + `avatar_type` (nullable = no avatar → initials).
+- **Upload (`POST /api/avatar`, multipart):** sets the CALLER's own avatar (user
+  derived from the JWT, Rule C — you can never set someone else's). Image-only
+  (sniffed must be in the inline-image allowlist), ≤ 2 MiB. The previous avatar file
+  is deleted on replace (no disk accretion).
+- **Serve (`GET /api/users/{id}/avatar`):** any authenticated user may fetch any
+  user's avatar (avatars are public within the instance, like Discord) — 404 when the
+  user has none, so the client falls back to initials. Served inline with the sniffed
+  image type + `nosniff`.
+- **Client (no message/member payload change):** an `<Avatar userId username>`
+  component blob-fetches `/api/users/{id}/avatar` with the bearer token, caches the
+  result per user id (image **or** "none"), and renders the photo on 200 or the
+  existing deterministic initials on 404/error. Swapping one component in at every
+  avatar site (messages, member list, DM list, search/pins) means **no message or
+  member JSON had to change** — the client already knows each user's id. The header
+  shows your own avatar; clicking it opens the upload picker.
+
+### Limits + threat model (Rule B/15 — verified by tests)
+
+- ≤ 2 MiB, image-allowlist only (a non-image / oversized upload → 400/413, nothing
+  stored). Opaque key → no path traversal. Upload sets only the JWT user's avatar
+  (can't target another id). Unauthenticated upload/serve → 401.
+
+### Known follow-ups (out of this slice)
+
+- Within-session avatar change needs a reload to reflect (URL is stable, client
+  caches the blob) — a cache-bust token is a later polish. Banners, per-server
+  nicknames, voice-chip avatars (a different chip structure) are future slices.

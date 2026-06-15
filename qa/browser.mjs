@@ -473,6 +473,31 @@ async function main() {
   check(await pinsPanel.getByText(srvBody).isVisible(), 'pins panel lists the pinned message')
   await pinsPanel.getByRole('button', { name: /close/ }).click()
 
+  // 7i — Uploaded avatar: the viewer sets a profile picture via the header avatar
+  // button → the header shows the image immediately; after a reload, their message
+  // avatars render the image too (replacing initials everywhere).
+  step('upload an avatar via the header → header + message avatars become the image')
+  await page.locator('.meta input[type=file]').setInputFiles({
+    name: 'avatar.png',
+    mimeType: 'image/png',
+    buffer: makePng(96, 96, [120, 90, 220]),
+  })
+  const headerImg = page.locator('.self-avatar-btn .avatar-self.avatar-img')
+  await headerImg.waitFor({ timeout: 10000 })
+  await shot('07i-avatar-header.png')
+  check(await headerImg.isVisible(), 'header avatar becomes the uploaded image immediately')
+  check(
+    await headerImg.evaluate((el) => el.complete && el.naturalWidth > 0),
+    'header avatar image actually decoded',
+  )
+  // Reload → #general (where the viewer posted) → their message avatar is now an image.
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: /general/ }).click()
+  const msgImg = page.locator('.message .avatar-img').first()
+  await msgImg.waitFor({ timeout: 12000 })
+  await shot('07i-avatar-message.png')
+  check(await msgImg.isVisible(), 'after reload, message-list avatars render the uploaded image')
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

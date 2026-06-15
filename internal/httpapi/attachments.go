@@ -253,6 +253,110 @@ func handleServeAttachment(uploadDir string, store *chat.Store) http.HandlerFunc
 	}
 }
 
+// maxAvatarBytes bounds an avatar upload (Rule B). Avatars are small images.
+const maxAvatarBytes = 2 << 20 // 2 MiB
+
+// handleUploadAvatar handles POST /api/avatar (multipart, field "file"): sets the
+// CALLER's own avatar (user from the JWT — Rule C, you can never set someone else's).
+// Image-only (sniffed must be in the inline allowlist), ≤2 MiB; the previous avatar
+// file is deleted on replace.
+func handleUploadAvatar(uploadDir string, store *chat.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.UserFrom(r.Context())
+		r.Body = http.MaxBytesReader(w, r.Body, maxAvatarBytes+4096)
+		if err := r.ParseMultipartForm(maxAvatarBytes); err != nil {
+			http.Error(w, `{"error":"invalid or oversized upload (max 2 MiB)"}`, http.StatusRequestEntityTooLarge)
+			return
+		}
+		if r.MultipartForm != nil {
+			defer func() { _ = r.MultipartForm.RemoveAll() }()
+		}
+		var fh *multipart.FileHeader
+		if r.MultipartForm != nil && len(r.MultipartForm.File["file"]) > 0 {
+			fh = r.MultipartForm.File["file"][0]
+		}
+		if fh == nil {
+			http.Error(w, `{"error":"no file"}`, http.StatusBadRequest)
+			return
+		}
+		if fh.Size > maxAvatarBytes {
+			http.Error(w, `{"error":"avatar exceeds the 2 MiB limit"}`, http.StatusRequestEntityTooLarge)
+			return
+		}
+		if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+			http.Error(w, `{"error":"storage unavailable"}`, http.StatusInternalServerError)
+			return
+		}
+		key, err := storageKey()
+		if err != nil {
+			http.Error(w, `{"error":"server error"}`, http.StatusInternalServerError)
+			return
+		}
+		dst := filepath.Join(uploadDir, key)
+		ct, _, err := saveUpload(fh, dst)
+		if err != nil {
+			http.Error(w, `{"error":"could not store avatar"}`, http.StatusInternalServerError)
+			return
+		}
+		// Must sniff as an allowlisted image — reject anything else (no scripts/SVG).
+		if !inlineImageTypes[ct] {
+			_ = os.Remove(dst)
+			http.Error(w, `{"error":"avatar must be a png, jpeg, gif, or webp image"}`, http.StatusBadRequest)
+			return
+		}
+		old, err := store.SetAvatar(r.Context(), u.ID, key, ct)
+		if err != nil {
+			_ = os.Remove(dst)
+			http.Error(w, `{"error":"could not set avatar"}`, http.StatusInternalServerError)
+			return
+		}
+		if old != "" && old != key {
+			_ = os.Remove(filepath.Join(uploadDir, filepath.Base(old)))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"avatarUrl": "/api/users/" + strconv.FormatInt(u.ID, 10) + "/avatar",
+		})
+	}
+}
+
+// handleServeAvatar handles GET /api/users/{id}/avatar: any authenticated user may
+// fetch any user's avatar (avatars are public within the instance, like Discord).
+// 404 when the user has none, so the client falls back to initials.
+func handleServeAvatar(uploadDir string, store *chat.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+			return
+		}
+		key, ct, err := store.AvatarForServe(r.Context(), id)
+		if errors.Is(err, chat.ErrNoAvatar) || errors.Is(err, chat.ErrUserNotFound) {
+			http.Error(w, `{"error":"no avatar"}`, http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"server error"}`, http.StatusInternalServerError)
+			return
+		}
+		f, err := os.Open(filepath.Join(uploadDir, filepath.Base(key)))
+		if err != nil {
+			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+		info, err := f.Stat()
+		if err != nil {
+			http.Error(w, `{"error":"server error"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Short cache: the avatar URL is stable, so a change reflects within minutes.
+		w.Header().Set("Cache-Control", "private, max-age=300")
+		http.ServeContent(w, r, key, info.ModTime(), f)
+	}
+}
+
 // sanitizeFilename reduces a client filename to a safe display string: base name
 // only, no control/path characters, bounded length. It is metadata only (never a
 // path), but it is echoed to clients, so it's cleaned. Empty → "file".

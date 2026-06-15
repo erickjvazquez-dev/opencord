@@ -17,7 +17,8 @@ run one command, and you have your own real-time chat server.
 > counts) · **replies** · **@mentions** with autocomplete · **markdown** ·
 > **file & image attachments** (local-disk, access-gated, inline images) ·
 > **grouped messages** (consecutive same-author) · **message search**
-> (in-channel) · **typing indicators** · online presence · **initials avatars** ·
+> (in-channel) · **typing indicators** · online presence · **avatars** (uploaded
+> images, falling back to generated initials) ·
 > **voice channels** (WebRTC — mute, deafen, push-to-talk + global hotkey,
 > per-user volume, device picker) · **screen share** (up to 4K@60, with system
 > audio + per-side audio-level controls) · **mobile-responsive** (sidebar drawer) ·
@@ -105,6 +106,8 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
 | `POST`   | `/api/messages`                | bearer | Send a message with file/image attachments (multipart: `channelId`, `body?`, `files`) |
 | `GET`    | `/api/attachments/{id}`        | bearer | Download an attachment (access-gated to the channel's members) |
+| `POST`   | `/api/avatar`                  | bearer | Set your own avatar (multipart `file`, image ≤2 MiB)            |
+| `GET`    | `/api/users/{id}/avatar`       | bearer | A user's avatar image (404 → client shows initials)            |
 | `GET`    | `/api/messages/search?channel=<id>&q=` | bearer | Search a channel's messages (members only) |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
 | `DELETE` | `/api/messages/{id}`           | bearer | Delete a message (author, or a server admin)   |

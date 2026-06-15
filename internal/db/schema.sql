@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Uploaded avatars (v0.4): a user may set a profile picture stored on local disk
+-- (avatar_key = opaque on-disk name, avatar_type = sniffed image type). NULL = no
+-- avatar → the client falls back to deterministic initials.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_type TEXT;
 
 CREATE TABLE IF NOT EXISTS messages (
     id         BIGSERIAL PRIMARY KEY,

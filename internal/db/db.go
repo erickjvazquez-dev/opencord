@@ -6,8 +6,10 @@ package db
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,6 +58,47 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		// Release on a fresh context so a cancelled ctx can't strand the lock.
 		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", migrateLockKey)
 	}()
-	_, err = conn.Exec(ctx, schema)
-	return err
+	// The schema apply takes brief ACCESS EXCLUSIVE locks (ALTER TABLE ... ADD
+	// COLUMN on FK-referenced tables like users). The advisory lock serializes it
+	// against OTHER migrations, but NOT against concurrent DML — the many parallel
+	// `go test ./...` packages, or a sibling instance still serving traffic during a
+	// rolling deploy. To never make that DML a deadlock victim, the migration sets a
+	// `lock_timeout` BELOW the 1s deadlock-detection threshold: its DDL aborts its
+	// own lock wait (SQLSTATE 55P03) before any deadlock is detected, so it always
+	// yields. The schema is fully idempotent, so we just retry until a lock window
+	// opens (and also retry a real 40P01, belt-and-suspenders).
+	var execErr error
+	for attempt := 0; attempt < 8; attempt++ {
+		if execErr = applySchema(ctx, conn); execErr == nil {
+			return nil
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(execErr, &pgErr) || (pgErr.Code != "55P03" && pgErr.Code != "40P01") {
+			return execErr // not transient lock contention — a real error
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(75*(attempt+1)) * time.Millisecond):
+		}
+	}
+	return execErr
+}
+
+// applySchema runs the whole schema in one transaction with a short lock_timeout, so
+// a contended ALTER yields (55P03) instead of deadlocking concurrent DML. SET LOCAL
+// scopes the timeout to this transaction; it never leaks back to the pooled conn.
+func applySchema(ctx context.Context, conn *pgxpool.Conn) error {
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '500ms'"); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, schema); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

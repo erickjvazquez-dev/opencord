@@ -1542,3 +1542,38 @@ shows B's new orange image live at the bottom.
 - **Next QA growth:** attachment in a DM (two members) renders for the other side;
   an oversized-file UI error path vision-checked; multi-file (2–3 at once) staging +
   render.
+
+## 2026-06-15 (tick 3) — Uploaded avatars + a deadlock the feature exposed
+
+Shipped uploaded avatars (image upload, local-disk store reusing the attachment
+helpers, access-gated serve, an `Avatar` component that blob-fetches by userId and
+falls back to initials, swapped in at every avatar site, header click-to-upload).
+Rule-15 hardened (8 adversarial sub-tests) + browser-QA + AI-vision verified (the
+purple test avatar renders as a circle in the message list + header after upload).
+
+**Highest-value lesson — a schema change caused a DB deadlock, found by the parallel
+test suite, NOT by the feature's own tests.** Adding `ALTER TABLE users ADD COLUMN`
+made every `Migrate` take an ACCESS EXCLUSIVE lock on the heavily-FK-referenced
+`users` table. Under `go test ./...` (8 packages migrating + running DML at once)
+that DDL raced concurrent INSERTs into FK-referencing tables (messages,
+server_members, reactions) into a Postgres deadlock (40P01) — and the *innocent
+test DML* was sometimes the victim, which nothing retries. It was **non-deterministic
+about which test failed**, so a single green run would have masked it.
+
+Fixes (both, layered):
+1. `Migrate` now runs the schema in a transaction with `SET LOCAL lock_timeout =
+   '500ms'` — below Postgres's 1s deadlock-detection threshold — so a contended ALTER
+   *yields* (55P03) and retries instead of ever deadlocking the DML. The migration
+   always loses the race; live DML always wins. This also hardens real rolling
+   deploys (a new instance migrating while the old one serves traffic).
+2. A regression test (`TestMigrateUnderConcurrentDML`) drives migrators + DML writers
+   from a barrier and asserts nothing errors. **Proven to catch it:** neutering the
+   lock_timeout makes it fail with "writer insert: deadlock detected" 2/3 runs; with
+   the fix it's green.
+
+- **Loop-process rule (apply every tick):** a flaky/concurrency failure must be run
+  **N times (≥5)** before declaring green — one pass proves nothing for a race. And a
+  schema/DDL change is a concurrency change: think about the locks it takes and what
+  DML it races, not just whether the column appears.
+- **Next QA growth:** two-client avatar — A sets an avatar, B sees it on A's messages
+  after a reload; avatar in the member-list sidebar renders the image.
