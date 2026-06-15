@@ -59,10 +59,29 @@ function applyDelta(reactions: Reaction[] | undefined, emoji: string, delta: num
 }
 
 // Deterministic avatar color + initials from a username (no uploaded avatars yet).
-function avatarColor(name: string): string {
+function avatarHue(name: string): number {
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360
-  return `hsl(${h}, 55%, 45%)`
+  return h
+}
+function avatarColor(name: string): string {
+  return `hsl(${avatarHue(name)}, 55%, 45%)`
+}
+// Initials color picked for WCAG-AA contrast on the generated background: white on
+// dark hues (blue/red/purple), black on bright ones (yellow/green/cyan) — so the
+// initials are always readable regardless of the user's hue.
+function avatarTextColor(name: string): string {
+  const h = avatarHue(name) / 360
+  const s = 0.55
+  const l = 0.45
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h * 12) % 12
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+  }
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const lum = 0.2126 * lin(f(0)) + 0.7152 * lin(f(8)) + 0.0722 * lin(f(4))
+  return lum > 0.18 ? '#000000' : '#ffffff'
 }
 function initials(name: string): string {
   return name.slice(0, 2).toUpperCase()
@@ -665,7 +684,7 @@ export function Chat({
             >
               <span
                 className="dm-avatar"
-                style={{ backgroundColor: avatarColor(d.user.username) }}
+                style={{ backgroundColor: avatarColor(d.user.username), color: avatarTextColor(d.user.username) }}
                 aria-hidden
               >
                 {initials(d.user.username)}
@@ -913,7 +932,7 @@ export function Chat({
                 <div key={mb.userId} className="member-row">
                   <div
                     className="avatar"
-                    style={{ backgroundColor: avatarColor(mb.username) }}
+                    style={{ backgroundColor: avatarColor(mb.username), color: avatarTextColor(mb.username) }}
                     aria-hidden
                   >
                     {initials(mb.username)}
@@ -954,7 +973,7 @@ export function Chat({
                 <div key={m.id} className="message">
                   <div
                     className="avatar"
-                    style={{ backgroundColor: avatarColor(m.username) }}
+                    style={{ backgroundColor: avatarColor(m.username), color: avatarTextColor(m.username) }}
                     aria-hidden
                   >
                     {initials(m.username)}
@@ -985,7 +1004,7 @@ export function Chat({
                 <div key={m.id} className="message">
                   <div
                     className="avatar"
-                    style={{ backgroundColor: avatarColor(m.username) }}
+                    style={{ backgroundColor: avatarColor(m.username), color: avatarTextColor(m.username) }}
                     aria-hidden
                   >
                     {initials(m.username)}
@@ -1026,7 +1045,7 @@ export function Chat({
                 ) : (
                   <div
                     className="avatar"
-                    style={{ backgroundColor: avatarColor(m.username) }}
+                    style={{ backgroundColor: avatarColor(m.username), color: avatarTextColor(m.username) }}
                     aria-hidden
                   >
                     {initials(m.username)}

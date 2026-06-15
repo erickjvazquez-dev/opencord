@@ -3,7 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-15 (iter 71) — active-speaker selection (top-N) + the web's FIRST unit tests
+## 2026-06-15 (iter 72) — accessibility: axe-core in the QA + WCAG-AA contrast fixes (rotated to UI)
+
+Component advanced: **UI**, toward "accessible" — the least-addressed word in its north star, and after ~10
+audio ticks the right rotation. Integrated **axe-core** WCAG 2 A/AA scanning into the browser QA: it scans a
+content-rich chat view and fails on any serious/critical violation. It found one rule (color-contrast, 7
+nodes) — all real, all fixed: links/@mentions used the accent blue as *text* (3.2:1), green labels used the
+presence green (4.33:1), and avatar initials were always white (2.8:1 on bright hues). Fixed with text-safe
+`--link`/`--online-text` vars (keeping `--accent`/`--online` as button fills/dots) and a luminance-aware
+`avatarTextColor` (black-on-bright / white-on-dark, backgrounds stay vibrant).
+
+**Why an automated a11y gate beats a manual pass:** accessibility is the kind of thing that silently
+regresses — a new muted color, a new icon button without a label — and a human won't re-audit every tick.
+axe-core makes it a *gate*: the next contrast regression fails CI, not a future audit. This is the same
+"verify-don't-assume" lever as the DB-test-gate (iter 61) and bundle-diff (iter 59b), now applied to a11y.
+
+**The avatar fix is the interesting one:** "make initials white" is the obvious move and it's wrong for half
+the hues. Computing the background's relative luminance and flipping the text color is the correct, general
+solution — and it's pure logic, so it could be unit-tested by the vitest harness added last tick (didn't this
+tick, but it's the natural home).
+
+**Highest-value next item:** axe scans one content-rich view; it does NOT yet cover the **in-call voice bar**
+(its own dense cluster of colored controls — Join/PTT/leave/volume) or the **server/members panels** (role
+badges, which I fixed blind). Add an axe scan at those surfaces too (cheap — one `AxeBuilder().analyze()` each
+in qa/voice.mjs + after the members panel opens). Also: keyboard navigation is wholly unaddressed (can you
+operate the app with no mouse?) — a real gap toward the "accessible" bar, but a bigger, separate tick.
 
 Component advanced: **audio**, toward "thousands without fidelity loss." The SFU client now connects with
 `autoSubscribe:false` and pulls only the **top-N loudest** remote audio streams (`MAX_AUDIO_SUBSCRIPTIONS`=12)

@@ -161,7 +161,9 @@ item from here as the structural milestones above land.
 
 ### Platform / Integrations
 - [ ] Bot/API + webhooks + slash commands · OAuth2 app authorization
-- [ ] Theme (dark/light) · accessibility · i18n · keyboard shortcuts
+- [~] **Accessibility** — WCAG-AA color contrast fixed (links/mentions/green labels/
+  avatar initials) + axe-core WCAG scan in the browser QA (0 serious/critical, regression-
+  guarded). Keyboard-nav · screen-reader · i18n · theme (dark/light) still TODO
 - [ ] Desktop + mobile clients (PWA first)
 
 ---

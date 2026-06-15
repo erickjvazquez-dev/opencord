@@ -681,3 +681,24 @@ star) — **enforced server-side** (Rule B), never trusted from the client.
   surfaces the throttle error.
 - **Verify:** store-integration (first msg ok · 2nd within window → ErrSlowMode ·
   admin exempt · expiry allows again) + browser-QA badge assertion.
+
+## Accessibility — WCAG-AA contrast + axe in the QA (v0.3, 2026-06-15)
+
+UI north star is "polished/fast/**accessible**". Integrated **axe-core** WCAG 2 A/AA
+scanning into the browser QA (`qa/browser.mjs`) — a content-rich chat view (messages,
+avatars, links, mentions) is scanned and any **serious/critical** violation fails the
+run. The scan found one rule (color-contrast, 7 nodes); all fixed:
+
+- **Links + @mentions** used `--accent` (#5865f2) as *text* — fails on the dark bg
+  (3.2–3.6:1). Added a text-safe `--link` (#99a3ff, ≥4.5:1) for text use; `--accent`
+  stays the button *fill* (white-on-accent is fine).
+- **Green labels** (Join voice, voice-bar title, PTT-on, admin role badge) used
+  `--online` (#23a55a, 4.33:1 borderline). Added `--online-text` (#36c46e) for text;
+  `--online` stays the presence *dot* / speaking ring.
+- **Avatar initials** were always white — failed on bright generated hues (green/
+  yellow, 2.8:1). `avatarTextColor(name)` now computes the bg's relative luminance and
+  picks black-on-bright / white-on-dark, so initials are readable on every hue while
+  the backgrounds stay vibrant.
+
+Result: auth + populated chat = **0 serious/critical axe violations**, now regression-
+guarded. (Full keyboard-nav / screen-reader passes are future work.)

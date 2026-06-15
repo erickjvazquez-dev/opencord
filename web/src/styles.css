@@ -6,7 +6,12 @@
   --text-muted: #949ba4;
   --accent: #5865f2;
   --accent-hover: #4752c4;
+  /* Text-safe variants: --accent/--online are tuned as button FILLS (white text on
+     top); as TEXT on the dark bg they fail WCAG-AA contrast, so links/mentions and
+     the green voice labels use these lighter variants instead (≥4.5:1). */
+  --link: #99a3ff;
   --online: #23a55a;
+  --online-text: #36c46e;
   --danger: #f23f43;
   --radius: 8px;
   color-scheme: dark;
@@ -426,7 +431,7 @@ button:disabled {
   opacity: 0.7;
 }
 .message .body a {
-  color: var(--accent, #5865f2);
+  color: var(--link, #99a3ff);
   text-decoration: underline;
   word-break: break-all;
 }
@@ -459,7 +464,7 @@ button:disabled {
   user-select: text;
 }
 .message .body .mention {
-  color: var(--accent, #5865f2);
+  color: var(--link, #99a3ff);
   background: rgba(88, 101, 242, 0.12);
   border-radius: 4px;
   padding: 0 3px;
@@ -744,7 +749,7 @@ button:disabled {
 }
 
 .role-badge.role-admin {
-  color: var(--online);
+  color: var(--online-text);
   background: rgba(35, 165, 90, 0.15);
 }
 
@@ -822,7 +827,7 @@ button:disabled {
 
 /* ── Voice call bar ──────────────────────────────────────────────────────── */
 .voice-join {
-  color: var(--online);
+  color: var(--online-text);
   font-weight: 600;
 }
 
@@ -839,7 +844,7 @@ button:disabled {
 
 .voice-bar-title {
   font-weight: 700;
-  color: var(--online);
+  color: var(--online-text);
 }
 
 .voice-chip {
@@ -921,7 +926,7 @@ button:disabled {
 }
 
 .voice-ptt-toggle.on {
-  color: var(--online);
+  color: var(--online-text);
   font-weight: 600;
 }
 

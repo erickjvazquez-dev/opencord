@@ -5,6 +5,7 @@
 // Assumes a running stack at QA_BASE_URL (default http://localhost:5173).
 // Boot one with qa/run.sh (which also runs this).
 import { chromium } from 'playwright'
+import { AxeBuilder } from '@axe-core/playwright'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -207,6 +208,17 @@ async function main() {
   check(await otherMention.isVisible(), 'a mention of someone else renders as a plain mention')
   const everyoneMention = page.locator('.message .body .mention.mention-all', { hasText: '@everyone' }).last()
   check(await everyoneMention.isVisible(), '@everyone renders as a highlighted (mention-all) mention')
+
+  // 3f2 — Accessibility: a WCAG 2 A/AA scan of the populated chat (messages,
+  // avatars, links, mentions) must have no serious/critical violations (UI north
+  // star: accessible). This is content-rich, so it covers contrast etc.
+  step('accessibility: axe-core WCAG scan of the chat view (no serious/critical)')
+  const axe = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze()
+  const bad = axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
+  for (const v of bad) console.log(`     [a11y ${v.impact}] ${v.id}: ${v.help} (${v.nodes.length})`)
+  check(bad.length === 0, `no serious/critical a11y violations (found ${bad.length})`)
 
   const msg = page.locator('.message', { hasText: body }).first()
 
