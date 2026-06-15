@@ -13,6 +13,7 @@ import (
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
 	"github.com/erickjvazquez-dev/opencord/internal/chat"
 	"github.com/erickjvazquez-dev/opencord/internal/config"
+	"github.com/erickjvazquez-dev/opencord/internal/voice"
 	"github.com/erickjvazquez-dev/opencord/internal/webui"
 	"github.com/erickjvazquez-dev/opencord/internal/ws"
 	"github.com/go-chi/chi/v5"
@@ -108,6 +109,42 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Get("/messages", chat.HandleRecent(store))
 			r.Get("/messages/search", chat.HandleSearch(store))
 			r.Get("/messages/pins", chat.HandlePins(store))
+			// Mint a join token for the optional LiveKit SFU (large voice calls).
+			// Unconfigured → {sfu:false} so the client uses mesh (Rule A). Otherwise
+			// the token is minted server-side from the verified user (Rule C), scoped
+			// to room = the channel, and ONLY for members (Rule B) — a non-member
+			// gets 403, never a token.
+			r.Post("/voice/token", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				if cfg.SFUURL == "" {
+					writeJSON(w, http.StatusOK, map[string]any{"sfu": false})
+					return
+				}
+				channelID, err := strconv.ParseInt(r.URL.Query().Get("channel"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				ok, err := store.CanAccessChannel(r.Context(), channelID, me.ID)
+				if err != nil {
+					http.Error(w, `{"error":"server error"}`, http.StatusInternalServerError)
+					return
+				}
+				if !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				room := "opencord-ch-" + strconv.FormatInt(channelID, 10)
+				tok, err := voice.MintToken(cfg.SFUSecret, cfg.SFUKey, room,
+					"u"+strconv.FormatInt(me.ID, 10), me.Username, time.Hour, time.Now())
+				if err != nil {
+					http.Error(w, `{"error":"could not mint token"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{
+					"sfu": true, "url": cfg.SFUURL, "room": room, "token": tok,
+				})
+			})
 			// Delete one's own message (soft delete) → broadcast the removal to the channel.
 			r.Delete("/messages/{id}", func(w http.ResponseWriter, r *http.Request) {
 				u, _ := auth.UserFrom(r.Context())

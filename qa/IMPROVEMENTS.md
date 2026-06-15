@@ -3,7 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 66) — SFU decision tick: vetted + chose LiveKit, wrote the mesh→SFU SPEC (no code — decide first)
+## 2026-06-14 (iter 67) — SFU slice 2: the access-gated token endpoint (audio component, mesh→SFU groundwork)
+
+Component advanced: **audio** (the SFU scale path). Built `POST /api/voice/token` + `internal/voice` token
+minter + optional config. Two wins worth recording:
+
+**Avoided a heavy dependency.** The SPEC said "mint via `server-sdk-go`", but a LiveKit access token is just
+an HS256 JWT with a `video` grant — so I minted it with the **golang-jwt lib auth already uses**, pulling in
+`server-sdk-go` (pion/webrtc + protobuf, a big tree) for *nothing*. go.mod unchanged. Lesson: before adding an
+SDK, check whether the wire format is something you can already produce — "use the official SDK" is often
+heavier than the actual need, and for a self-host-lean project that bloat is a real cost.
+
+**Verified a deferred-backend feature honestly (Rule 14).** Can't prove a *real* LiveKit server accepts the
+token (no SFU instance — deferred), so I verified what IS verifiable: the minted JWT decodes to the correct
+LiveKit claims and is secret-bound (unit), the endpoint enforces the access gate (DB-integration: unauth 401 /
+non-member 403 / member → token), and the live binary returns `{sfu:false}` unconfigured + a valid token when
+the env is set. Stated the deferred bit explicitly rather than implying full E2E. Rule-15 pass landed: a
+**non-member gets 403, never a token** (the token is the keys to the room — leaking it to a non-member would
+bypass channel membership entirely).
+
+**Highest-value next item:** SFU **slice 3** — the client SFU path. When `/api/voice/token` returns a token,
+connect via `livekit-client` (publish mic, subscribe, use LiveKit's active-speaker events for the existing
+ring) instead of building the mesh; mesh stays the fallback. This DOES add a client dep (`livekit-client`) and
+is the first slice that needs a **real SFU to E2E** — so it also forces the deferred decision: stand up a
+throwaway LiveKit (local docker, NOT the Railway demo) purely to E2E the client path, or gate slice 3's
+"done" on that. Decide which at the top of next tick.
 
 Component advanced: **audio**, toward its north star (thousands/call). A deliberately code-free tick: the next
 audio leap is the SFU (mesh is N²-bound at ~4 peers), which is a Rule-16 adoption — so the right move was to

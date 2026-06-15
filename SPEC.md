@@ -611,12 +611,18 @@ Janus = GPLv3 copyleft + C, no Go SDK (license friction + highest integration co
 
 **Planned slices (build later, one per tick):**
 1. **[this commit] decision + SPEC** (stack-guardian APPROVE recorded).
-2. **Server config + token endpoint.** Add the optional SFU config (all default
-   empty). `POST /api/voice/token?channel=<id>` → mint a LiveKit access token via
-   `server-sdk-go`, **server-side from the verified JWT** (never trust client
-   identity — Rule C), **room = the channel**, **gated by `CanAccessChannel`**
-   (Rule B; a non-member can't get a token). Returns `{url, token}` when SFU is
-   configured, else `{sfu:false}` → client uses mesh.
+2. **[DONE 2026-06-14] Server config + token endpoint.** Optional SFU config
+   (`OPENCORD_SFU_URL`/`_KEY`/`_SECRET`, all default empty). `POST
+   /api/voice/token?channel=<id>` → mints a LiveKit access token (`internal/voice`),
+   **server-side from the verified JWT** (Rule C), **room = `opencord-ch-<id>`**,
+   **gated by `CanAccessChannel`** (Rule B — non-member → 403, no token). Returns
+   `{sfu,url,room,token}` when configured, else `{sfu:false}` → client uses mesh.
+   A LiveKit token is just an HS256 JWT with a `video` grant, so it's minted with the
+   existing `golang-jwt` lib — **no `server-sdk-go` dependency** (go.mod stays lean).
+   Verified: unit test (decodes to the right LiveKit claims, secret-bound) +
+   DB-integration test (unauth 401 / non-member 403 / member → room-scoped token) +
+   live binary check with/without the env. *Deferred:* acceptance by a real LiveKit
+   server (needs a running SFU instance, itself deferred).
 3. **Client SFU path.** When the server returns a token, connect with
    `livekit-client` (publish mic, subscribe to others, LiveKit gives active-speaker
    events for the existing speaking ring) instead of building the mesh; when not,

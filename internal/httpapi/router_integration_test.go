@@ -8,10 +8,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/erickjvazquez-dev/opencord/internal/auth"
 	"github.com/erickjvazquez-dev/opencord/internal/chat"
@@ -39,10 +42,19 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) harness {
+	return newHarnessCfg(t, config.Config{CORSOrigin: "*"})
+}
+
+// newHarnessCfg builds the live router with a caller-supplied config (e.g. to set
+// the optional SFU credentials). CORSOrigin defaults to "*" if unset.
+func newHarnessCfg(t *testing.T, cfg config.Config) harness {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		t.Skip("DATABASE_URL not set — skipping HTTP integration test")
+	}
+	if cfg.CORSOrigin == "" {
+		cfg.CORSOrigin = "*"
 	}
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, url)
@@ -57,7 +69,6 @@ func newHarness(t *testing.T) harness {
 	store := chat.NewStore(pool)
 	hub := ws.NewHub(store)
 	go hub.Run() // REST delete/edit handlers fan out via the hub; drain it.
-	cfg := config.Config{CORSOrigin: "*"}
 	return harness{h: httpapi.New(cfg, authsvc, store, hub), authsvc: authsvc, store: store}
 }
 
@@ -465,5 +476,83 @@ func TestRouterPinsListIntegration(t *testing.T) {
 	}
 	if pins[0].ID != pinned.ID || !pins[0].Pinned {
 		t.Fatalf("pins[0] = {id:%d pinned:%v}, want {id:%d pinned:true}", pins[0].ID, pins[0].Pinned, pinned.ID)
+	}
+}
+
+// TestVoiceTokenIntegration covers the optional-SFU token endpoint (SPEC "mesh →
+// OSS SFU"): unconfigured → {sfu:false} (client uses mesh); configured → a member
+// gets a room-scoped LiveKit token, while a non-member gets 403 and NO token, and
+// an unauthenticated caller gets 401 (Rule B / Rule 15 — never mint for a hostile
+// or non-member caller).
+func TestVoiceTokenIntegration(t *testing.T) {
+	// 1) SFU unconfigured → sfu:false, no token.
+	hs := newHarness(t)
+	_, anyTok := hs.user(t)
+	w := hs.req(t, "POST", "/api/voice/token?channel=1", anyTok, "")
+	wantStatus(t, w, http.StatusOK, "unconfigured voice token")
+	if !strings.Contains(w.Body.String(), `"sfu":false`) || strings.Contains(w.Body.String(), `"token"`) {
+		t.Fatalf("unconfigured: want sfu:false and no token, got %s", strings.TrimSpace(w.Body.String()))
+	}
+
+	// 2) SFU configured.
+	const apiKey, apiSecret = "APItest", "sfu-secret-supersecret"
+	hs2 := newHarnessCfg(t, config.Config{
+		SFUURL: "wss://sfu.example", SFUKey: apiKey, SFUSecret: apiSecret,
+	})
+	ctx := context.Background()
+	owner, ownerTok := hs2.user(t)
+	_, outsiderTok := hs2.user(t)
+
+	// A members-only server channel: owner is a member, outsider is not.
+	srv, err := hs2.store.CreateServer(ctx, owner.ID, "Voice Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := hs2.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	path := "/api/voice/token?channel=" + strconv.FormatInt(ch.ID, 10)
+
+	// Unauthenticated → 401 (auth middleware).
+	wantStatus(t, hs2.req(t, "POST", path, "", ""), http.StatusUnauthorized, "voice token unauth")
+
+	// Non-member → 403 and NO token leaked.
+	w403 := hs2.req(t, "POST", path, outsiderTok, "")
+	wantStatus(t, w403, http.StatusForbidden, "voice token non-member")
+	if strings.Contains(w403.Body.String(), "token") {
+		t.Fatalf("non-member leaked a token: %s", strings.TrimSpace(w403.Body.String()))
+	}
+
+	// Member → a valid LiveKit token scoped to room = the channel.
+	wOK := hs2.req(t, "POST", path, ownerTok, "")
+	wantStatus(t, wOK, http.StatusOK, "voice token member")
+	var resp struct {
+		SFU   bool   `json:"sfu"`
+		URL   string `json:"url"`
+		Room  string `json:"room"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(wOK.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode token resp: %v", err)
+	}
+	wantRoom := "opencord-ch-" + strconv.FormatInt(ch.ID, 10)
+	if !resp.SFU || resp.URL != "wss://sfu.example" || resp.Room != wantRoom || resp.Token == "" {
+		t.Fatalf("member token resp = %+v (want sfu, url, room=%s, token)", resp, wantRoom)
+	}
+	// The token must verify under the SFU secret (server-minted, not forgeable) and
+	// carry the channel room grant + this user's identity.
+	claims := jwt.MapClaims{}
+	parsed, err := jwt.ParseWithClaims(resp.Token, &claims, func(*jwt.Token) (any, error) {
+		return []byte(apiSecret), nil
+	})
+	if err != nil || !parsed.Valid {
+		t.Fatalf("minted token failed to verify: %v", err)
+	}
+	if claims["iss"] != apiKey || claims["sub"] != "u"+strconv.FormatInt(owner.ID, 10) {
+		t.Fatalf("token claims iss/sub wrong: %v / %v", claims["iss"], claims["sub"])
+	}
+	if video, _ := claims["video"].(map[string]any); video["room"] != wantRoom {
+		t.Fatalf("token room grant = %v, want %v", video["room"], wantRoom)
 	}
 }

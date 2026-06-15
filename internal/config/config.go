@@ -14,6 +14,12 @@ type Config struct {
 	JWTSecret   []byte
 	TokenTTL    time.Duration
 	CORSOrigin  string
+	// Optional OSS SFU (LiveKit) for large voice calls. All empty by default →
+	// voice stays mesh (Rule A: the one-command stack needs no SFU). A self-hoster
+	// opts into scale by running LiveKit and setting these three.
+	SFUURL    string
+	SFUKey    string
+	SFUSecret string
 }
 
 func Load() Config {
@@ -29,6 +35,9 @@ func Load() Config {
 		JWTSecret:   []byte(env("JWT_SECRET", "dev-insecure-change-me")),
 		TokenTTL:    7 * 24 * time.Hour,
 		CORSOrigin:  env("CORS_ORIGIN", "*"),
+		SFUURL:      env("OPENCORD_SFU_URL", ""),
+		SFUKey:      env("OPENCORD_SFU_KEY", ""),
+		SFUSecret:   env("OPENCORD_SFU_SECRET", ""),
 	}
 }
 
