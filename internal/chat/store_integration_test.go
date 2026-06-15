@@ -888,7 +888,10 @@ func TestChannelSlowmodeIntegration(t *testing.T) {
 	if _, err := store.Save(ctx, ch2.ID, member.ID, member.Username, "fast"); !errors.Is(err, chat.ErrSlowMode) {
 		t.Fatalf("member rapid repost in ch2 = %v, want ErrSlowMode", err)
 	}
-	time.Sleep(1100 * time.Millisecond)
+	// Wait comfortably past the 1s window. A tight margin (e.g. 1100ms) is flaky:
+	// the cooldown is measured server-side as now()-created_at, so DB round-trips and
+	// scheduling jitter under load can leave <1s actually elapsed; 1600ms is robust.
+	time.Sleep(1600 * time.Millisecond)
 	if _, err := store.Save(ctx, ch2.ID, member.ID, member.Username, "after cooldown"); err != nil {
 		t.Fatalf("member should post after the cooldown elapses: %v", err)
 	}
