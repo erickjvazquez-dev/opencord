@@ -461,7 +461,11 @@ hostile NATs). So the one-command stack stays intact.
 **Client (next slice):** `getUserMedia({audio})` → an `RTCPeerConnection` per peer
 (public STUN), exchange offer/answer/ICE via the frames above, play remote audio; a
 "Join voice" control + a roster of who's in the call + leave. New peers: the existing
-member offers to the joiner (deterministic by user id to avoid glare).
+member offers to the joiner (deterministic by user id to avoid glare). The joiner
+needs no server roster — it discovers everyone by simply answering the incoming
+offers; only existing members ever create offers, so there is no glare except on
+simultaneous joins (broken by user id). Map signal payloads: SDP offer/answer and
+each ICE candidate are separate `voice-signal` frames (trickle ICE).
 
 **Slices:** (1) backend signaling relay [this commit] · (2) client WebRTC + UI ·
 (3) later: optional TURN config, SFU for larger calls, video/screenshare.
