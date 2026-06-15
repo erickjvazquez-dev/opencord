@@ -5,8 +5,9 @@ Config-driven via `.ccf/project.env`. Mirrors the Claude Code Framework
 self-improve structure (health → QA → improve → ship), but is fully isolated:
 it NEVER touches ContextForge (its repo, its Railway project, its CI) or any other
 repo. Opencord has its OWN Railway deploy (project `talented-curiosity`, service
-`opencord`, `CCF_LIVE_URL`) that this loop ships to via `git push origin main` and
-verifies — distinct from ContextForge's, which stays off-limits.
+`opencord`, `CCF_LIVE_URL`) that this loop ships to via `CCF_DEPLOY_CMD`
+(`railway up` — a `git push` alone does NOT deploy) and then verifies — distinct
+from ContextForge's, which stays off-limits.
 
 ## Scope guard — read FIRST, every tick (hard stop if violated)
 
@@ -76,16 +77,18 @@ verifies — distinct from ContextForge's, which stays off-limits.
    claim done on green tests alone. Tear the stack back down.
 
 5. **Ship + confirm the deploy.** If something real changed: ONE surgical
-   Conventional-Commits commit, then `git push origin main`. **That push IS the
-   Railway deploy** — Railway's GitHub integration auto-builds the Dockerfile and
-   rolls out the new commit (owner directive 2026-06-14: "always push it to
-   railway"). So **never leave a shipping tick with unpushed commits** (the deploy
-   silently wouldn't happen). After pushing, **verify the rollout**: poll
-   `"${CCF_LIVE_URL}${CCF_HEALTH_PATH}"` until it's 200 (Railway takes ~1–3 min to
-   build); a deploy that doesn't come up healthy is a **P0** for next tick. If
-   `CCF_DEPLOY_CMD` is non-empty, run it (blank → push-only; Railway needs no CLI
-   step). If nothing changed, log green and make **no commit** (anti-churn, Rule
-   10) — and do NOT trigger a redeploy just to look busy.
+   Conventional-Commits commit, then `git push origin main` (source control), then
+   **deploy to Railway by running `CCF_DEPLOY_CMD`** (`railway up --service
+   opencord --ci`). **A `git push` alone does NOT deploy** — Railway is NOT wired
+   to GitHub here; `railway up` uploads the dir + builds the Dockerfile + rolls out
+   (owner directive 2026-06-14: "always push it to railway"). Then **verify the
+   rollout**: after the deploy finishes, fetch the live SPA bundle and confirm the
+   new code is actually serving (e.g. `curl -s "$CCF_LIVE_URL/" | grep -o
+   'assets/index-[^"]*\.js'` → fetch it → grep for a string from what you just
+   shipped), not just that `/healthz` is 200 (the OLD build also returns 200). A
+   deploy that builds but doesn't serve the new code, or doesn't come up healthy,
+   is a **P0** for next tick. If nothing changed, log green, make **no commit**,
+   and do **not** deploy (anti-churn, Rule 10).
 
 6. **Heartbeat (always, even on a green no-op tick)** — so the statusline shows
    this loop as `/self-improve opencord`, distinct from other projects' loops:
