@@ -21,6 +21,7 @@ const (
 	maxMessageSize = 4096  // max chat message body (Rule B)
 	maxFrameSize   = 16384 // max inbound WS frame — larger than a message so SDP offers fit
 	maxSignalSize  = 8192  // max voice-signal payload (SDP/ICE) — flood guard
+	maxStreamID    = 128   // max voice-screen StreamID (a MediaStream.id is ~36 chars) — Rule B
 
 	// Per-connection inbound rate limit (token bucket): burst of rateBurst frames,
 	// refilling rateRefillPerSec/sec. Each inbound frame (message or typing) costs
@@ -155,11 +156,13 @@ func (c *Client) readPump(store *chat.Store) {
 			return
 		}
 		var in struct {
-			Type    string          `json:"type"`
-			Body    string          `json:"body"`
-			ReplyTo *int64          `json:"replyTo"`
-			Target  int64           `json:"target"`
-			Signal  json.RawMessage `json:"signal"`
+			Type     string          `json:"type"`
+			Body     string          `json:"body"`
+			ReplyTo  *int64          `json:"replyTo"`
+			Target   int64           `json:"target"`
+			Signal   json.RawMessage `json:"signal"`
+			On       bool            `json:"on"`
+			StreamID string          `json:"streamId"`
 		}
 		if json.Unmarshal(raw, &in) != nil {
 			continue
@@ -170,7 +173,7 @@ func (c *Client) readPump(store *chat.Store) {
 		// (each frame is fanned out to the whole channel) can't be amplified into a
 		// DoS. The signal payload is also size-bounded (Rule 15).
 		switch in.Type {
-		case "voice-join", "voice-leave", "voice-signal":
+		case "voice-join", "voice-leave", "voice-signal", "voice-screen":
 			nowV := time.Now()
 			c.voiceTokens = min(voiceBurst, c.voiceTokens+nowV.Sub(c.voiceLast).Seconds()*voiceRefillPerSec)
 			c.voiceLast = nowV
@@ -186,6 +189,20 @@ func (c *Client) readPump(store *chat.Store) {
 					Type: "voice-signal", From: c.user.ID, Username: c.user.Username,
 					Target: in.Target, Signal: in.Signal,
 				})
+				continue
+			}
+			if in.Type == "voice-screen" {
+				// Announce a start/stop of screen share. StreamID lets receivers tell
+				// the screen's tracks from the mic; bound it (Rule B) and only carry
+				// it when starting.
+				if len(in.StreamID) > maxStreamID {
+					continue
+				}
+				ev := Event{Type: "voice-screen", From: c.user.ID, Username: c.user.Username, On: in.On}
+				if in.On {
+					ev.StreamID = in.StreamID
+				}
+				c.hub.BroadcastToChannel(c.channelID, ev)
 				continue
 			}
 			c.hub.BroadcastToChannel(c.channelID, Event{Type: in.Type, From: c.user.ID, Username: c.user.Username})

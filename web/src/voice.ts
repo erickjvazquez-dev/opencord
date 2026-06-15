@@ -14,6 +14,9 @@ export type VoiceFrame =
   | { type: 'voice-join' }
   | { type: 'voice-leave' }
   | { type: 'voice-signal'; target: number; signal: unknown }
+  // Announce we started/stopped screen sharing. `streamId` (start only) is the
+  // screen MediaStream's id so peers can tell its tracks apart from the mic.
+  | { type: 'voice-screen'; on: boolean; streamId?: string }
 
 // An inbound voice frame as relayed to the channel (server-stamped with `from`).
 export interface VoiceInbound {
@@ -22,6 +25,8 @@ export interface VoiceInbound {
   username?: string
   target?: number
   signal?: unknown
+  on?: boolean
+  streamId?: string
 }
 
 export type PeerState = 'connecting' | 'connected' | 'failed'
@@ -41,6 +46,22 @@ export interface VoiceTransport {
   setPeerVolume(id: number, volume: number): void
   setPushToTalk(enabled: boolean): void
   setTransmitting(on: boolean): void
+  // ── Screen share ──────────────────────────────────────────────────────────
+  // Start/stop sharing the screen (getDisplayMedia: high-res video + optional
+  // system/tab audio). Capable of 4K@60 when the source and link allow it.
+  startScreenShare(): Promise<void>
+  stopScreenShare(): void
+  isScreenSharing(): boolean
+  // Audio mixing while sharing screen audio:
+  //  • setScreenSendGain — the SHARER raises/lowers the shared audio level sent to
+  //    ALL viewers (gain on the outgoing track; 1 = unchanged, >1 louder).
+  //  • setScreenMonitorVolume — the SHARER's own local monitor of the shared audio
+  //    (0 = off, the default, so it doesn't echo through their speakers).
+  //  • setPeerScreenVolume — a VIEWER's personal playback volume for a peer's shared
+  //    audio (0..1), independent of that peer's mic/voice volume.
+  setScreenSendGain(gain: number): void
+  setScreenMonitorVolume(volume: number): void
+  setPeerScreenVolume(id: number, volume: number): void
   handle(ev: VoiceInbound): void | Promise<void>
 }
 
@@ -53,6 +74,12 @@ export interface VoicePeer {
   speaking: boolean
   // Per-listener playback volume for this peer, 0..1 (local only — never signaled).
   volume: number
+  // True while this peer is screen sharing; screenStream carries the live screen
+  // video for the UI to render. screenVolume is the local playback volume (0..1)
+  // for this peer's shared audio (independent of `volume`).
+  sharingScreen: boolean
+  screenStream: MediaStream | null
+  screenVolume: number
 }
 
 // Public STUN only (Rule A: no required paid service). On loopback/LAN, host
@@ -64,6 +91,27 @@ const RTC_CONFIG: RTCConfiguration = {
 // Target outbound Opus bitrate. ~96 kbps mono is comfortably above Discord's
 // default (~64 kbps) for crisper voice while staying cheap on a mesh.
 const VOICE_BITRATE = 96_000
+
+// Screen-share capture: request up to 4K@60 with a high max bitrate so a sharp,
+// smooth share is possible when the source + link can sustain it; the browser
+// negotiates down gracefully on weaker hardware/networks. `frameRate.max` is the
+// cap, not a demand. System/tab audio is requested too (the user's picker decides).
+const SCREEN_CONSTRAINTS: DisplayMediaStreamOptions = {
+  video: {
+    width: { ideal: 3840, max: 3840 },
+    height: { ideal: 2160, max: 2160 },
+    frameRate: { ideal: 60, max: 60 },
+  },
+  audio: {
+    echoCancellation: false, // system audio must not be processed as a "mic"
+    noiseSuppression: false,
+    autoGainControl: false,
+  },
+}
+
+// Max outbound bitrate for the screen video. 8 Mbps comfortably carries detailed
+// 4K UI / slides; high-motion 4K60 will use more if the encoder/link allow it.
+const SCREEN_BITRATE = 8_000_000
 
 // Voice-activity detection (the "who's talking" ring). A source whose time-domain
 // RMS exceeds VAD_THRESHOLD is loud; it stays flagged "speaking" for VAD_HANG_MS
@@ -118,6 +166,13 @@ interface Peer {
   speaking: boolean
   // Per-listener playback volume (0..1), applied to this peer's <audio> element.
   volume: number
+  // Screen share received from this peer: the screen MediaStream id (so its audio
+  // is told apart from the mic), the live video stream for the UI, a dedicated
+  // <audio> element for the screen's audio, and its local playback volume (0..1).
+  screenStreamId: string | null
+  screenStream: MediaStream | null
+  screenAudioEl: HTMLAudioElement | null
+  screenVolume: number
 }
 
 export class VoiceSession {
@@ -143,6 +198,18 @@ export class VoiceSession {
   private localLoudAt = 0
   private localSpeaking = false
 
+  // Screen share (local, when WE are sharing). screenStream is the getDisplayMedia
+  // capture; screenVideoTrack/screenSendAudioTrack are what we publish to peers.
+  // The send-gain graph lets the sharer scale the audio level all viewers hear;
+  // the monitor element lets the sharer hear their own shared audio (default off).
+  private screenStream: MediaStream | null = null
+  private screenVideoTrack: MediaStreamTrack | null = null
+  private screenSendAudioTrack: MediaStreamTrack | null = null
+  private screenSendGain: GainNode | null = null
+  private screenSendGainValue = 1
+  private screenMonitorEl: HTMLAudioElement | null = null
+  private screenMonitorVolume = 0
+
   constructor(
     private myId: number,
     private send: (frame: VoiceFrame) => void,
@@ -150,6 +217,8 @@ export class VoiceSession {
     // Reports the local participant's speaking state (optional; the roster carries
     // remote peers' speaking state).
     private onLocalSpeaking?: (speaking: boolean) => void,
+    // Reports OUR own screen-share stream (for a local preview), or null on stop.
+    private onLocalScreen?: (stream: MediaStream | null) => void,
   ) {}
 
   // Acquire the mic and announce we're in the call. Rejects if the mic is denied
@@ -247,7 +316,10 @@ export class VoiceSession {
     // Match the current mute / push-to-talk state on the freshly captured track.
     track.enabled = this.pttEnabled ? this.transmitting : !this.muted
     for (const peer of this.peers.values()) {
-      const sender = peer.pc.getSenders().find((s) => s.track?.kind === 'audio')
+      // The mic sender — never the screen-audio sender (also kind 'audio').
+      const sender = peer.pc
+        .getSenders()
+        .find((s) => s.track?.kind === 'audio' && s.track !== this.screenSendAudioTrack)
       if (sender) {
         await sender.replaceTrack(track)
         void this.tuneSender(sender)
@@ -284,6 +356,9 @@ export class VoiceSession {
   // Leave the call: tell the channel, tear down every peer and release the mic.
   stop(): void {
     if (this.stopped) return
+    // End any active screen share first (releases the OS capture + notifies peers)
+    // while we can still send, before we mark ourselves stopped.
+    this.stopScreenShare()
     this.stopped = true
     this.send({ type: 'voice-leave' })
     if (this.vadTimer) {
@@ -312,7 +387,10 @@ export class VoiceSession {
   // speaking rings keep showing who's talking.
   setDeafened(on: boolean): void {
     this.deafened = on
-    this.peers.forEach((p) => (p.audioEl.muted = on))
+    this.peers.forEach((p) => {
+      p.audioEl.muted = on
+      if (p.screenAudioEl) p.screenAudioEl.muted = on // deafen silences shared audio too
+    })
     this.applyMicState()
   }
 
@@ -343,6 +421,144 @@ export class VoiceSession {
     }
   }
 
+  // ── Screen share ────────────────────────────────────────────────────────────
+
+  isScreenSharing(): boolean {
+    return this.screenStream != null
+  }
+
+  // Capture the screen (and optional system/tab audio) and publish it to every
+  // peer. Rejects if the user cancels the picker or capture is unsupported — the
+  // caller surfaces that. Adding the tracks triggers perfect-negotiation renegotiation.
+  async startScreenShare(): Promise<void> {
+    if (this.stopped || this.screenStream) return
+    const stream = await navigator.mediaDevices.getDisplayMedia(SCREEN_CONSTRAINTS)
+    if (this.stopped) {
+      stream.getTracks().forEach((t) => t.stop())
+      return
+    }
+    this.screenStream = stream
+    this.screenVideoTrack = stream.getVideoTracks()[0] ?? null
+    if (this.screenVideoTrack) {
+      // 'detail' keeps text/UI crisp; the browser trades frame rate for clarity.
+      this.screenVideoTrack.contentHint = 'detail'
+      // The browser's own "Stop sharing" affordance ends the track — mirror it.
+      this.screenVideoTrack.onended = () => this.stopScreenShare()
+    }
+    // Route any captured system audio through a gain node so the sharer can scale
+    // what viewers hear; the processed track is what we publish.
+    const rawAudio = stream.getAudioTracks()[0]
+    if (rawAudio) this.screenSendAudioTrack = this.buildScreenSendAudio(rawAudio)
+
+    for (const peer of this.peers.values()) this.addScreenTracksToPeer(peer)
+    // Tell peers which stream id is the screen so they classify its tracks, then
+    // expose our own stream for a local preview.
+    this.send({ type: 'voice-screen', on: true, streamId: stream.id })
+    this.onLocalScreen?.(stream)
+  }
+
+  // Stop sharing: drop the screen senders from every peer, tear down capture +
+  // the audio graph, and tell peers. Safe to call when not sharing.
+  stopScreenShare(): void {
+    if (!this.screenStream) return
+    for (const peer of this.peers.values()) this.removeScreenTracksFromPeer(peer)
+    this.screenStream.getTracks().forEach((t) => t.stop())
+    this.screenSendAudioTrack?.stop()
+    try {
+      this.screenSendGain?.disconnect()
+    } catch {
+      /* already disconnected */
+    }
+    if (this.screenMonitorEl) {
+      this.screenMonitorEl.srcObject = null
+      this.screenMonitorEl.remove()
+      this.screenMonitorEl = null
+    }
+    this.screenStream = null
+    this.screenVideoTrack = null
+    this.screenSendAudioTrack = null
+    this.screenSendGain = null
+    if (!this.stopped) this.send({ type: 'voice-screen', on: false })
+    this.onLocalScreen?.(null)
+  }
+
+  // SHARER control: scale the screen-audio level sent to ALL viewers (1 = as
+  // captured, >1 louder, 0 = silent). Applied on the outgoing gain node live.
+  setScreenSendGain(gain: number): void {
+    this.screenSendGainValue = Math.max(0, Math.min(4, gain))
+    if (this.screenSendGain) this.screenSendGain.gain.value = this.screenSendGainValue
+  }
+
+  // SHARER control: local monitor volume for your OWN shared audio (0 = off, the
+  // default, so it doesn't echo through your speakers; raise it on headphones).
+  setScreenMonitorVolume(volume: number): void {
+    this.screenMonitorVolume = Math.max(0, Math.min(1, volume))
+    if (this.screenMonitorEl) this.screenMonitorEl.volume = this.screenMonitorVolume
+  }
+
+  // VIEWER control: how loudly YOU hear a peer's shared audio (0..1), separate
+  // from that peer's mic/voice volume. Local only — never signaled.
+  setPeerScreenVolume(id: number, volume: number): void {
+    const peer = this.peers.get(id)
+    if (!peer) return
+    peer.screenVolume = Math.max(0, Math.min(1, volume))
+    if (peer.screenAudioEl) peer.screenAudioEl.volume = peer.screenVolume
+    this.emitRoster()
+  }
+
+  // Build the outgoing screen-audio track: raw capture → GainNode → destination,
+  // so setScreenSendGain scales it live. Also wires the sharer's local monitor
+  // element (muted by default). Falls back to the raw track if Web Audio is absent.
+  private buildScreenSendAudio(raw: MediaStreamTrack): MediaStreamTrack {
+    const ctx = this.audioCtx
+    if (!ctx) return raw
+    try {
+      const src = ctx.createMediaStreamSource(new MediaStream([raw]))
+      const gain = ctx.createGain()
+      gain.gain.value = this.screenSendGainValue
+      const dest = ctx.createMediaStreamDestination()
+      src.connect(gain).connect(dest)
+      this.screenSendGain = gain
+      // Local monitor: play the captured audio back to the sharer, off by default.
+      const mon = new Audio()
+      mon.autoplay = true
+      mon.srcObject = new MediaStream([raw])
+      mon.volume = this.screenMonitorVolume
+      mon.style.display = 'none'
+      document.body.appendChild(mon)
+      void mon.play().catch(() => {})
+      this.screenMonitorEl = mon
+      return dest.stream.getAudioTracks()[0] ?? raw
+    } catch {
+      return raw
+    }
+  }
+
+  // Add our screen video (+ processed audio) to one peer, associated with the
+  // screen MediaStream's id so the receiver groups them as the screen, not the mic.
+  private addScreenTracksToPeer(peer: Peer): void {
+    if (!this.screenStream) return
+    if (this.screenVideoTrack) {
+      const sender = peer.pc.addTrack(this.screenVideoTrack, this.screenStream)
+      void this.tuneSender(sender, SCREEN_BITRATE)
+    }
+    if (this.screenSendAudioTrack) peer.pc.addTrack(this.screenSendAudioTrack, this.screenStream)
+  }
+
+  // Remove our screen senders from one peer (renegotiates them away).
+  private removeScreenTracksFromPeer(peer: Peer): void {
+    for (const sender of peer.pc.getSenders()) {
+      const t = sender.track
+      if (t && (t === this.screenVideoTrack || t === this.screenSendAudioTrack)) {
+        try {
+          peer.pc.removeTrack(sender)
+        } catch {
+          /* peer already closing */
+        }
+      }
+    }
+  }
+
   // Feed a server-stamped voice-* frame relayed on the channel WS.
   async handle(ev: VoiceInbound): Promise<void> {
     if (this.stopped || ev.from == null || ev.from === this.myId) return
@@ -350,11 +566,39 @@ export class VoiceSession {
       // A participant appeared. Open a peer; perfect negotiation drives the
       // offer/answer from whichever side fires negotiationneeded first.
       this.ensurePeer(ev.from, ev.username ?? '')
+      // If WE are already sharing, re-announce so the new joiner learns our screen
+      // stream id (ensurePeer also publishes our screen tracks to them).
+      if (this.screenStream) {
+        this.send({ type: 'voice-screen', on: true, streamId: this.screenStream.id })
+      }
     } else if (ev.type === 'voice-leave') {
       this.dropPeer(ev.from)
+    } else if (ev.type === 'voice-screen') {
+      this.onScreenAnnounce(ev.from, ev.username ?? '', ev.on === true, ev.streamId)
     } else if (ev.type === 'voice-signal' && ev.target === this.myId) {
       await this.onSignal(ev.from, ev.username ?? '', ev.signal as SignalPayload | undefined)
     }
+  }
+
+  // A peer announced they started (on) or stopped (off) screen sharing. On start
+  // we record their screen stream id so the screen's tracks are told apart from
+  // the mic — and reclassify any screen track that arrived before this frame. On
+  // stop we tear down their screen video/audio.
+  private onScreenAnnounce(id: number, username: string, on: boolean, streamId?: string): void {
+    const peer = this.ensurePeer(id, username)
+    if (on && streamId) {
+      peer.screenStreamId = streamId
+      // A screen audio track may have landed before this frame and been treated as
+      // the mic — if the mic element now holds the screen stream, move it over.
+      const micStream = peer.audioEl.srcObject as MediaStream | null
+      if (micStream && micStream.id === streamId) {
+        peer.audioEl.srcObject = null
+        this.attachScreenAudio(peer, micStream)
+      }
+    } else {
+      this.teardownPeerScreen(peer)
+    }
+    this.emitRoster()
   }
 
   private ensurePeer(id: number, username: string): Peer {
@@ -387,6 +631,10 @@ export class VoiceSession {
       loudAt: 0,
       speaking: false,
       volume: 1,
+      screenStreamId: null,
+      screenStream: null,
+      screenAudioEl: null,
+      screenVolume: 1,
     }
     this.peers.set(id, peer)
     this.applySink(audioEl)
@@ -396,6 +644,8 @@ export class VoiceSession {
       const sender = pc.addTrack(t, this.localStream!)
       void this.tuneSender(sender)
     })
+    // If we're already sharing our screen, publish it to this (new) peer too.
+    if (this.screenStream) this.addScreenTracksToPeer(peer)
 
     pc.onnegotiationneeded = async () => {
       try {
@@ -411,8 +661,30 @@ export class VoiceSession {
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) this.send({ type: 'voice-signal', target: id, signal: { candidate } })
     }
-    pc.ontrack = ({ streams }) => {
+    pc.ontrack = ({ track, streams }) => {
       const stream = streams[0] ?? null
+      // Video is always the screen share (the mesh mic is audio-only).
+      if (track.kind === 'video') {
+        peer.screenStreamId = stream?.id ?? peer.screenStreamId
+        peer.screenStream = stream
+        // Safety net: if the track truly ends (not just the voice-screen frame),
+        // tear the tile down so a stopped share can't linger.
+        track.onended = () => {
+          if (peer.screenStream === stream) {
+            this.teardownPeerScreen(peer)
+            this.emitRoster()
+          }
+        }
+        this.emitRoster()
+        return
+      }
+      // Audio belonging to the announced screen stream is screen audio; route it to
+      // its own element (its own volume), not the mic element.
+      if (stream && peer.screenStreamId && stream.id === peer.screenStreamId) {
+        this.attachScreenAudio(peer, stream)
+        return
+      }
+      // Otherwise it's the mic.
       peer.audioEl.srcObject = stream
       peer.audioEl.volume = peer.volume
       void peer.audioEl.play().catch(() => {})
@@ -468,13 +740,18 @@ export class VoiceSession {
     }
   }
 
-  // Raise the sender's max bitrate for crisper voice. encodings may be empty
-  // before negotiation, so seed one; best-effort (older browsers may reject).
-  private async tuneSender(sender: RTCRtpSender): Promise<void> {
+  // Raise the sender's max bitrate (crisper voice, or a high ceiling for 4K screen
+  // video). encodings may be empty before negotiation, so seed one; best-effort
+  // (older browsers may reject). For video, prefer holding resolution over frame
+  // rate so shared text/UI stays sharp.
+  private async tuneSender(sender: RTCRtpSender, maxBitrate = VOICE_BITRATE): Promise<void> {
     try {
       const params = sender.getParameters()
       if (!params.encodings || params.encodings.length === 0) params.encodings = [{}]
-      params.encodings[0].maxBitrate = VOICE_BITRATE
+      params.encodings[0].maxBitrate = maxBitrate
+      if (sender.track?.kind === 'video') {
+        params.degradationPreference = 'maintain-resolution'
+      }
       await sender.setParameters(params)
     } catch {
       /* unsupported — fall back to the browser default bitrate */
@@ -489,6 +766,43 @@ export class VoiceSession {
     }
   }
 
+  // Play a peer's screen-share audio through its own hidden element so its volume
+  // is independent of the mic and it can be deafened. The screen video is rendered
+  // by the UI (from peer.screenStream) — this element handles only the audio.
+  private attachScreenAudio(peer: Peer, stream: MediaStream): void {
+    let el = peer.screenAudioEl
+    if (!el) {
+      el = new Audio()
+      el.autoplay = true
+      el.dataset.voiceScreenAudio = String(this.peerId(peer))
+      el.style.display = 'none'
+      el.muted = this.deafened // a share arriving while deafened stays silent
+      document.body.appendChild(el)
+      this.applySink(el)
+      peer.screenAudioEl = el
+    }
+    el.srcObject = stream
+    el.volume = peer.screenVolume
+    void el.play().catch(() => {})
+  }
+
+  // Tear down a peer's received screen share (video + audio); used on their
+  // voice-screen "off" and when the peer leaves.
+  private teardownPeerScreen(peer: Peer): void {
+    peer.screenStreamId = null
+    peer.screenStream = null
+    if (peer.screenAudioEl) {
+      peer.screenAudioEl.srcObject = null
+      peer.screenAudioEl.remove()
+      peer.screenAudioEl = null
+    }
+  }
+
+  private peerId(peer: Peer): number {
+    for (const [id, p] of this.peers) if (p === peer) return id
+    return 0
+  }
+
   private dropPeer(id: number): void {
     const peer = this.peers.get(id)
     if (!peer) return
@@ -499,6 +813,7 @@ export class VoiceSession {
     peer.pc.close()
     peer.audioEl.srcObject = null
     peer.audioEl.remove()
+    this.teardownPeerScreen(peer)
     this.peers.delete(id)
     this.emitRoster()
   }
@@ -510,6 +825,9 @@ export class VoiceSession {
       state: p.state,
       speaking: p.speaking,
       volume: p.volume,
+      sharingScreen: p.screenStream != null,
+      screenStream: p.screenStream,
+      screenVolume: p.screenVolume,
     }))
     this.onRoster(peers)
   }

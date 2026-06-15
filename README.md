@@ -6,17 +6,20 @@ Opencord is built to be owned by the people who run it: one Go binary, a static
 web client, and Postgres. No SaaS, no telemetry, no per-seat pricing — clone it,
 run one command, and you have your own real-time chat server.
 
-> **Status:** v0.2 — *in progress*. The realtime core is solid and growing.
-> DMs, servers/guilds, roles, and voice are on the roadmap (see
-> [`GOAL.md`](./GOAL.md)).
+> **Status:** v0.4 — *in progress*. The realtime core is solid and growing, with
+> servers, DMs, roles, and voice (incl. screen share) all working. More Discord
+> parity is on the roadmap (see [`GOAL.md`](./GOAL.md)).
 >
 > **Working today:** accounts (bcrypt + JWT) · multiple channels with per-channel
 > real-time routing (create + switch in a sidebar) · **servers/guilds** (group
 > channels under a members-only server) · **direct messages** (private, members-only) ·
 > live messaging with **edit & delete** (owner-only) · **emoji reactions** (live
-> counts) · **grouped messages** (consecutive same-author) · **message search**
+> counts) · **replies** · **@mentions** with autocomplete · **markdown** ·
+> **grouped messages** (consecutive same-author) · **message search**
 > (in-channel) · **typing indicators** · online presence · **initials avatars** ·
-> **mobile-responsive** (sidebar drawer) ·
+> **voice channels** (WebRTC — mute, deafen, push-to-talk + global hotkey,
+> per-user volume, device picker) · **screen share** (up to 4K@60, with system
+> audio + per-side audio-level controls) · **mobile-responsive** (sidebar drawer) ·
 > per-connection **rate limiting** · one-command Docker stack · CI with a Postgres
 > service running DB integration tests.
 

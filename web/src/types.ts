@@ -82,6 +82,7 @@ export interface ServerEvent {
     | 'voice-join'
     | 'voice-leave'
     | 'voice-signal'
+    | 'voice-screen'
   message?: Message
   history?: Message[]
   username?: string
@@ -92,4 +93,8 @@ export interface ServerEvent {
   from?: number
   target?: number
   signal?: unknown
+  // Screen share (voice-screen): on=true started sharing (streamId = the screen
+  // MediaStream id, so its tracks are told apart from the mic); absent/false = stopped.
+  on?: boolean
+  streamId?: string
 }

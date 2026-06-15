@@ -93,7 +93,13 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   hotkey shipped** (hold a bound key — default `` ` ``, rebindable + persisted —
   anywhere to talk; stands down while typing; E2E + AI-vision verified).
   *Next voice polish: screen share, video, soundboard.*
-- [ ] Screen share
+- [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
+  contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live
+  video tiles for every viewer; **screen-audio mixing** — sharer scales the level sent to all
+  viewers (Web Audio gain) + a local self-monitor (default off), and each viewer has a
+  per-share playback volume independent of voice. `voice-screen` WS frame (Rule-B bounded).
+  Two-client E2E (B receives a live video track) + AI-vision verified. SFU path + true
+  thousands-scale screen share still TODO.
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
 - [ ] Plugin/bot API
@@ -146,7 +152,8 @@ item from here as the structural milestones above land.
 - [~] Voice channels — mesh WebRTC audio for small calls (2–4): join/leave, live
   roster with per-peer connection state, crisp DSP, device auto-detect + picker,
   mute (E2E verified). SFU for scale + video calls still TODO.
-- [ ] Screen share / Go Live · soundboard
+- [~] Screen share (mesh, up to 4K@60, with system audio + per-side audio-level
+  controls) — done; Go Live · soundboard still TODO
 - [x] Voice controls — noise suppression, mute, voice-activity/speaking indicator,
   per-user volume, push-to-talk, deafen, and a rebindable global PTT hotkey all shipped
 

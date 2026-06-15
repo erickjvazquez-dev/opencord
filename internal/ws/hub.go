@@ -11,7 +11,7 @@ import (
 
 // Event is the envelope every server→client frame uses.
 type Event struct {
-	Type     string         `json:"type"` // history|message|message-edited|message-deleted|message-pinned|typing|presence|error|voice-join|voice-leave|voice-signal
+	Type     string         `json:"type"` // history|message|message-edited|message-deleted|message-pinned|typing|presence|error|voice-join|voice-leave|voice-signal|voice-screen
 	Message  *chat.Message  `json:"message,omitempty"`
 	History  []chat.Message `json:"history,omitempty"`
 	Username string         `json:"username,omitempty"` // who, for "typing" / voice
@@ -23,6 +23,12 @@ type Event struct {
 	From   int64           `json:"from,omitempty"`
 	Target int64           `json:"target,omitempty"`
 	Signal json.RawMessage `json:"signal,omitempty"`
+	// Screen share (voice-screen): On=true announces a peer started sharing and
+	// StreamID carries the screen MediaStream's id (so receivers can tell the
+	// screen's audio/video tracks apart from the mic). A voice-screen frame with
+	// On omitted (false) means the peer stopped sharing.
+	On       bool   `json:"on,omitempty"`
+	StreamID string `json:"streamId,omitempty"`
 }
 
 // targetedEvent is an Event addressed to a specific channel — used for events

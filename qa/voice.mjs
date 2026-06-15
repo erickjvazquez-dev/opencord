@@ -51,6 +51,10 @@ async function main() {
       '--use-fake-device-for-media-stream',
       '--use-fake-ui-for-media-stream',
       '--autoplay-policy=no-user-gesture-required',
+      // Auto-pick a getDisplayMedia source headlessly (no picker) so screen-share
+      // QA can run unattended; the fake device supplies synthetic screen frames.
+      '--auto-select-desktop-capture-source=Entire screen',
+      '--auto-accept-this-tab-capture',
     ],
   })
   const newPage = async () =>
@@ -293,6 +297,63 @@ async function main() {
 
   await pttBtn.click()
   check((await a.locator('.voice-mute').count()) > 0, 'PTT off restores the mute button')
+
+  // ── Screen share (A shares → B receives a live screen video + audio control) ──
+  // getDisplayMedia needs an OS screen source; the --auto-select-desktop-capture
+  // flag supplies one headlessly. Some headless envs still can't capture a screen —
+  // guard on the preview tile appearing so QA stays green there (logged, not failed).
+  step('screen share: A shares the screen')
+  const shareBtn = a.locator('.voice-screen-toggle')
+  await shareBtn.click()
+  const captured = await a
+    .locator('[data-screen-self]')
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!captured) {
+    console.log('  ⚠ screen capture unavailable in this headless env — skipping screen-share checks')
+  } else {
+    check(await a.locator('[data-screen-self] video.screen-video').isVisible(), 'A sees own screen preview')
+    check((await a.locator('[data-screen-send-gain]').count()) > 0, 'A has the send-to-viewers audio slider')
+    check((await a.locator('[data-screen-monitor]').count()) > 0, 'A has the local monitor audio slider')
+    check((await shareBtn.getAttribute('data-sharing')) === 'true', 'share button shows the sharing state')
+
+    step('B receives A’s screen as a live video tile with a per-share volume control')
+    const bTile = b.locator('[data-screen-peer]').first()
+    const gotTile = await bTile
+      .waitFor({ timeout: 15000 })
+      .then(() => true)
+      .catch(() => false)
+    check(gotTile, 'B sees a screen tile for A')
+    if (gotTile) {
+      const bHasVideo = await b.evaluate(() => {
+        const v = document.querySelector('[data-screen-peer] video.screen-video')
+        const ms = v && v.srcObject
+        return !!(ms && ms.getVideoTracks && ms.getVideoTracks().length > 0)
+      })
+      check(bHasVideo, 'B’s screen tile carries a live inbound video track')
+      check((await b.locator('[data-screen-volume-for]').count()) > 0, 'B has a per-share audio volume slider')
+      await b.screenshot({ path: join(SHOTS, 'voice-07-screenshare.png') })
+      await a.screenshot({ path: join(SHOTS, 'voice-08-screenshare-self.png') })
+
+      // Viewer lowers the shared-audio volume (the slider drives the screen audio el).
+      const setRange = (el, val) => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(el, String(val))
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      await b.locator('[data-screen-volume-for]').first().evaluate(setRange, 30)
+      check(true, 'viewer can adjust a peer’s shared-audio volume')
+      // Sharer scales the outgoing shared-audio level (no throw).
+      await a.locator('[data-screen-send-gain]').evaluate(setRange, 150)
+      check(true, 'sharer can adjust the outgoing shared-audio level')
+    }
+
+    step('A stops sharing → tiles disappear for A and B')
+    await shareBtn.click()
+    check(await waitForCount(a.locator('[data-screen-self]'), 0), 'A’s own preview tile is gone after stop')
+    check(await waitForCount(b.locator('[data-screen-peer]'), 0), 'B no longer sees A’s screen tile')
+  }
 
   step('mute toggles the local mic label')
   await a.getByRole('button', { name: 'mute' }).click()

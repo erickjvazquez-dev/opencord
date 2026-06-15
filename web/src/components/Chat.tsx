@@ -188,6 +188,12 @@ export function Chat({
   // `bindingKey` is the rebind-capture mode.
   const [pttKey, setPttKey] = useState(loadPttKey)
   const [bindingKey, setBindingKey] = useState(false)
+  // Screen share: `localScreen` is our own capture (a preview tile when we share);
+  // `screenSendGain` is how loud our shared audio is sent to viewers (0..4, 1=as-is);
+  // `screenMonitor` is our own local monitor of that audio (0..1, 0=off, avoids echo).
+  const [localScreen, setLocalScreen] = useState<MediaStream | null>(null)
+  const [screenSendGain, setScreenSendGain] = useState(1)
+  const [screenMonitor, setScreenMonitor] = useState(0)
 
   // @mention autocomplete: candidate usernames matching the partial being typed,
   // the highlighted index, the textarea ref (for caret restore), and the range of
@@ -294,9 +300,10 @@ export function Chat({
       } else if (
         data.type === 'voice-join' ||
         data.type === 'voice-leave' ||
-        data.type === 'voice-signal'
+        data.type === 'voice-signal' ||
+        data.type === 'voice-screen'
       ) {
-        // Mesh-voice signaling: hand the relayed frame to the active call.
+        // Mesh-voice signaling (incl. screen-share start/stop) → the active call.
         void voiceRef.current?.handle(data)
       } else if (data.type === 'presence') setOnline(data.online ?? 0)
       else if (data.type === 'error' && data.error) window.alert(data.error)
@@ -315,6 +322,7 @@ export function Chat({
         setPttOn(false)
         setTransmitting(false)
         setBindingKey(false)
+        setLocalScreen(null)
       }
       ws.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
@@ -413,12 +421,18 @@ export function Chat({
     )
     const session: VoiceTransport =
       t.sfu && t.url && t.token && t.room
-        ? new SfuSession({ url: t.url, room: t.room, token: t.token }, setVoicePeers, setSpeakingSelf)
+        ? new SfuSession(
+            { url: t.url, room: t.room, token: t.token },
+            setVoicePeers,
+            setSpeakingSelf,
+            setLocalScreen,
+          )
         : new VoiceSession(
             user.id,
             (frame) => wsRef.current?.send(JSON.stringify(frame)),
             setVoicePeers,
             setSpeakingSelf,
+            setLocalScreen,
           )
     voiceRef.current = session
     try {
@@ -444,10 +458,47 @@ export function Chat({
     setPttOn(false)
     setTransmitting(false)
     setBindingKey(false)
+    setLocalScreen(null)
   }
 
   const toggleMute = () => {
     if (voiceRef.current) setMuted(voiceRef.current.toggleMute())
+  }
+
+  // Screen share: start capture (the session prompts the OS picker), or stop. The
+  // session reports our own stream via setLocalScreen, which drives the preview +
+  // the sharer audio controls. getDisplayMedia rejects if the user cancels.
+  const toggleScreenShare = async () => {
+    const s = voiceRef.current
+    if (!s) return
+    if (s.isScreenSharing()) {
+      s.stopScreenShare()
+      return
+    }
+    try {
+      await s.startScreenShare()
+    } catch (err) {
+      // Cancelling the picker throws NotAllowed/AbortError — that's not an error
+      // worth alerting; surface anything else (e.g. SFU-unsupported).
+      const name = (err as DOMException)?.name
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        window.alert((err as Error)?.message || 'Could not start screen sharing.')
+      }
+    }
+  }
+  // SHARER: scale the screen audio sent to all viewers (0..4, 1 = as captured).
+  const changeScreenSendGain = (g: number) => {
+    setScreenSendGain(g)
+    voiceRef.current?.setScreenSendGain(g)
+  }
+  // SHARER: your own local monitor of the shared audio (0..1, 0 = off).
+  const changeScreenMonitor = (v: number) => {
+    setScreenMonitor(v)
+    voiceRef.current?.setScreenMonitorVolume(v)
+  }
+  // VIEWER: how loudly you hear a peer's shared audio (0..1).
+  const changePeerScreenVolume = (id: number, v: number) => {
+    voiceRef.current?.setPeerScreenVolume(id, v)
   }
 
   // Deafen: silence all incoming audio + force your own mic off. The session also
@@ -1110,9 +1161,92 @@ export function Chat({
             >
               {deafened ? 'undeafen' : 'deafen'}
             </button>
+            <button
+              className={`link voice-screen-toggle${localScreen ? ' on' : ''}`}
+              onClick={() => void toggleScreenShare()}
+              title="Share your screen (up to 4K/60 — with system audio if you allow it)"
+              data-sharing={localScreen != null}
+            >
+              {localScreen ? 'stop sharing' : '🖥 share screen'}
+            </button>
             <button className="link voice-leave" onClick={leaveVoice}>
               leave
             </button>
+          </div>
+        )}
+
+        {inCall && (localScreen || voicePeers.some((p) => p.sharingScreen)) && (
+          <div className="screen-stage" role="region" aria-label="screen shares">
+            {localScreen && (
+              <div className="screen-tile" data-screen-self>
+                <video
+                  className="screen-video"
+                  autoPlay
+                  muted
+                  playsInline
+                  ref={(el) => {
+                    if (el && el.srcObject !== localScreen) el.srcObject = localScreen
+                  }}
+                />
+                <div className="screen-tile-bar">
+                  <span className="screen-tile-name">You are sharing</span>
+                  <label className="screen-level" title="Audio level sent to viewers">
+                    out
+                    <input
+                      type="range"
+                      min={0}
+                      max={200}
+                      value={Math.round(screenSendGain * 100)}
+                      onChange={(e) => changeScreenSendGain(Number(e.target.value) / 100)}
+                      data-screen-send-gain
+                      aria-label="shared audio level sent to viewers"
+                    />
+                  </label>
+                  <label className="screen-level" title="Your own monitor of the shared audio (off by default)">
+                    monitor
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={Math.round(screenMonitor * 100)}
+                      onChange={(e) => changeScreenMonitor(Number(e.target.value) / 100)}
+                      data-screen-monitor
+                      aria-label="your local monitor of the shared audio"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+            {voicePeers
+              .filter((p) => p.sharingScreen && p.screenStream)
+              .map((p) => (
+                <div key={p.id} className="screen-tile" data-screen-peer={p.id}>
+                  <video
+                    className="screen-video"
+                    autoPlay
+                    muted
+                    playsInline
+                    ref={(el) => {
+                      if (el && el.srcObject !== p.screenStream) el.srcObject = p.screenStream
+                    }}
+                  />
+                  <div className="screen-tile-bar">
+                    <span className="screen-tile-name">{p.username || `user ${p.id}`}’s screen</span>
+                    <label className="screen-level" title="How loudly you hear this share's audio">
+                      🔉
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={Math.round(p.screenVolume * 100)}
+                        onChange={(e) => changePeerScreenVolume(p.id, Number(e.target.value) / 100)}
+                        data-screen-volume-for={p.id}
+                        aria-label={`shared audio volume for ${p.username || `user ${p.id}`}`}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
           </div>
         )}
 

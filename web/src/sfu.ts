@@ -75,6 +75,8 @@ export class SfuSession implements VoiceTransport {
     private tok: SfuToken,
     private onRoster: (peers: VoicePeer[]) => void,
     private onLocalSpeaking?: (speaking: boolean) => void,
+    // Parallel to VoiceSession's signature; unused until SFU screen share lands.
+    _onLocalScreen?: (stream: MediaStream | null) => void,
   ) {}
 
   async start(deviceId?: string): Promise<void> {
@@ -179,6 +181,25 @@ export class SfuSession implements VoiceTransport {
   // No-op: the SFU has its own signaling; channel-WS voice frames aren't used here.
   handle(_ev: VoiceInbound): void {}
 
+  // ── Screen share (SFU) ──────────────────────────────────────────────────────
+  // Not implemented yet on the SFU path. LiveKit supports it natively
+  // (localParticipant.setScreenShareEnabled + ScreenShare-source subscriptions),
+  // but the per-viewer audio mixing + remote rendering still need building and
+  // can't be tested without a live LiveKit. The mesh path has full screen share;
+  // surface a clear message rather than silently doing nothing.
+  isScreenSharing(): boolean {
+    return false
+  }
+  startScreenShare(): Promise<void> {
+    return Promise.reject(
+      new Error('Screen sharing is not available on this server’s SFU yet — it works on the default voice path.'),
+    )
+  }
+  stopScreenShare(): void {}
+  setScreenSendGain(_gain: number): void {}
+  setScreenMonitorVolume(_volume: number): void {}
+  setPeerScreenVolume(_id: number, _volume: number): void {}
+
   // A subscribed remote audio track arrived → attach it for playback (and so the
   // QA can see it), honoring this peer's chosen volume.
   private onTrackSubscribed(track: RemoteTrack, p: RemoteParticipant): void {
@@ -246,6 +267,10 @@ export class SfuSession implements VoiceTransport {
         state: 'connected',
         speaking: activeIdentities ? activeIdentities.has(p.identity) : p.isSpeaking,
         volume: this.volumes.get(id) ?? 1,
+        // SFU screen share not wired yet (see startScreenShare).
+        sharingScreen: false,
+        screenStream: null,
+        screenVolume: 1,
       })
     }
     this.onRoster(peers)

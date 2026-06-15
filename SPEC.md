@@ -749,6 +749,44 @@ returns the mic to its prior mute/PTT state.
 - **Verify:** browser-QA flow (join → deafen → remote audio elements muted + self chip
   shows deafened → undeafen restores) + AI-vision on the voice bar.
 
+## Voice — screen share (mesh) + screen-audio mixing controls (v0.4, 2026-06-15)
+
+Discord-parity screen share on the mesh voice path: a participant shares their screen (with
+optional system/tab audio) and every other participant sees it live; the pipeline is configured
+for **up to 4K@60** where the source + link sustain it. Owner ask: configurable audio levels
+when sharing video+audio, for BOTH the sharer and the viewers.
+
+- **Capture (sharer):** `getDisplayMedia` with `width/height ideal 3840×2160`, `frameRate ideal 60`
+  (caps, the browser negotiates down), `contentHint='detail'` (sharp text/UI). The screen video
+  sender is tuned to `maxBitrate 8 Mbps` + `degradationPreference='maintain-resolution'`. The
+  browser's native "Stop sharing" affordance ends our share too (`track.onended`).
+- **Transport (mesh):** the screen video (+ processed audio) tracks are `addTrack`-ed to every
+  peer associated with the screen MediaStream's id, so perfect-negotiation renegotiates them in;
+  a late joiner gets the share on connect. A new **`voice-screen`** WS frame ({on, streamId},
+  relayed by the server with Rule-B bounds) tells receivers which stream is the screen so its
+  audio is told apart from the mic, and signals start/stop. Receivers classify video as screen
+  always, and audio by stream id; a `track.onended` safety net also tears a stopped share down.
+- **Audio mixing (the owner ask), three independent controls:**
+  - **Sharer → all viewers:** outgoing screen-audio runs through a Web Audio `GainNode`
+    (`setScreenSendGain`, 0..4, 1=as captured) so the sharer scales what everyone hears.
+  - **Sharer → self:** a local monitor element (`setScreenMonitorVolume`, 0..1, **default 0** so
+    it doesn't echo through the sharer's own speakers; raise it on headphones).
+  - **Viewer → self:** each viewer has a per-share playback volume (`setPeerScreenVolume`, 0..1)
+    on a dedicated `<audio>` element, independent of that peer's mic/voice volume; deafen also
+    silences it.
+- **UI:** a "🖥 share screen / stop sharing" toggle in the voice bar; a screen stage of 16:9
+  video tiles below it — the sharer's own preview carries the out+monitor sliders, each peer's
+  tile carries a 🔉 per-share volume slider.
+- **SFU path:** stubbed for now — `SfuSession.startScreenShare` rejects with a clear message
+  ("works on the default voice path"); LiveKit-native screen share + per-viewer mixing is a
+  follow-up. Mesh is the default one-command stack (Rule A), so the feature ships there first.
+- **Verify (Rule 14):** `qa/voice.mjs` (3-way mesh, headless Chromium with
+  `--auto-select-desktop-capture-source`) — A shares → A sees the preview + out/monitor sliders →
+  **B receives a live inbound video track** + a per-share volume slider → both audio levels
+  adjust → A stops → tiles disappear on both. Full `qa/run.sh` (browser+realtime+voice) green;
+  AI-vision on `voice-07/08-screenshare*.png`. NOTE: actual 4K@60 throughput depends on the
+  user's machine + network (the headless fake source isn't 4K); large calls will want the SFU.
+
 ## Config — insecure-JWT-secret warning + config test coverage (v0.3, 2026-06-15)
 
 Rule C requires `JWT_SECRET` be overridden outside local dev, but nothing enforced or even

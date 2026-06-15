@@ -274,10 +274,12 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 	defer connB.Close()
 
 	type frame struct {
-		Type   string          `json:"type"`
-		From   int64           `json:"from"`
-		Target int64           `json:"target"`
-		Signal json.RawMessage `json:"signal"`
+		Type     string          `json:"type"`
+		From     int64           `json:"from"`
+		Target   int64           `json:"target"`
+		Signal   json.RawMessage `json:"signal"`
+		On       bool            `json:"on"`
+		StreamID string          `json:"streamId"`
 	}
 	// readUntil reads frames on conn (with a deadline) until one of typ arrives.
 	readUntil := func(conn *gws.Conn, typ string) frame {
@@ -313,6 +315,27 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 	}
 	if !strings.Contains(string(sig.Signal), "v=0") {
 		t.Fatalf("voice-signal payload not relayed intact: %s", sig.Signal)
+	}
+
+	// A starts screen sharing → B sees voice-screen on=true from A, carrying the
+	// screen MediaStream id (so B can tell the screen's tracks from the mic).
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":true,"streamId":"screen-stream-123"}`)); err != nil {
+		t.Fatalf("A voice-screen on: %v", err)
+	}
+	scr := readUntil(connB, "voice-screen")
+	if scr.From != a.ID || !scr.On || scr.StreamID != "screen-stream-123" {
+		t.Fatalf("voice-screen on: from=%d on=%v streamId=%q, want from=%d on=true streamId=screen-stream-123",
+			scr.From, scr.On, scr.StreamID, a.ID)
+	}
+
+	// A stops sharing → B sees voice-screen on=false (and no stream id leaks).
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":false}`)); err != nil {
+		t.Fatalf("A voice-screen off: %v", err)
+	}
+	off := readUntil(connB, "voice-screen")
+	if off.From != a.ID || off.On || off.StreamID != "" {
+		t.Fatalf("voice-screen off: from=%d on=%v streamId=%q, want from=%d on=false streamId=\"\"",
+			off.From, off.On, off.StreamID, a.ID)
 	}
 }
 

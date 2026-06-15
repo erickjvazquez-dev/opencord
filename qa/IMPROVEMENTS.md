@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (owner request) — screen share (mesh) + screen-audio mixing controls
+
+Owner asked to start developing screen share (4K@60-capable) with audio-level controls for BOTH
+the sharer and the viewers. Built it end-to-end on the mesh path (the default, Rule A): capture via
+getDisplayMedia (4K@60 constraints, contentHint detail, 8 Mbps, maintain-resolution), published to
+every peer via perfect-negotiation, with a new Rule-B-bounded `voice-screen` WS frame so receivers
+tell screen tracks from the mic. Three independent audio controls (the owner ask): sharer→viewers
+outgoing gain (Web Audio GainNode), sharer→self local monitor (default 0, no echo), viewer→self
+per-share volume. UI: share toggle + a stage of 16:9 video tiles with the right sliders per side.
+
+**Verified (Rule 14):** extended `qa/voice.mjs` (3-way mesh) — A shares → preview + out/monitor
+sliders → **B receives a live inbound video track** + per-share volume → both levels adjust → stop
+clears both sides. Full `qa/run.sh` green; AI-vision on `voice-07/08-screenshare*.png`. Backend
+`voice-screen` relay has a Go integration test (on + off). go+web build/vet/test green.
+
+**Bug caught by QA (fixed before ship):** the first run failed "B no longer sees A’s screen tile"
+after stop — I'd added `voice-screen` to the session's `handle()` but forgot to DISPATCH it from
+Chat.tsx's `onmessage`, so the teardown signal never arrived (the tile had appeared only via the
+video track). Fixed the dispatch + added a `track.onended` safety net. This is the value of driving
+the real two-client UI: the unit pieces all passed; only the live flow exposed the missing wire-up.
+
+**QA-process win:** confirmed headless Chromium CAN screen-capture with
+`--auto-select-desktop-capture-source` — so screen share is now part of the autonomous browser QA,
+not a manual-only feature. Guarded so it logs+skips (not fails) where capture is unavailable.
+
+**Follow-ups (logged):** SFU-path screen share (LiveKit-native) for scale; true 4K@60 throughput
+depends on hardware/network and wasn't measurable headlessly (the fake source isn't 4K).
+
 ## 2026-06-15 (iter 82) — Rule-C hardening: insecure-JWT-secret warning + config tests (security)
 
 Rotated to **security** (north star: hostile-input-proof / secrets hygiene). Found a real Rule-C
