@@ -18,7 +18,9 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 4096
+	maxMessageSize = 4096  // max chat message body (Rule B)
+	maxFrameSize   = 16384 // max inbound WS frame — larger than a message so SDP offers fit
+	maxSignalSize  = 8192  // max voice-signal payload (SDP/ICE) — flood guard
 
 	// Per-connection inbound rate limit (token bucket): burst of rateBurst frames,
 	// refilling rateRefillPerSec/sec. Each inbound frame (message or typing) costs
@@ -120,7 +122,7 @@ func (c *Client) readPump(store *chat.Store) {
 		_ = c.conn.Close()
 	}()
 
-	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadLimit(maxFrameSize)
 	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error {
 		return c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -131,7 +133,34 @@ func (c *Client) readPump(store *chat.Store) {
 		if err != nil {
 			return
 		}
-		// Per-connection rate limit (token bucket): drop frames over the budget.
+		var in struct {
+			Type   string          `json:"type"`
+			Body   string          `json:"body"`
+			Target int64           `json:"target"`
+			Signal json.RawMessage `json:"signal"`
+		}
+		if json.Unmarshal(raw, &in) != nil {
+			continue
+		}
+		// Voice signaling (mesh WebRTC) is relayed verbatim, stamped with the sender,
+		// and is exempt from the text token bucket — ICE exchange is legitimately
+		// bursty. The signal payload is size-bounded as a flood guard.
+		// (Hardening TODO: a separate, dedicated voice rate bucket — Rule 15.)
+		switch in.Type {
+		case "voice-join", "voice-leave":
+			c.hub.BroadcastToChannel(c.channelID, Event{Type: in.Type, From: c.user.ID, Username: c.user.Username})
+			continue
+		case "voice-signal":
+			if len(in.Signal) == 0 || len(in.Signal) > maxSignalSize {
+				continue
+			}
+			c.hub.BroadcastToChannel(c.channelID, Event{
+				Type: "voice-signal", From: c.user.ID, Username: c.user.Username,
+				Target: in.Target, Signal: in.Signal,
+			})
+			continue
+		}
+		// Per-connection rate limit (token bucket): drop non-voice frames over budget.
 		now := time.Now()
 		c.rateTokens = min(rateBurst, c.rateTokens+now.Sub(c.rateLast).Seconds()*rateRefillPerSec)
 		c.rateLast = now
@@ -139,13 +168,6 @@ func (c *Client) readPump(store *chat.Store) {
 			continue
 		}
 		c.rateTokens--
-		var in struct {
-			Type string `json:"type"`
-			Body string `json:"body"`
-		}
-		if json.Unmarshal(raw, &in) != nil {
-			continue
-		}
 		if in.Type == "typing" {
 			// Ephemeral: relay to the channel, never persisted.
 			c.hub.BroadcastToChannel(c.channelID, Event{Type: "typing", Username: c.user.Username})

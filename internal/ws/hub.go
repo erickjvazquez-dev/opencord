@@ -11,12 +11,18 @@ import (
 
 // Event is the envelope every server→client frame uses.
 type Event struct {
-	Type     string         `json:"type"` // history | message | message-edited | message-deleted | typing | presence | error
+	Type     string         `json:"type"` // history|message|message-edited|message-deleted|message-pinned|typing|presence|error|voice-join|voice-leave|voice-signal
 	Message  *chat.Message  `json:"message,omitempty"`
 	History  []chat.Message `json:"history,omitempty"`
-	Username string         `json:"username,omitempty"` // who, for "typing"
+	Username string         `json:"username,omitempty"` // who, for "typing" / voice
 	Online   int            `json:"online,omitempty"`
 	Error    string         `json:"error,omitempty"`
+	// Voice signaling (mesh WebRTC): From is the sender; Target the intended peer
+	// (clients ignore a voice-signal unless Target is them); Signal is opaque
+	// WebRTC JSON (an SDP offer/answer or an ICE candidate).
+	From   int64           `json:"from,omitempty"`
+	Target int64           `json:"target,omitempty"`
+	Signal json.RawMessage `json:"signal,omitempty"`
 }
 
 // targetedEvent is an Event addressed to a specific channel — used for events

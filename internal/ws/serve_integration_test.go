@@ -2,6 +2,7 @@ package ws_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -250,4 +251,67 @@ func TestServeWSRateLimitIntegration(t *testing.T) {
 		t.Fatalf("rate limiter dropped too much (burst should let ~%d through): saved %d", int(5), saved)
 	}
 	t.Logf("rate limiter: %d of %d flooded messages persisted, rest throttled", saved, flood)
+}
+
+// TestServeWSVoiceSignalingIntegration verifies the mesh-voice signaling relay: the
+// server stamps the sender and rebroadcasts voice-join / voice-signal to the channel,
+// carrying from/target/signal so peers can establish WebRTC connections.
+func TestServeWSVoiceSignalingIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	a, aTok := h.user(t)
+	b, bTok := h.user(t)
+
+	// Both connect to the default (global) channel.
+	connA, sA := h.dial(t, "?token="+aTok)
+	if connA == nil {
+		t.Fatalf("dial A failed (status %d)", sA)
+	}
+	defer connA.Close()
+	connB, sB := h.dial(t, "?token="+bTok)
+	if connB == nil {
+		t.Fatalf("dial B failed (status %d)", sB)
+	}
+	defer connB.Close()
+
+	type frame struct {
+		Type   string          `json:"type"`
+		From   int64           `json:"from"`
+		Target int64           `json:"target"`
+		Signal json.RawMessage `json:"signal"`
+	}
+	// readUntil reads frames on conn (with a deadline) until one of typ arrives.
+	readUntil := func(conn *gws.Conn, typ string) frame {
+		t.Helper()
+		_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+		for {
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				t.Fatalf("waiting for %q: %v", typ, err)
+			}
+			var f frame
+			if json.Unmarshal(data, &f) == nil && f.Type == typ {
+				return f
+			}
+		}
+	}
+
+	// A joins voice → B sees voice-join stamped with A's id.
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-join"}`)); err != nil {
+		t.Fatalf("A voice-join: %v", err)
+	}
+	if join := readUntil(connB, "voice-join"); join.From != a.ID {
+		t.Fatalf("voice-join from = %d, want A (%d)", join.From, a.ID)
+	}
+
+	// A sends a directed offer to B → B sees voice-signal from A, target B, signal intact.
+	if err := connA.WriteMessage(gws.TextMessage, []byte(fmt.Sprintf(`{"type":"voice-signal","target":%d,"signal":{"sdp":"v=0"}}`, b.ID))); err != nil {
+		t.Fatalf("A voice-signal: %v", err)
+	}
+	sig := readUntil(connB, "voice-signal")
+	if sig.From != a.ID || sig.Target != b.ID {
+		t.Fatalf("voice-signal from=%d target=%d, want from=%d target=%d", sig.From, sig.Target, a.ID, b.ID)
+	}
+	if !strings.Contains(string(sig.Signal), "v=0") {
+		t.Fatalf("voice-signal payload not relayed intact: %s", sig.Signal)
+	}
 }

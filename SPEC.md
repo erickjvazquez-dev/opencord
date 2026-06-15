@@ -432,3 +432,36 @@ Bulleted (`- `/`* `) and numbered (`1. `) lists render as `<ul>`/`<ol>` via `ren
 (line-grouped like blockquotes). The bullet rule requires a space (`- `/`* `) so `*italic*`
 (no space) stays inline. Verified via react-dom/server probe (bullets, `*`, numbered, italic-not-
 a-bullet, mixed) + browser QA (`.body ul li` count) + AI-vision.
+
+## Voice channels — MVP (v0.4, 2026-06-14)
+
+**Goal:** real-time audio so you can invite someone and talk. First slice is mesh
+peer-to-peer audio for small calls (2–4); an SFU is the later scale path.
+
+**Why mesh + no SFU (Rule A):** an SFU (mediasoup) is a heavyweight native dependency
+and would break "self-hostable, one command, zero required paid service." Mesh WebRTC
+needs only the browser + a STUN server (use a public STUN; TURN is optional, only for
+hostile NATs). So the one-command stack stays intact.
+
+**Architecture:**
+- **Signaling rides the existing WebSocket gateway** — no new server, no new port. The
+  server is a *dumb relay*: it stamps the sender and rebroadcasts voice frames to the
+  channel; clients do the WebRTC work.
+- Three client→server frames (all relayed to the channel):
+  - `voice-join` → server broadcasts `{type:"voice-join", from, username}`.
+  - `voice-leave` → `{type:"voice-leave", from}`.
+  - `voice-signal` `{target, signal}` → `{type:"voice-signal", from, target, signal}`;
+    each client ignores it unless `target === me`. `signal` is opaque WebRTC JSON
+    (SDP offer/answer or ICE candidate; trickle ICE keeps frames small).
+- **Roster is client-derived** from join/leave frames — no server-side voice state.
+- **WS read limit raised to 16 KiB** (`maxFrameSize`) so SDP fits; text bodies stay
+  bounded to `maxMessageSize` (4 KiB). Voice frames are **exempt from the text token
+  bucket** (ICE is bursty). *Hardening TODO: a separate voice rate bucket (Rule 15).*
+
+**Client (next slice):** `getUserMedia({audio})` → an `RTCPeerConnection` per peer
+(public STUN), exchange offer/answer/ICE via the frames above, play remote audio; a
+"Join voice" control + a roster of who's in the call + leave. New peers: the existing
+member offers to the joiner (deterministic by user id to avoid glare).
+
+**Slices:** (1) backend signaling relay [this commit] · (2) client WebRTC + UI ·
+(3) later: optional TURN config, SFU for larger calls, video/screenshare.
