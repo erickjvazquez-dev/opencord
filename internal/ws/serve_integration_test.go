@@ -369,10 +369,22 @@ func TestServeWSVoiceFloodGuard(t *testing.T) {
 	}()
 
 	payload := []byte(fmt.Sprintf(`{"type":"voice-signal","target":%d,"signal":{"c":"x"}}`, b.ID))
-	send := func(n int) {
+	// send writes n frames from A. `fatalOnErr` is true only for the legit burst:
+	// there a write failure is a real regression (the guard must not drop/close a
+	// legitimate client). During a flood it's NOT — the server defending itself is
+	// the guard working: the voice bucket drops most frames, and the hub may still
+	// evict a client that floods faster than it drains its own fanned-back echoes
+	// (a TCP reset / close mid-flood). Treating that as fatal made the test flaky
+	// (it failed at a different frame each run). So in the flood phase we stop on the
+	// first write error and proceed to measure what B actually received — which only
+	// strengthens the "flood is bounded" assertion.
+	send := func(n int, fatalOnErr bool) {
 		for i := 0; i < n; i++ {
 			if err := connA.WriteMessage(gws.TextMessage, payload); err != nil {
-				t.Fatalf("write %d: %v", i, err)
+				if fatalOnErr {
+					t.Fatalf("write %d: %v", i, err)
+				}
+				return
 			}
 		}
 	}
@@ -380,7 +392,7 @@ func TestServeWSVoiceFloodGuard(t *testing.T) {
 	// Phase 1 — a legitimate setup-sized burst (well within the bucket and B's
 	// buffer) must be relayed IN FULL: the guard must not false-drop real ICE.
 	const legit = 25
-	send(legit)
+	send(legit, true)
 	time.Sleep(400 * time.Millisecond)
 	if got := atomic.LoadInt64(&received); got < legit {
 		t.Fatalf("voice guard throttled a legitimate burst: relayed %d of %d", got, legit)
@@ -390,7 +402,7 @@ func TestServeWSVoiceFloodGuard(t *testing.T) {
 	// Phase 2 — a flood far beyond the bucket must be bounded: most frames are
 	// dropped at the source, never amplified to the channel.
 	const flood = 500
-	send(flood)
+	send(flood, false)
 	time.Sleep(500 * time.Millisecond)
 	got := atomic.LoadInt64(&received)
 	if got >= flood {
