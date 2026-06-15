@@ -3,6 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 58) — Voice signaling shipped; clearing context for the WebRTC client build
+
+Shipped voice **slice 1** (WS signaling relay: `voice-join`/`voice-leave`/`voice-signal`, dumb relay,
+16 KiB frames for SDP, two-client test) and recorded the owner's **audio north star** (thousands /
+HD / free, via OSS SFU later) + the **per-component excellence** directive (GOAL + loop skill + memory).
+
+**This tick: clearing context (judgment trigger).** Slice 2 — the mesh WebRTC **client** (getUserMedia,
+RTCPeerConnection-per-peer, STUN, offer/answer/ICE, join/leave UI, audio playback) plus a fake-media
+two-context E2E — is a major new subsystem, and this session is ~58 ticks deep. The disciplined call
+(framework rule for sustained deep work; I flagged it last turn) is to build it in a **fresh context**
+off the now-complete SPEC, not in a long degrading one. Durable handoff is all on disk:
+- SPEC "Voice channels — MVP" has the full design (mesh, the 3 signal frames, STUN, **client peer
+  discovery = answer incoming offers, existing-members-offer-to-joiner, ties by user id**, trickle ICE).
+- GOAL voice item `[~]` with the north star; memory `project_opencord` voice section.
+- Signaling relay is committed + green; client is the only remaining slice for a testable call.
+
+**Next tick (fresh context):** build `web/src/voice.ts` (`useVoice` hook) + wire into `Chat.tsx`
+(join/leave + roster + route WS voice events) + a Playwright test launched with
+`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream` asserting two contexts reach an
+`RTCPeerConnection` `connected` state. Then iterate audio toward the north star (OSS SFU via
+`stack-guardian`).
+
 ## 2026-06-14 (iter 57) — Markdown lists; the delimiter ambiguity that needed care
 
 Added `- `/`* ` and `1. ` lists to the renderer. The interesting bit is the `*` ambiguity: `* item`
