@@ -20,7 +20,15 @@ const check = (cond, msg) => {
 
 async function main() {
   await mkdir(SHOTS, { recursive: true })
-  const browser = await chromium.launch()
+  // Fake media so the single-client voice entry-point check can call getUserMedia
+  // headlessly (the rest of the flow is unaffected).
+  const browser = await chromium.launch({
+    args: [
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      '--autoplay-policy=no-user-gesture-required',
+    ],
+  })
   const page = await (await browser.newContext({ viewport: { width: 1100, height: 820 } })).newPage()
   page.on('pageerror', (e) => {
     console.log('  [pageerror] ' + e.message)
@@ -56,6 +64,21 @@ async function main() {
   await page.getByPlaceholder(/Message #/).waitFor({ timeout: 15000 })
   await shot('02-chat.png')
   check(await page.getByRole('button', { name: /general/ }).isVisible(), '#general in sidebar after register')
+
+  // 2b — Voice entry point: the control renders, is gated until the WS connects,
+  // and joining solo shows the in-voice bar (guards the entry point even without
+  // the multi-peer voice.mjs run).
+  step('voice: Join control renders + is enabled once connected, then joins solo')
+  await page.locator('.dot.online').waitFor({ timeout: 8000 })
+  const joinVoiceBtn = page.getByRole('button', { name: /Join voice/ })
+  check((await joinVoiceBtn.count()) > 0, 'voice: "Join voice" control is present')
+  check(await joinVoiceBtn.isEnabled(), 'voice: "Join voice" is enabled once connected')
+  await joinVoiceBtn.click()
+  await page.locator('.voice-bar').waitFor({ timeout: 8000 })
+  check((await page.locator('[data-voice-self]').count()) > 0, 'voice: joining shows the in-voice bar with your chip')
+  await page.getByRole('button', { name: 'leave' }).click()
+  await page.locator('.voice-bar').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
+  check((await page.locator('.voice-bar').count()) === 0, 'voice: leaving removes the voice bar')
 
   // 3 — Send a message; it renders with an avatar.
   const body = 'hello from the qa bot'

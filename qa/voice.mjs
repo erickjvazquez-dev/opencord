@@ -176,6 +176,21 @@ async function main() {
   }
   check(await speakingSeen(a), 'A sees a speaking indicator (active-speaker VAD works)')
 
+  step('per-user volume slider adjusts that peer audio element')
+  const vslider = a.locator('[data-volume-for]').first()
+  const vpid = await vslider.getAttribute('data-volume-for')
+  // Set a controlled range input the React way: native value setter + input event.
+  await vslider.evaluate((el) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    setter.call(el, '40')
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const vol = await a.evaluate((id) => {
+    const au = document.querySelector(`audio[data-voice-audio="${id}"]`)
+    return au ? au.volume : -1
+  }, vpid)
+  check(Math.abs(vol - 0.4) < 0.05, `slider at 40% sets that peer's audio volume to ~0.4 (got ${vol})`)
+
   step('mute toggles the local mic label')
   await a.getByRole('button', { name: 'mute' }).click()
   check(

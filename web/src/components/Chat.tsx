@@ -755,6 +755,17 @@ export function Chat({
               >
                 <span className={`dot voice-${p.state}`} aria-hidden />
                 {p.username || `user ${p.id}`}
+                <input
+                  className="voice-volume"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(p.volume * 100)}
+                  onChange={(e) => voiceRef.current?.setPeerVolume(p.id, Number(e.target.value) / 100)}
+                  data-volume-for={p.id}
+                  aria-label={`volume for ${p.username || `user ${p.id}`}`}
+                  title={`Volume: ${Math.round(p.volume * 100)}%`}
+                />
               </span>
             ))}
             {voicePeers.length === 0 && <span className="voice-empty">waiting for others…</span>}

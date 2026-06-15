@@ -547,3 +547,21 @@ no server state (Rule A).
   voice-bar chip (incl. "you") gets a `.speaking` class → a green ring/glow.
 - **Verification:** browser QA — with Chromium's fake mic (a tone), join voice and
   assert a chip gains the speaking state; `data-speaking` is asserted in `qa/voice.mjs`.
+
+## Voice — per-user volume + browser-QA entry guard (v0.4, 2026-06-14)
+
+Two small additions:
+
+- **Per-user volume.** Each remote peer's voice-bar chip gets a compact slider
+  (0–100%, default 100%) that sets *only your* playback of that peer via
+  `HTMLAudioElement.volume`. Purely local — never signaled, so it can't be abused to
+  make yourself louder for everyone (Rule B). `VoicePeer.volume` carries it; the
+  session clamps to 0..1 and applies it on the peer's `<audio>` (also re-applied when
+  the track arrives). Verified in `qa/voice.mjs`: a slider set to 40% drives that
+  peer's audio element to `volume ≈ 0.4`.
+
+- **Browser-QA voice entry guard.** `qa/browser.mjs` (single client, launched with
+  fake media) now asserts the "🎙 Join voice" control renders, is enabled once the WS
+  connects, joins solo (the in-voice bar with your chip appears), and that leaving
+  removes the bar — so the voice entry point is guarded even without the multi-peer
+  `qa/voice.mjs` run.

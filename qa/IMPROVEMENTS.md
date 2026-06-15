@@ -3,7 +3,25 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 62) — active-speaker indicator (voice polish toward the "crisp" bar)
+## 2026-06-14 (iter 63) — per-user volume + closed the browser-QA voice blind spot
+
+Shipped two things: **per-user volume** (a local-only slider per peer chip → `HTMLAudioElement.volume`;
+never signaled, so it can't be abused to boost yourself for everyone — Rule B) and the **browser-QA voice
+entry guard** I flagged last tick. `qa/browser.mjs` (single client) never touched voice — voice lived
+entirely in the 2+ peer `qa/voice.mjs`. Now the single-client run launches with fake media and asserts the
+"🎙 Join voice" control renders, is enabled once connected, joins solo (in-voice bar + your chip), and that
+leaving removes the bar. So a regression that breaks the *entry point* (button gone, getUserMedia broken) is
+caught by the cheap single-client run, not only the heavier multi-peer one.
+
+**Testing note worth reusing:** driving a React **controlled `range` input** from Playwright needs the native
+value-setter trick (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set` + dispatch
+`input`) — a plain `el.value=…` doesn't fire React's onChange. Encoded in the volume assertion.
+
+**Highest-value next item:** the voice bar is getting dense (roster + speaking ring + volume slider + 2 device
+selectors + mute/leave), and on a phone viewport it will wrap badly — **no mobile-viewport check covers the
+voice bar yet**. Next tick: add a ≤640px AI-vision pass on the in-voice bar (does it stay usable/readable when
+wrapped?), and if it's cramped, move per-peer volume into a click-to-open popover (Discord's pattern) rather
+than an always-visible inline slider. Product-wise, push-to-talk is the next voice-polish step.
 
 Shipped the speaking ring (owner's "close the gap Discord has"): client-side Web Audio VAD — one
 `AudioContext`, an `AnalyserNode` per stream (local mic + each remote), a 120 ms RMS sampler with 250 ms

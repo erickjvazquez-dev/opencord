@@ -855,6 +855,16 @@ button:disabled {
   transition: box-shadow 80ms ease-in;
 }
 
+/* Per-peer volume slider — compact, lives inside the peer chip. */
+.voice-volume {
+  width: 64px;
+  height: 4px;
+  margin-left: 2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
 .voice-chip .dot {
   width: 8px;
   height: 8px;

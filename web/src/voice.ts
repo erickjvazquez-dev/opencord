@@ -33,6 +33,8 @@ export interface VoicePeer {
   state: PeerState
   // True while this peer is actively talking (client-side voice-activity detection).
   speaking: boolean
+  // Per-listener playback volume for this peer, 0..1 (local only — never signaled).
+  volume: number
 }
 
 // Public STUN only (Rule A: no required paid service). On loopback/LAN, host
@@ -96,6 +98,8 @@ interface Peer {
   analyser: AnalyserNode | null
   loudAt: number
   speaking: boolean
+  // Per-listener playback volume (0..1), applied to this peer's <audio> element.
+  volume: number
 }
 
 export class VoiceSession {
@@ -235,6 +239,16 @@ export class VoiceSession {
     for (const peer of this.peers.values()) this.applySink(peer.audioEl)
   }
 
+  // Set how loudly *you* hear one peer (0..1). Local only — never signaled, so it
+  // can't be abused to make someone else louder for everyone.
+  setPeerVolume(id: number, volume: number): void {
+    const peer = this.peers.get(id)
+    if (!peer) return
+    peer.volume = Math.min(1, Math.max(0, volume))
+    peer.audioEl.volume = peer.volume
+    this.emitRoster()
+  }
+
   currentInputDevice(): string | undefined {
     return this.inputDeviceId
   }
@@ -312,6 +326,7 @@ export class VoiceSession {
       analyser: null,
       loudAt: 0,
       speaking: false,
+      volume: 1,
     }
     this.peers.set(id, peer)
     this.applySink(audioEl)
@@ -339,6 +354,7 @@ export class VoiceSession {
     pc.ontrack = ({ streams }) => {
       const stream = streams[0] ?? null
       peer.audioEl.srcObject = stream
+      peer.audioEl.volume = peer.volume
       void peer.audioEl.play().catch(() => {})
       // Tap the remote stream for the speaking meter.
       if (stream) peer.analyser = this.makeAnalyser(stream)
@@ -433,6 +449,7 @@ export class VoiceSession {
       username: p.username,
       state: p.state,
       speaking: p.speaking,
+      volume: p.volume,
     }))
     this.onRoster(peers)
   }
