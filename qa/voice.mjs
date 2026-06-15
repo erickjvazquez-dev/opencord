@@ -191,6 +191,22 @@ async function main() {
   }, vpid)
   check(Math.abs(vol - 0.4) < 0.05, `slider at 40% sets that peer's audio volume to ~0.4 (got ${vol})`)
 
+  // The voice bar is dense (roster + speaking ring + volume + 2 device selectors +
+  // mute/leave); guard that it wraps cleanly on a phone instead of clipping.
+  step('voice bar stays usable + does not overflow at phone width (≤640px)')
+  await a.setViewportSize({ width: 390, height: 780 })
+  await new Promise((r) => setTimeout(r, 250))
+  check(await a.locator('.voice-bar').isVisible(), 'voice bar renders at 390px')
+  check(await a.getByRole('button', { name: 'leave' }).isVisible(), 'leave is reachable at 390px')
+  check((await a.locator('[data-voice-peer]').first().isVisible()), 'a peer chip is visible at 390px')
+  const noOverflow = await a.evaluate(() => {
+    const el = document.querySelector('.voice-bar')
+    return el ? el.scrollWidth <= el.clientWidth + 1 : false
+  })
+  check(noOverflow, 'voice bar wraps cleanly — no horizontal overflow at 390px')
+  await a.screenshot({ path: join(SHOTS, 'voice-04-mobile.png') })
+  await a.setViewportSize({ width: 1100, height: 820 })
+
   step('mute toggles the local mic label')
   await a.getByRole('button', { name: 'mute' }).click()
   check(

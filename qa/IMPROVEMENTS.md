@@ -3,7 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 63) — per-user volume + closed the browser-QA voice blind spot
+## 2026-06-14 (iter 64) — the flagged "mobile voice bar is cramped" P1 was a non-issue; verified + covered instead of churned
+
+Last tick I predicted the dense in-voice bar would "wrap badly ≤640px" and queued a redesign (move volume into
+a popover). Did the AI-vision pass at 390px first: it wraps **cleanly** — title + your chip, peer chip + volume
+slider, mic selector, output selector + mute/leave each stack onto their own readable, tappable row; an
+objective `scrollWidth <= clientWidth` check confirms **zero horizontal overflow**. So the right move was the
+opposite of what I queued: **don't redesign** (Rule 10 anti-churn), just add the missing coverage. `qa/voice.mjs`
+now resizes to 390px mid-call and asserts the bar renders, leave is reachable, a peer chip is visible, and the
+bar doesn't overflow — plus `voice-04-mobile.png` for future vision passes.
+
+**Loop lesson:** a queued "this will probably be bad, redesign it" item must be **re-verified before acting** —
+I almost spent a tick rebuilding a layout that was already fine. Predictions decay; check the artifact first.
+The anti-churn rule and the verify-first rule pulled the same direction here.
+
+**Highest-value next item:** push-to-talk — the last non-trivial voice-control gap toward the owner's parity
+bar. Plan: a press-and-hold "Talk" button (works on desktop + touch, no key-vs-composer conflict) gating the
+mic via `track.enabled`, with PTT/mute mutually exclusive in the UI; reflect `transmitting` in a `data-` attr
+so the E2E can assert the hold→transmit→release flow. Its own tick (real state interactions with mute + VAD).
 
 Shipped two things: **per-user volume** (a local-only slider per peer chip → `HTMLAudioElement.volume`;
 never signaled, so it can't be abused to boost yourself for everyone — Rule B) and the **browser-QA voice
