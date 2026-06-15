@@ -117,6 +117,36 @@ async function main() {
     'A sees the reply quote the original message body (live broadcast carries replyToBody)',
   )
 
+  // 1d — @mention autocomplete: typing "@" + a partial offers matching usernames
+  // active in the channel; Enter ACCEPTS the suggestion (inserts "@username ") rather
+  // than sending. Both A and B have posted by now, so B is a candidate for A.
+  step('@mention autocomplete: typing @ offers a matching user; Enter inserts it')
+  const composer = a.getByPlaceholder(/Message #/)
+  await composer.click()
+  await composer.fill('hey @bo')
+  const acMenu = a.locator('.mention-autocomplete')
+  await acMenu.waitFor({ timeout: 8000 })
+  check(
+    (await a.locator(`.mention-option[data-mention-option="${userB}"]`).count()) > 0,
+    `autocomplete suggests ${userB} for "@bo"`,
+  )
+  await a.screenshot({ path: join(SHOTS, 'rt-08-mention-autocomplete.png') })
+  await composer.press('Enter') // accept the highlighted suggestion — must NOT send
+  check(
+    (await composer.inputValue()) === `hey @${userB} `,
+    'Enter inserts "@username " into the composer',
+  )
+  check((await acMenu.count()) === 0, 'autocomplete closes after accepting')
+  check(
+    (await a.locator('.message', { hasText: 'hey @' + userB }).count()) === 0,
+    'accepting the suggestion did NOT send the message',
+  )
+  step('the accepted @mention sends and renders as a highlighted chip for B')
+  await a.getByRole('button', { name: 'Send' }).click()
+  const bMention = b.locator('.message .body .mention', { hasText: '@' + userB }).first()
+  await bMention.waitFor({ timeout: 8000 })
+  check(await bMention.isVisible(), 'the sent @mention renders as a highlighted chip for B')
+
   const aMsg = a.locator('.message', { hasText: body }).first()
   const bMsg = b.locator('.message', { hasText: body }).first()
 

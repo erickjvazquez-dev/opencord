@@ -77,6 +77,18 @@ function isEditableTarget(t: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
 }
 
+// ── @mention autocomplete ───────────────────────────────────────────────────
+// If the caret sits inside an @mention being typed, return the partial `query`
+// and the index where its `@` starts (so the token can be replaced on accept).
+// The `@` must begin the text or follow whitespace, and only username chars
+// (letters/digits/_/-) may run from it to the caret.
+function activeMention(text: string, caret: number): { query: string; start: number } | null {
+  const upto = text.slice(0, Math.max(0, caret))
+  const m = /(?:^|\s)@([\w-]*)$/.exec(upto)
+  if (!m) return null
+  return { query: m[1], start: caret - m[1].length - 1 }
+}
+
 // Apply a count delta for one emoji to a message's reaction list (immutably):
 // inserts a chip when adding the first, drops it when the last is removed.
 function applyDelta(reactions: Reaction[] | undefined, emoji: string, delta: number): Reaction[] {
@@ -177,6 +189,14 @@ export function Chat({
   const [pttKey, setPttKey] = useState(loadPttKey)
   const [bindingKey, setBindingKey] = useState(false)
 
+  // @mention autocomplete: candidate usernames matching the partial being typed,
+  // the highlighted index, the textarea ref (for caret restore), and the range of
+  // the `@token` being replaced on accept.
+  const [mentionMatches, setMentionMatches] = useState<string[]>([])
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
+  const mentionRange = useRef<{ start: number; len: number } | null>(null)
+
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -222,6 +242,7 @@ export function Chat({
     setSearchResults(null)
     setSearchQuery('')
     setMembersOf(null)
+    setMentionMatches([])
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(
       `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${channelId}`,
@@ -311,11 +332,56 @@ export function Chat({
     wsRef.current.send(JSON.stringify({ body, replyTo: replyingTo?.id }))
     setDraft('')
     setReplyingTo(null)
+    setMentionMatches([])
   }
 
   const send = (e: FormEvent) => {
     e.preventDefault()
     submitDraft()
+  }
+
+  // Recompute the @mention suggestions for the current draft + caret. Candidates are
+  // the distinct usernames active in this channel (message authors), minus yourself,
+  // that start with the partial — no extra fetch, works in every channel type.
+  const refreshMentions = (value: string, caret: number) => {
+    const active = activeMention(value, caret)
+    if (!active) {
+      if (mentionMatches.length) setMentionMatches([])
+      mentionRange.current = null
+      return
+    }
+    const q = active.query.toLowerCase()
+    const seen = new Set<string>()
+    const names: string[] = []
+    for (const m of messages) {
+      const u = m.username
+      if (!u || u === user.username || seen.has(u)) continue
+      seen.add(u)
+      if (u.toLowerCase().startsWith(q)) names.push(u)
+    }
+    mentionRange.current = { start: active.start, len: active.query.length + 1 }
+    setMentionMatches(names.slice(0, 6))
+    setMentionIndex(0)
+  }
+
+  // Replace the `@partial` under the caret with `@name ` and restore the caret.
+  const acceptMention = (name: string) => {
+    const range = mentionRange.current
+    if (!range) return
+    const inserted = `@${name} `
+    const before = draft.slice(0, range.start)
+    const next = before + inserted + draft.slice(range.start + range.len)
+    setDraft(next)
+    setMentionMatches([])
+    mentionRange.current = null
+    const caret = before.length + inserted.length
+    requestAnimationFrame(() => {
+      const ta = composerRef.current
+      if (ta) {
+        ta.focus()
+        ta.setSelectionRange(caret, caret)
+      }
+    })
   }
 
   // ── Voice call (mesh WebRTC) ────────────────────────────────────────────────
@@ -1299,8 +1365,30 @@ export function Chat({
             </button>
           </div>
         )}
+        {mentionMatches.length > 0 && (
+          <div className="mention-autocomplete" role="listbox" aria-label="mention suggestions">
+            {mentionMatches.map((name, i) => (
+              <button
+                type="button"
+                key={name}
+                role="option"
+                aria-selected={i === mentionIndex}
+                className={`mention-option${i === mentionIndex ? ' active' : ''}`}
+                data-mention-option={name}
+                // mousedown (not click) so the textarea doesn't blur before we insert.
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  acceptMention(name)
+                }}
+              >
+                @{name}
+              </button>
+            ))}
+          </div>
+        )}
         <form className="composer" onSubmit={send}>
           <textarea
+            ref={composerRef}
             className="composer-input"
             rows={1}
             placeholder={
@@ -1315,6 +1403,7 @@ export function Chat({
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value)
+              refreshMentions(e.target.value, e.target.selectionStart ?? e.target.value.length)
               // Auto-grow with the content, bounded by CSS max-height.
               e.target.style.height = 'auto'
               e.target.style.height = `${e.target.scrollHeight}px`
@@ -1325,6 +1414,29 @@ export function Chat({
               }
             }}
             onKeyDown={(e) => {
+              // When the @mention dropdown is open, it owns the arrows/Enter/Tab/Esc.
+              if (mentionMatches.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setMentionIndex((i) => (i + 1) % mentionMatches.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  acceptMention(mentionMatches[mentionIndex])
+                  return
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setMentionMatches([])
+                  return
+                }
+              }
               // Enter sends; Shift+Enter inserts a newline (Discord convention).
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()

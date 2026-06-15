@@ -132,8 +132,10 @@ item from here as the structural milestones above land.
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
   (React elements, no innerHTML); E2E + AI-vision verified.
 - [~] Mentions — `@user` chips (your own highlighted), plus `@everyone`/`@here`
-  highlighted as all-mentions; E2E + AI-vision verified. (@role, autocomplete,
-  delivery/notifications, replies, threads still TODO)
+  highlighted as all-mentions; **`@`-autocomplete** (typing `@`+partial offers
+  channel-active usernames; ↑/↓ to move, Enter/Tab to accept, Esc to dismiss,
+  click-to-insert) — E2E + AI-vision verified. (@role, delivery/notifications,
+  threads still TODO)
 - [ ] File / image / video attachments · link embeds + previews
 - [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
   WS update, and a "pins" panel listing all of a channel's pins; E2E + AI-vision

@@ -526,6 +526,35 @@ button:disabled {
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* @mention autocomplete dropdown — sits directly above the composer. */
+.mention-autocomplete {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  gap: 2px;
+}
+.mention-option {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.mention-option.active,
+.mention-option:hover {
+  background: var(--accent);
+  color: var(--accent-text, #fff);
+}
 .reply-bar strong {
   color: var(--text);
 }

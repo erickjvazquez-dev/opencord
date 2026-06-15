@@ -749,6 +749,27 @@ returns the mic to its prior mute/PTT state.
 - **Verify:** browser-QA flow (join → deafen → remote audio elements muted + self chip
   shows deafened → undeafen restores) + AI-vision on the voice bar.
 
+## Mentions — @-autocomplete (v0.3, 2026-06-15)
+
+Mention *rendering* (`@user` chips, `@everyone`/`@here`) already existed; this adds the
+*composer* side — Discord-style autocomplete so you don't have to type a name exactly.
+
+- **Trigger:** `activeMention(text, caret)` (pure, module-level) matches `@<partial>` when the
+  `@` starts the text or follows whitespace and only username chars (`[\w-]`) run to the caret.
+- **Candidates:** distinct usernames **active in the current channel** (authors in the loaded
+  `messages`), minus yourself, that start with the partial (case-insensitive), capped at 6. No
+  new endpoint/fetch — works in global, server, and DM channels. (Trade-off vs Discord: only
+  people who've posted are suggested; a full member-scoped source is a later slice.)
+- **Interaction:** a `.mention-autocomplete` listbox renders directly above the composer. While
+  open it owns the keys — ↑/↓ cycle the highlight, Enter/Tab accept, Esc dismisses — so Enter
+  does NOT send. Accepting replaces the `@partial` with `@username ` and restores the caret
+  after it (`requestAnimationFrame` + `setSelectionRange`). Click uses `mousedown`+preventDefault
+  so the textarea keeps focus. Closes on send and on channel switch.
+- **Verify:** `qa/realtime.mjs` (two clients) — A types `@bo`, the dropdown suggests user B,
+  Enter inserts `@bob… ` (and does NOT send), the dropdown closes, then Send delivers it and B
+  sees the `@`-mention render as a highlighted chip. Web build + tsc + vitest green; AI-vision on
+  `rt-08-mention-autocomplete.png` (highlighted suggestion above the composer).
+
 ## Voice — global push-to-talk hotkey (v0.3, 2026-06-15)
 
 Push-to-talk previously only worked via the on-screen press-and-hold Talk button. Discord's

@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 81) — @mention autocomplete (chat/UX polish)
+
+Rotated off audio (now complete) to **chat/UX**. Shipped **@-mention autocomplete** — the composer
+side of mentions (rendering already existed). Typing `@`+partial opens a suggestion listbox of
+channel-active usernames (message authors minus self, capped 6); ↑/↓ move, Enter/Tab accept (insert
+`@username ` + restore caret), Esc/send/channel-switch dismiss; click uses mousedown+preventDefault
+to keep textarea focus. Pure `activeMention(text, caret)` helper detects the token; no new endpoint.
+
+**Verified:** web build + tsc + vitest (6/6) green; `qa/realtime.mjs` (two clients) gains a flow —
+A types `@bo` → dropdown suggests B → Enter inserts (and does NOT send) → Send delivers → B sees the
+mention chip; full `qa/run.sh` (browser+realtime+voice) all PASS; AI-vision on
+`rt-08-mention-autocomplete.png` confirms the highlighted suggestion sits cleanly above the composer.
+
+**QA gap found (next tick):** the candidate source is "authors who've posted" — so autocomplete can't
+suggest a silent channel member. For server channels we already fetch `serverMembers` on demand; a
+follow-up could union those in. Logged for a future tick (not a regression — documented MVP scope).
+
+**Process note:** app-code change → committed + pushed to `origin` AND `railway up` deployed +
+rollout-verified (live bundle serves the new code), unlike iter-80's QA-only no-deploy.
+
 ## 2026-06-15 (iter 80) — close the PTT-on mobile-overflow QA gap (Track-0 self-improvement)
 
 Closed the **P1 QA gap I logged last tick (iter 77)**: the voice-bar ≤640px overflow assertion ran
