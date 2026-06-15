@@ -66,12 +66,15 @@ hit one origin in the browser.
 
 All config is environment-driven (see [`.env.example`](./.env.example)):
 
-| Variable        | Default                          | Purpose                              |
-| --------------- | -------------------------------- | ------------------------------------ |
-| `OPENCORD_ADDR` | `:8080`                          | Listen address                       |
-| `DATABASE_URL`  | local Postgres DSN               | Postgres connection string           |
-| `JWT_SECRET`    | `dev-insecure-change-me`         | **Change in production.** Signs JWTs |
-| `CORS_ORIGIN`   | `*`                              | Allowed REST origin                  |
+| Variable             | Default                  | Purpose                                                       |
+| -------------------- | ------------------------ | ------------------------------------------------------------ |
+| `OPENCORD_ADDR`      | `:8080`                  | Listen address (a platform `$PORT` overrides it)             |
+| `DATABASE_URL`       | local Postgres DSN       | Postgres connection string                                   |
+| `JWT_SECRET`         | `dev-insecure-change-me` | **Change in production** — signs JWTs. The server logs a loud warning at boot while the insecure default is in use (anyone can forge tokens). |
+| `CORS_ORIGIN`        | `*`                      | Allowed REST origin                                          |
+| `OPENCORD_SFU_URL`   | _(empty → mesh)_         | Optional LiveKit SFU URL for large voice calls (opt-in)      |
+| `OPENCORD_SFU_KEY`   | _(empty)_                | LiveKit API key (only with `OPENCORD_SFU_URL`)              |
+| `OPENCORD_SFU_SECRET`| _(empty)_                | LiveKit API secret (only with `OPENCORD_SFU_URL`)          |
 
 ## API surface
 

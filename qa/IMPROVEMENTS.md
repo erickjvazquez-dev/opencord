@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 82) — Rule-C hardening: insecure-JWT-secret warning + config tests (security)
+
+Rotated to **security** (north star: hostile-input-proof / secrets hygiene). Found a real Rule-C
+gap: `config.Load()` AND `docker-compose.yml` both silently default `JWT_SECRET` to the public
+`dev-insecure-change-me`, so a self-hoster who forgets it runs forgeable-token-open with NO signal —
+and `internal/config` had **zero tests** (the only package without any). Closed both:
+`Config.InsecureJWTSecret` flag → `main.go` logs a loud boot WARNING (warning, not hard-fail, so the
+one-command stack stays zero-config — Rule A); new `config_test.go` (7 tests) covers defaults, PORT
+precedence, env override, SFU opt-in, and the flag both ways.
+
+**Verified (Rule 14, real boot — not just unit tests):** ran the actual binary; WITHOUT `JWT_SECRET`
+the WARNING prints, WITH it set it's silent. `go build`/`vet`/`test` green. Docs-synced (README +
+.env.example gained the warning note and the previously-undocumented `OPENCORD_SFU_*` vars).
+
+**QA-process win:** the "which package has no tests?" scan (`internal/config` = 0 test files) is a
+cheap, repeatable coverage probe — worth running each tick. Next under-covered target to eyeball:
+`internal/db` (1 test file) and `cmd/server` (0, though it's mostly wiring).
+
+**Process note:** backend/config change, no UI surface → browser QA correctly NOT triggered (iter 82,
+82%3≠0); verification was the Go suite + a real-boot log check. **Not redeployed:** prod already sets
+`JWT_SECRET` so the warning never fires there, and there's no frontend/API/bundle delta to serve or
+rollout-verify — a `railway up` would rebuild an artifact with identical prod runtime behavior
+(anti-churn, same reasoning as iter-80's QA-only no-deploy). Pushed to `origin` as the OSS deliverable.
+
 ## 2026-06-15 (iter 81) — @mention autocomplete (chat/UX polish)
 
 Rotated off audio (now complete) to **chat/UX**. Shipped **@-mention autocomplete** — the composer

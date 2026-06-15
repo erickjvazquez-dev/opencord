@@ -749,6 +749,25 @@ returns the mic to its prior mute/PTT state.
 - **Verify:** browser-QA flow (join → deafen → remote audio elements muted + self chip
   shows deafened → undeafen restores) + AI-vision on the voice bar.
 
+## Config — insecure-JWT-secret warning + config test coverage (v0.3, 2026-06-15)
+
+Rule C requires `JWT_SECRET` be overridden outside local dev, but nothing enforced or even
+surfaced it: both `config.Load()` and `docker-compose.yml` silently fall back to the public
+default `dev-insecure-change-me`, so a self-hoster who forgets it runs wide open (anyone can
+forge a JWT) with no signal. `internal/config` also had zero tests.
+
+- **Warning, not hard-fail (Rule A):** `Config.InsecureJWTSecret` is set in `Load()` when the
+  resolved secret equals `DevJWTSecret` (env unset OR explicitly set to the dev value). `main.go`
+  logs a loud one-line WARNING at boot when it's true. Auth still works, so `go run` / `docker
+  compose up` stay zero-config — a hard-fail would break the one-command stack (Rule A/E).
+- **Tests:** new `config_test.go` covers defaults, `$PORT` precedence over `OPENCORD_ADDR`, env
+  override, SFU opt-in staying empty by default, and the insecure-flag both ways (unset → true,
+  overridden → false, explicit-dev-value → true). `env()` fallback tested directly.
+- **Docs-sync:** README config table gains the warning note + the three `OPENCORD_SFU_*` vars
+  (previously undocumented); `.env.example` gains the commented opt-in SFU block.
+- **Verify (Rule 14):** booted the real binary — WITHOUT `JWT_SECRET` the WARNING prints at boot;
+  WITH it set, no warning. Full `go build`/`vet`/`test` green.
+
 ## Mentions — @-autocomplete (v0.3, 2026-06-15)
 
 Mention *rendering* (`@user` chips, `@everyone`/`@here`) already existed; this adds the

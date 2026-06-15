@@ -26,6 +26,11 @@ func main() {
 	_ = godotenv.Load() // optional .env for local dev; ignored if absent
 
 	cfg := config.Load()
+	if cfg.InsecureJWTSecret {
+		log.Println("WARNING: JWT_SECRET is unset — using the insecure development default. " +
+			"Anyone can forge auth tokens. Set JWT_SECRET to a long random value before " +
+			"exposing this server (Rule C).")
+	}
 
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
