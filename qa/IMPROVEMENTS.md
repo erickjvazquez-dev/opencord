@@ -1508,3 +1508,37 @@ the blurple rectangle renders inline cleanly (`06c-attachment-image.png`).
 - **Next QA growth:** two-client attachment propagation (A uploads → B sees the image
   live over the WS, the realtime path the single-client QA can't prove); a
   non-image (download-chip) render assertion; an oversized-file UI-error vision check.
+
+## 2026-06-15 (tick 2) — Two-client attachment QA + a false-positive I caught & fixed
+
+Grew the QA to prove the **realtime** path of attachments (Step 5b follow-through on
+last tick's ship):
+- `qa/realtime.mjs` now drives **A uploads an image → B sees a NEW image render
+  inline live** (the WS-broadcast path the single-client `browser.mjs` can't prove);
+  B fetches the bytes with B's OWN token, proving the access-gated serve works
+  cross-client.
+- `qa/browser.mjs` gained a **non-image download-chip** assertion (a `.txt` renders
+  as a `.attachment-file` chip with a size, not inline).
+- Extracted the PNG generator into a shared **`qa/fixtures.mjs`** (`makePng`), used by
+  both suites (DRY).
+
+**Meta-QA catch (highest-value lesson):** the FIRST version of the realtime check
+used `.attachment-image` **`.last()`** — but the realtime suite shares `#general`
+with the prior `browser.mjs` run, so a **stale** image was already in history. The
+check passed by matching that stale image even though it never verified A's *new*
+upload arrived — a **false positive**, the exact QA blind-spot class the loop exists
+to kill. AI-vision review of the screenshot (the new orange image wasn't at the
+bottom) is what surfaced it. Fix: the check is now **count-based** — it records B's
+`.attachment-image` count before the upload and requires it to **grow by one**, so a
+pre-existing image can't satisfy it. Re-ran → genuinely green, and the screenshot now
+shows B's new orange image live at the bottom.
+
+- **Loop-process rule (apply every tick):** in a **shared-DB / shared-channel** QA
+  suite, never assert on "the last/any matching element" — a prior step or a prior
+  suite may have seeded one. Assert a **delta** (count grows, or match the specific
+  new content), and **AI-vision the screenshot to confirm the NEW artifact is the one
+  rendered**, not a stale look-alike. A green check whose screenshot doesn't show the
+  expected new thing is a false positive until proven otherwise.
+- **Next QA growth:** attachment in a DM (two members) renders for the other side;
+  an oversized-file UI error path vision-checked; multi-file (2–3 at once) staging +
+  render.

@@ -202,7 +202,8 @@ item from here as the structural milestones above land.
   threads still TODO)
 - [~] File / image attachments — DONE (composer 📎, multipart upload, local-disk
   store, access-gated serve, inline images + download chips; Rule-15 hardened +
-  vision-verified). Video transcode · link embeds + previews still TODO
+  vision-verified incl. **two-client live propagation** — B sees A's upload render
+  live, fetched with B's own token). Video transcode · link embeds + previews TODO
 - [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
   WS update, and a "pins" panel listing all of a channel's pins; E2E + AI-vision
   verified. (bookmarks, read state / unread / mention badges TODO)

@@ -9,6 +9,7 @@
 import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { makePng } from './fixtures.mjs'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:5173'
 const SHOTS = process.env.QA_SHOTS || join(import.meta.dirname, 'qa-screenshots')
@@ -195,6 +196,51 @@ async function main() {
   await a.screenshot({ path: join(SHOTS, 'rt-03-a-count-2.png') })
   check((await rcount(aMsg)) === '2', 'A sees the count climb to 2 after B reacts (live)')
   check(await bMsg.locator('.reaction.mine').isVisible(), "B's chip becomes 'mine' after B reacts")
+
+  // 3c — Attachments propagate live: A uploads an image in #general → B sees a NEW
+  // image render inline WITHOUT reloading (the realtime broadcast path the
+  // single-client browser QA can't prove). B fetches the bytes with B's OWN token
+  // (access-gated). Count-based so a stale image already in history (the suite shares
+  // a channel with browser.mjs) can't pass this — we require the count to GROW by one.
+  step('A uploads an image → B sees a NEW image render inline live (no reload)')
+  const bImgBefore = await b.locator('.message .attachment-image').count()
+  const aImgBefore = await a.locator('.message .attachment-image').count()
+  await a.waitForTimeout(3000) // rate-limit refill before the send
+  await a.locator('.composer input[type=file]').setInputFiles({
+    name: 'rt-pic.png',
+    mimeType: 'image/png',
+    buffer: makePng(220, 130, [235, 110, 75]),
+  })
+  await a.locator('.pending-file-name').waitFor({ timeout: 8000 })
+  await a.getByRole('button', { name: /Send|Sending/ }).click()
+  // A's own echo: its image count must grow by one.
+  await a
+    .waitForFunction(
+      (n) => document.querySelectorAll('.message .attachment-image').length > n,
+      aImgBefore,
+      { timeout: 12000 },
+    )
+    .catch(() => {})
+  check(
+    (await a.locator('.message .attachment-image').count()) === aImgBefore + 1,
+    'A sees its own uploaded image echo back',
+  )
+  // B receives the NEW image live over the WS broadcast (count grows by one).
+  const bGrew = await b
+    .waitForFunction(
+      (n) => document.querySelectorAll('.message .attachment-image').length > n,
+      bImgBefore,
+      { timeout: 12000 },
+    )
+    .then(() => true)
+    .catch(() => false)
+  const bImg = b.locator('.message .attachment-image').last()
+  await b.screenshot({ path: join(SHOTS, 'rt-03c-b-sees-attachment.png') })
+  check(bGrew, "B sees a NEW image arrive live (WS broadcast carries the attachment)")
+  check(
+    bGrew && (await bImg.evaluate((el) => el.complete && el.naturalWidth > 0)),
+    "B's copy of the new image decoded — fetched with B's own token (access-gated serve)",
+  )
 
   // 4 — Direct messages: A opens a private DM with B and sends a message; B reloads,
   // finds the DM in their sidebar, and reads it. Proves the DM UI end-to-end.
