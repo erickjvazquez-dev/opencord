@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (owner bug report) — "doesn't work when another person joins" → WS reconnect + UX
+
+Owner: on the public deploy, a second person on another computer found voice worked but chat
+didn't and a screen share never reached them. Diagnosed empirically (two sessions vs the LIVE
+Railway URL): same-machine everything passed — so the code was right; the failure was
+network/longevity. ROOT CAUSE: **no WebSocket reconnect** — `onclose` only set connected=false.
+On a real/flaky network (or a proxy dropping an idle socket) the channel WS died and never came
+back, so chat stopped and screen-share renegotiation couldn't signal, while already-established
+P2P voice kept playing — matching the symptom exactly. Fixed with capped-backoff reconnect; the
+server re-sends history on connect, so state re-syncs. **Verified live**: `context.setOffline
+(true→false)` against the real deploy → reconnected and received a post-reconnect message.
+
+Same session, owner feature asks delivered:
+- **Screen view-size controls** — viewer-local small/medium/large tile sizing, fit↔fill toggle,
+  and per-tile fullscreen. E2E + AI-vision (`voice-09-screenshare-sized.png`).
+- **Invite/DM by username OR user id** — backend `LookupUserByIdentifier` (numeric→id, else
+  username; email is a one-line branch once accounts store one), `/api/dms` accepts `identifier`,
+  prompt updated. Go integration test for id + username.
+- **North Star rewrite** (GOAL.md + CLAUDE.md): free local + built-in secure tunneling (no
+  paywall), paid Cloud Opencord (24/7 hosting only), data-ownership, and **match Discord exactly**
+  in layout/design/features + our improvements — the loop now advances Discord parity each tick.
+
+**QA-process win:** added a real reconnect test (offline/online) to the two-client suite — network
+resilience is now regression-guarded, not just happy-path. **Process note:** could NOT reproduce
+the cross-network failure locally (same-machine always connects); the fix came from reasoning about
+which features survive a dead socket (P2P voice) vs which don't (WS chat + renegotiation). TURN +
+secure tunneling + accounts-email queued in GOAL.md "Platform & hosting".
+
 ## 2026-06-15 (owner request) — screen share (mesh) + screen-audio mixing controls
 
 Owner asked to start developing screen share (4K@60-capable) with audio-level controls for BOTH

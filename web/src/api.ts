@@ -232,11 +232,12 @@ export async function fetchDMs(token: string): Promise<DMChannel[]> {
   return res.json()
 }
 
-export async function openDM(token: string, username: string): Promise<DMChannel> {
+// `identifier` may be a username or a numeric user id (email once accounts store one).
+export async function openDM(token: string, identifier: string): Promise<DMChannel> {
   const res = await fetch('/api/dms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ identifier }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not open DM')

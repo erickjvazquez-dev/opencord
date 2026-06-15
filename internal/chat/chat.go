@@ -574,6 +574,21 @@ func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (
 	return ok, err
 }
 
+// LookupUserByIdentifier resolves a DM/invite target from a free-form identifier:
+// an all-digit string is treated as a user id, otherwise as a username. (Email
+// lookup will slot in here once accounts store an email — a one-line WHERE email=$1
+// branch; until then an email simply won't match a username and returns not-found.)
+func (s *Store) LookupUserByIdentifier(ctx context.Context, ident string) (DMUser, error) {
+	ident = strings.TrimSpace(ident)
+	if ident == "" {
+		return DMUser{}, ErrUserNotFound
+	}
+	if id, err := strconv.ParseInt(ident, 10, 64); err == nil {
+		return s.LookupUserByID(ctx, id)
+	}
+	return s.LookupUserByUsername(ctx, ident)
+}
+
 // LookupUserByUsername resolves a DM target, returning ErrUserNotFound if absent.
 func (s *Store) LookupUserByUsername(ctx context.Context, username string) (DMUser, error) {
 	var u DMUser
@@ -1215,20 +1230,27 @@ func HandleListDMs(store *Store) http.HandlerFunc {
 	}
 }
 
-// HandleCreateDM opens (or returns the existing) DM with {"username":"..."}.
+// HandleCreateDM opens (or returns the existing) DM with a target identified by
+// {"identifier":"..."} — a username or numeric user id (email once accounts store
+// it). Accepts the legacy {"username":"..."} field too for backward compatibility.
 func HandleCreateDM(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
 		var in struct {
-			Username string `json:"username"`
+			Username   string `json:"username"`
+			Identifier string `json:"identifier"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
 		}
-		target, err := store.LookupUserByUsername(r.Context(), in.Username)
+		ident := in.Identifier
+		if ident == "" {
+			ident = in.Username
+		}
+		target, err := store.LookupUserByIdentifier(r.Context(), ident)
 		if errors.Is(err, ErrUserNotFound) {
-			http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
+			http.Error(w, `{"error":"no user found for that username or id"}`, http.StatusNotFound)
 			return
 		}
 		if err != nil {

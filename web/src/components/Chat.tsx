@@ -194,6 +194,11 @@ export function Chat({
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null)
   const [screenSendGain, setScreenSendGain] = useState(1)
   const [screenMonitor, setScreenMonitor] = useState(0)
+  // Screen-share view sizing: tile size (small/medium/large) + how the video fits
+  // the tile (contain = letterbox the whole screen, cover = fill+crop). Fullscreen
+  // is per-tile via the Fullscreen API. Viewer-local; doesn't affect the sender.
+  const [screenSize, setScreenSize] = useState<'sm' | 'md' | 'lg'>('md')
+  const [screenFit, setScreenFit] = useState<'contain' | 'cover'>('contain')
 
   // @mention autocomplete: candidate usernames matching the partial being typed,
   // the highlighted index, the textarea ref (for caret restore), and the range of
@@ -636,10 +641,10 @@ export function Chat({
   }
 
   const startDM = async () => {
-    const username = window.prompt('Direct message which user? (their username)')?.trim()
-    if (!username) return
+    const ident = window.prompt('Direct message who? Enter a username or user ID')?.trim()
+    if (!ident) return
     try {
-      const dm = await openDM(token, username)
+      const dm = await openDM(token, ident)
       setDms((cur) => (cur.some((d) => d.id === dm.id) ? cur : [...cur, dm]))
       setChannelId(dm.id)
     } catch (err) {
@@ -1201,7 +1206,33 @@ export function Chat({
         )}
 
         {inCall && (localScreen || voicePeers.some((p) => p.sharingScreen)) && (
-          <div className="screen-stage" role="region" aria-label="screen shares">
+          <div className="screen-stage" role="region" aria-label="screen shares" data-size={screenSize}>
+            <div className="screen-stage-toolbar">
+              <span className="screen-stage-label">Screens</span>
+              <span className="screen-sizes" role="group" aria-label="screen size">
+                {(['sm', 'md', 'lg'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`link screen-size-btn${screenSize === s ? ' on' : ''}`}
+                    onClick={() => setScreenSize(s)}
+                    data-screen-size={s}
+                    aria-pressed={screenSize === s}
+                  >
+                    {s === 'sm' ? 'small' : s === 'md' ? 'medium' : 'large'}
+                  </button>
+                ))}
+              </span>
+              <button
+                type="button"
+                className="link screen-fit-btn"
+                onClick={() => setScreenFit((f) => (f === 'contain' ? 'cover' : 'contain'))}
+                data-screen-fit={screenFit}
+                title="Fit shows the whole screen (letterboxed); Fill crops to fill the tile"
+              >
+                {screenFit === 'contain' ? 'fit' : 'fill'}
+              </button>
+            </div>
             {localScreen && (
               <div className="screen-tile" data-screen-self>
                 <video
@@ -1209,12 +1240,24 @@ export function Chat({
                   autoPlay
                   muted
                   playsInline
+                  style={{ objectFit: screenFit }}
                   ref={(el) => {
                     if (el && el.srcObject !== localScreen) el.srcObject = localScreen
                   }}
                 />
                 <div className="screen-tile-bar">
                   <span className="screen-tile-name">You are sharing</span>
+                  <button
+                    type="button"
+                    className="link screen-fullscreen"
+                    onClick={(e) =>
+                      void e.currentTarget.closest('.screen-tile')?.querySelector('video')?.requestFullscreen?.()
+                    }
+                    title="Fullscreen"
+                    aria-label="fullscreen this screen"
+                  >
+                    ⛶
+                  </button>
                   <label className="screen-level" title="Audio level sent to viewers">
                     out
                     <input
@@ -1251,6 +1294,7 @@ export function Chat({
                     autoPlay
                     muted
                     playsInline
+                    style={{ objectFit: screenFit }}
                     ref={(el) => {
                       if (el && el.srcObject !== p.screenStream) el.srcObject = p.screenStream
                     }}
@@ -1269,6 +1313,17 @@ export function Chat({
                         aria-label={`shared audio volume for ${p.username || `user ${p.id}`}`}
                       />
                     </label>
+                    <button
+                      type="button"
+                      className="link screen-fullscreen"
+                      onClick={(e) =>
+                        void e.currentTarget.closest('.screen-tile')?.querySelector('video')?.requestFullscreen?.()
+                      }
+                      title="Fullscreen"
+                      aria-label={`fullscreen ${p.username || `user ${p.id}`}'s screen`}
+                    >
+                      ⛶
+                    </button>
                   </div>
                 </div>
               ))}

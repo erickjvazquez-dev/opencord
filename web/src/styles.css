@@ -1064,6 +1064,29 @@ button:disabled {
   background: #000;
   border-bottom: 1px solid var(--border, #1f2023);
 }
+/* Stage toolbar: viewer-local size + fit controls (full width above the tiles). */
+.screen-stage-toolbar {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.screen-stage-label {
+  font-weight: 600;
+  color: var(--text);
+}
+.screen-sizes {
+  display: inline-flex;
+  gap: 6px;
+}
+.screen-size-btn.on,
+.screen-fit-btn[data-screen-fit='cover'] {
+  color: var(--online-text);
+  font-weight: 600;
+}
 .screen-tile {
   display: flex;
   flex-direction: column;
@@ -1071,10 +1094,24 @@ button:disabled {
   background: var(--bg-elevated);
   border-radius: var(--radius);
   overflow: hidden;
-  /* Comfortable default; the 16:9 video scales within. Two fit side-by-side on
-     desktop, one per row on a phone (flex-wrap). */
+  /* Comfortable default (medium); the 16:9 video scales within. Two fit
+     side-by-side on desktop, one per row on a phone (flex-wrap). */
   flex: 1 1 360px;
   max-width: 640px;
+}
+/* Viewer-chosen tile size. */
+.screen-stage[data-size='sm'] .screen-tile {
+  flex-basis: 220px;
+  max-width: 340px;
+}
+.screen-stage[data-size='lg'] .screen-tile {
+  flex-basis: 100%;
+  max-width: none;
+}
+.screen-fullscreen {
+  margin-left: auto;
+  font-size: 14px;
+  line-height: 1;
 }
 .screen-video {
   width: 100%;

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -341,6 +342,18 @@ func TestDirectMessagesIntegration(t *testing.T) {
 	}
 	if u, err := store.LookupUserByUsername(ctx, bob.Username); err != nil || u.ID != bob.ID {
 		t.Fatalf("lookup bob = %+v err %v", u, err)
+	}
+
+	// Identifier lookup resolves both a username and a numeric user id to the same
+	// user (invite/DM by username OR id).
+	if u, err := store.LookupUserByIdentifier(ctx, bob.Username); err != nil || u.ID != bob.ID {
+		t.Fatalf("identifier(username) = %+v err %v, want bob", u, err)
+	}
+	if u, err := store.LookupUserByIdentifier(ctx, strconv.FormatInt(bob.ID, 10)); err != nil || u.ID != bob.ID {
+		t.Fatalf("identifier(id) = %+v err %v, want bob", u, err)
+	}
+	if _, err := store.LookupUserByIdentifier(ctx, "99999999"); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("identifier(unknown id) err = %v, want ErrUserNotFound", err)
 	}
 }
 

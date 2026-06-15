@@ -4,10 +4,16 @@ Open-source, self-hostable Discord alternative. Go backend + React/Vite client +
 Postgres. This file is the project-specific rule set; it sits **on top of** the
 workspace-level Claude Code Framework rules (`~/CLAUDE.md`) — those still apply.
 
-**North Star:** anyone can `git clone` + one command and run their own real-time
-chat server, at little to no cost, fully open source — built toward **full feature
-parity with Discord** (every feature Discord has). The exhaustive target list is in
-[`GOAL.md`](./GOAL.md) "## Discord Feature Parity".
+**North Star:** a free, open-source Discord alternative owned by its users, run two
+ways from one app: **local/self-hosted (always free, no paywall)** — `git clone` +
+one command, with **built-in free secure tunneling** so friends on other computers
+can join without manual port-forwarding — or **Cloud Opencord (the only paid tier)**,
+a managed 24/7 hosted account (paying for uptime, never for features). **Match Discord
+exactly** in layout, design, and features (our own from-scratch implementation of the
+same UX — not Discord's assets/code/trademarks), PLUS the improvements we've added
+(screen-share audio mixing, global PTT hotkey, …). **Users' data is theirs — we keep
+nothing** (no telemetry/phone-home, Rule A). Each tick advances Discord parity. Full
+target list + business model in [`GOAL.md`](./GOAL.md).
 
 ## Architecture (keep this shape)
 

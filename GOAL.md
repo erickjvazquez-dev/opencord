@@ -1,9 +1,29 @@
 # Opencord — Goals & Roadmap
 
-**North Star:** A fully open-source, self-hostable Discord alternative anyone can
-run locally at little to no cost — built toward **full feature parity with
-Discord**: every feature Discord has, eventually, owned by the people who run it.
-The exhaustive target list lives in "## Discord Feature Parity" below.
+**North Star:** A fully open-source Discord alternative anyone can run **for free**,
+owned by the people who use it. Two ways to run it, same app:
+
+1. **Local / self-hosted (always free, nothing behind a paywall).** `git clone` +
+   one command and you have your own server. To let friends on other computers join
+   without manual port-forwarding, Opencord ships **built-in secure tunneling** (an
+   optional, free, self-hostable relay/tunnel so a local server is reachable over the
+   internet securely). Every feature works here — no feature gating, ever.
+2. **Cloud Opencord (the only paid option).** For a small fee, a managed 24/7 hosted
+   account with all services always-on, so you don't run anything yourself. Same app,
+   same features — you're paying for uptime/hosting, not features.
+
+**Your data is yours.** We keep nothing from users; self-host owns its DB outright,
+and Cloud is hosting-only (no mining, no telemetry, no phone-home — Rule A).
+
+**Product bar — match Discord exactly, then exceed it.** The **layout, design, and
+features must mirror Discord's** (our own from-scratch implementation of the same UX —
+not Discord's proprietary assets/code/trademarks), PLUS the improvements we've already
+added (e.g. screen-share audio mixing: sharer→viewers gain, sharer self-monitor, and
+per-viewer volume; a rebindable global PTT hotkey). Every tick advances Discord parity
+— one feature/surface at a time — toward "indistinguishable from Discord in feel,
+better in the details, free and self-ownable." The exhaustive feature list lives in
+"## Discord Feature Parity" below; the **business model is fixed: free local + secure
+tunnel, paid cloud only for 24/7 hosting.**
 
 ---
 
@@ -103,6 +123,26 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
 - [ ] Plugin/bot API
+
+---
+
+## Platform & hosting (business model — see North Star)
+
+- [~] **Voice/screen reliability across networks** — WS auto-reconnect SHIPPED (chat +
+  screen-share signaling survive socket drops; real offline→online E2E). TODO: optional
+  **self-hostable TURN** (`OPENCORD_TURN_*` env → RTC iceServers, degrades to STUN; free,
+  Rule A) for hostile NATs / higher-bitrate screen video.
+- [ ] **Built-in secure tunneling (free, local)** — let friends on other computers reach a
+  self-hosted server without manual port-forwarding: an optional, free, self-hostable
+  relay/tunnel (e.g. bundled reverse-tunnel) — "creating local servers for you and your
+  friends with secure tunneling, nothing behind a paywall." Must stay free + self-hostable.
+- [ ] **Real accounts with email** — add an email to accounts (register/login, unique,
+  bcrypt unchanged). Unlocks **invite/DM by email** (the lookup is already identifier-based:
+  username + user id work today; email is the one-line `WHERE email=$1` branch once stored)
+  and is the basis for password reset + optional SSO.
+- [ ] **Cloud Opencord (the only paid tier)** — managed 24/7 hosted accounts: same app, all
+  features, you pay for uptime/hosting not features. Data stays the user's; hosting-only, no
+  mining/telemetry. Local self-host remains 100% free forever.
 
 ---
 

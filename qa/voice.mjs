@@ -347,6 +347,23 @@ async function main() {
       // Sharer scales the outgoing shared-audio level (no throw).
       await a.locator('[data-screen-send-gain]').evaluate(setRange, 150)
       check(true, 'sharer can adjust the outgoing shared-audio level')
+
+      // View-size controls: viewer can resize the stage and toggle fit/fill + has a
+      // fullscreen button per tile.
+      step('viewer can resize the shared screen (small/medium/large + fit/fill + fullscreen)')
+      const stage = b.locator('.screen-stage')
+      check((await b.locator('[data-screen-size="lg"]').count()) > 0, 'size controls present')
+      await b.locator('[data-screen-size="lg"]').click()
+      check((await stage.getAttribute('data-size')) === 'lg', 'choosing Large resizes the stage')
+      await b.locator('[data-screen-size="sm"]').click()
+      check((await stage.getAttribute('data-size')) === 'sm', 'choosing Small resizes the stage')
+      const fitBtn = b.locator('.screen-fit-btn')
+      const fit0 = await fitBtn.getAttribute('data-screen-fit')
+      await fitBtn.click()
+      check((await fitBtn.getAttribute('data-screen-fit')) !== fit0, 'fit/fill toggles the video sizing')
+      check((await b.locator('[data-screen-peer] .screen-fullscreen').count()) > 0, 'each tile has a fullscreen button')
+      await b.locator('[data-screen-size="md"]').click()
+      await b.screenshot({ path: join(SHOTS, 'voice-09-screenshare-sized.png') })
     }
 
     step('A stops sharing → tiles disappear for A and B')
