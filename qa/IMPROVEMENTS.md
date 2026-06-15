@@ -16,16 +16,23 @@ Caught a self-inflicted bug doing it: a local `const join = …` helper **shadow
 screenshot got a Promise as its path (`path.lastIndexOf is not a function`). Renamed to `joinCall`. Lesson:
 in these test files, never name a local after an imported util.
 
-**(2) The deploy gap was a verification gap, not a push gap.** Investigated and found the `opencord` Railway
-service (project `talented-curiosity`) is wired to GitHub — **every `git push origin main` auto-builds the
-Dockerfile and rolls out**. So the loop *was* deploying on every shipping push; it just never *knew* it:
-`.ccf/project.env` had `CCF_LIVE_URL=""` + `CCF_DEPLOY_TARGET="local"`, so no tick ever health-checked the
-cloud, and the skill's scope guard forbade hitting "any Railway URL" (meant for ContextForge, but it also
-blocked Opencord's own). **Fixes:** set `CCF_LIVE_URL` to the live URL + `CCF_DEPLOY_TARGET=railway`;
-narrowed the scope guard to "ContextForge's Railway" (Opencord's own is in-scope to verify); rewrote Ship
-(step 5) to "push IS the deploy — never leave unpushed commits, then poll the live health until 200, a
-failed rollout is a P0." Process lesson: *a deploy you don't verify is a deploy you can't trust* — silence
-read as "deployed." The loop now proves it every tick.
+**(2) The deploy was genuinely broken — and my first diagnosis was wrong, which is the real lesson.** I
+*assumed* the `opencord` Railway service auto-deployed from GitHub on push (a `repo` field in the project
+JSON + a false-positive `grep` made me believe voice was already live), and I wrote that into the skill,
+`.ccf`, and memory. Then I actually **diffed the live bundle**: `grep -o 'Join voice'` on the served JS
+returned **0** — voice was NOT live, and the latest Railway deployment was still the pre-voice one from
+17:41Z. My two pushes had created **zero** deployments. Truth: **Railway here is NOT GitHub-wired; a `git
+push` does not deploy.** The deploy is CLI — `railway up --service opencord --ci` (the original memory note
+had it right; I'd "corrected" it wrongly). Deployed that way → live bundle now has voice, verified against
+the running site, and a 3-peer mesh E2E passes against the **live** URL (proving WSS signaling through
+Railway's proxy, not just localhost). **Fixes:** `.ccf` `CCF_DEPLOY_CMD='…railway up…'` +
+`CCF_DEPLOY_TARGET=railway` + `CCF_LIVE_URL`; Ship (step 5) now commits→pushes→`railway up`→**verifies the
+live bundle actually serves the new code** (not just `/healthz`=200 — the *old* build also 200s, which is
+exactly what fooled me); scope guard narrowed to ContextForge's Railway so Opencord's own is verifiable.
+**Two process lessons:** (a) *verify the rollout by diffing what's served, never by assuming a push deployed
+or trusting a 200* — silence and a healthy old build both read as success; (b) *don't bake an unverified
+assumption into config/docs* — I shipped the wrong mechanism into three files before testing it; test first,
+then encode.
 
 ## 2026-06-14 (iter 59) — Voice slice 2 shipped (mesh WebRTC client + device intelligence); the WS-race the E2E nearly hid
 
