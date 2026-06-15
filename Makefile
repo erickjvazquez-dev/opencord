@@ -32,6 +32,9 @@ test: ## Run Go tests (boots a Postgres so integration tests actually run)
 qa-browser: ## Browser QA — boot a dev stack, drive the real UI (Playwright), tear down
 	bash qa/run.sh
 
+qa-sfu: ## SFU proof — boot a local LiveKit + Opencord, prove tokens connect (needs docker)
+	bash qa/sfu-run.sh
+
 build: ## Compile the server binary into ./bin
 	go build -o bin/opencord ./cmd/server
 

@@ -8,5 +8,8 @@
   },
   "devDependencies": {
     "playwright": "^1.49.0"
+  },
+  "dependencies": {
+    "livekit-client": "^2.19.2"
   }
 }

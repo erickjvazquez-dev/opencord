@@ -3,7 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-15 (iter 68) — slowmode (rotated off audio → chat/security after ~8 audio ticks)
+## 2026-06-15 (iter 69) — SFU slice 3a: proved a REAL LiveKit accepts our tokens (closed the deferred gap)
+
+Component advanced: **audio** (SFU scale path). De-risked slice 3 before building the big client refactor:
+stood up a local LiveKit (`livekit-server --dev`, docker) and had **two real browsers** connect to it with
+tokens minted by `/api/voice/token`, asserting each sees the other. **SFU PROOF PASSED** — closing iter-67's
+explicitly-deferred "does a real LiveKit accept our token?" gap. Reusable `qa/sfu-run.sh` harness committed;
+it's the E2E foundation for the client path.
+
+**The bug the proof caught (and why de-risk-first was right):** the *first* run failed with "could not
+establish pc connection" — but crucially **NOT** an auth/token rejection, so the token was already accepted;
+the failure was ICE. Root cause: LiveKit in docker advertises its **container IP** (172.17.0.2) as the WebRTC
+candidate, unreachable from the host browser. Fix: `--node-ip 127.0.0.1` so candidates point at the mapped
+host port. Had I built the whole client transport first and hit this, I'd have debugged a "voice doesn't
+connect" symptom across the entire new client stack instead of in a 70-line proof. **Lesson reinforced: when a
+new external dependency is on the critical path, prove the smallest end-to-end slice against the real thing
+before building on top of it** — the failure mode you learn is worth more than the code you'd have written.
+
+**Highest-value next item:** SFU **slice 3** proper — the client transport. Build `web/src/sfu.ts`
+(`SfuSession` over `livekit-client`, lazy-imported so the mesh-only bundle stays lean) exposing the SAME
+surface Chat.tsx already drives (roster/mute/volume/PTT/speaking via callbacks); `joinVoice` fetches the
+token and picks mesh vs SFU. E2E it by extending `qa/sfu.mjs` to drive the actual Opencord voice UI (Join
+voice → SFU transport → two users hear each other) instead of the synthetic livekit-client connection.
 
 Component advanced: **chat + security** (deliberate rotation — I'd done ~8 straight audio ticks, and the SFU
 *client* path needs a real local LiveKit to E2E, which deserves its own focused tick). Shipped slowmode: a

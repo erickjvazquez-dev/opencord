@@ -621,13 +621,21 @@ Janus = GPLv3 copyleft + C, no Go SDK (license friction + highest integration co
    existing `golang-jwt` lib — **no `server-sdk-go` dependency** (go.mod stays lean).
    Verified: unit test (decodes to the right LiveKit claims, secret-bound) +
    DB-integration test (unauth 401 / non-member 403 / member → room-scoped token) +
-   live binary check with/without the env. *Deferred:* acceptance by a real LiveKit
-   server (needs a running SFU instance, itself deferred).
+   live binary check with/without the env. ~~Deferred: acceptance by a real LiveKit
+   server.~~
+2.5. **[DONE 2026-06-15] Real-LiveKit acceptance proof + E2E harness.** Closes the
+   deferred gap above. `qa/sfu-run.sh` boots a local LiveKit (`livekit-server --dev
+   --node-ip 127.0.0.1`, placeholder keys devkey/secret) + an Opencord server wired
+   to it, and `qa/sfu.mjs` has **two real browsers** connect to that LiveKit with
+   tokens minted by `/api/voice/token` and assert each sees the other — proving the
+   token format is **accepted by a real server** and the SFU forwards participants.
+   (Docker gotcha encoded: LiveKit must advertise `--node-ip 127.0.0.1` or its WebRTC
+   candidates point at the container IP and ICE fails from the host browser.)
 3. **Client SFU path.** When the server returns a token, connect with
    `livekit-client` (publish mic, subscribe to others, LiveKit gives active-speaker
    events for the existing speaking ring) instead of building the mesh; when not,
    the mesh path is unchanged. Reuse the voice-bar UI (roster/mute/volume/PTT) over
-   whichever transport is active.
+   whichever transport is active. E2E it through `qa/sfu-run.sh` (now proven).
 4. **Scale polish.** Active-speaker selection (forward top-N loudest), optional
    self-hosted TURN for hostile NATs, later cascaded SFUs.
 

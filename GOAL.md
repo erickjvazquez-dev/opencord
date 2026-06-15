@@ -66,8 +66,10 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   `stack-guardian` APPROVE 2026-06-14 over mediasoup/Janus). Strictly **opt-in**
   (`OPENCORD_SFU_URL` empty ⇒ mesh; one-command stack stays SFU-free — Rule A);
   server mints room=channel tokens from the verified JWT, gated by `CanAccessChannel`
-  (Rule B/C). Plan in SPEC "mesh → OSS SFU (LiveKit) scale path"; **not yet built**
-  (slices: config+token endpoint → client SFU path → active-speaker/TURN). Railway
+  (Rule B/C). Plan in SPEC "mesh → OSS SFU (LiveKit) scale path". Built: ✅ token
+  endpoint; ✅ **real-LiveKit acceptance proven** (`qa/sfu-run.sh` — 2 browsers connect
+  to a local LiveKit with our minted tokens and see each other). Next: client SFU path
+  → active-speaker/TURN. Railway
   demo instance DEFERRED (Railway is TCP-only + egress-unbounded). With
   **active-speaker selection** (forward only the top-N loudest) this reaches
   thousands-scale audio; (4) distributed/cascaded SFUs + optional self-hosted TURN.
