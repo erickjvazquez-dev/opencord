@@ -584,3 +584,51 @@ the last non-trivial voice-control gap toward Discord parity.
 - **Verification:** `qa/voice.mjs` toggles PTT on (Talk button appears, mute hides),
   asserts not-transmitting by default, `pointerdown`→transmitting, `pointerup`→not,
   and PTT-off restores mute (`voice-05-ptt-talking.png` for the vision pass).
+
+## Voice — mesh → OSS SFU (LiveKit) scale path (DECISION + plan, 2026-06-14)
+
+**Status: APPROVED architecture, not yet built.** The audio north star is thousands
+per call with no fidelity loss; **mesh can't get there** (every client uploads its
+mic to every other — N² fan-out, ~4 participants max). The fix is an **SFU**: each
+client uploads once, the server forwards selectively (only the top-N active speakers
+at scale). This is a Rule-16 adoption → vetted by `stack-guardian` (2026-06-14).
+
+**Decision: LiveKit** (`github.com/livekit/livekit`, Apache-2.0). Why over the
+alternatives: it's **written in Go with a first-class server SDK**
+(`server-sdk-go` — room service + JWT token minting + webhooks), so it's the lowest
+integration cost from this exact backend; **genuinely free to self-host** (no paid
+tier/cap/key; single-node needs no Redis); license-compatible with a permissive
+self-hostable project. mediasoup = C++/Node, no Go API (extra runtime + IPC bridge);
+Janus = GPLv3 copyleft + C, no Go SDK (license friction + highest integration cost).
+
+**Non-negotiable: the SFU is strictly OPT-IN; mesh stays the default (Rule A).**
+- Gated on config: `OPENCORD_SFU_URL` (+ `OPENCORD_SFU_KEY` / `OPENCORD_SFU_SECRET`).
+  **Empty ⇒ mesh**, byte-for-byte as today. The one-command `docker-compose.yml`
+  stack stays SFU-free; a self-hoster who wants scale opts in by running LiveKit and
+  setting the env. No required paid service, ever.
+- Do NOT adopt the canned Railway LiveKit template — it bundles Redis + a *required*
+  OpenAI key (a hidden bill). Use the bare single-node OSS server.
+
+**Planned slices (build later, one per tick):**
+1. **[this commit] decision + SPEC** (stack-guardian APPROVE recorded).
+2. **Server config + token endpoint.** Add the optional SFU config (all default
+   empty). `POST /api/voice/token?channel=<id>` → mint a LiveKit access token via
+   `server-sdk-go`, **server-side from the verified JWT** (never trust client
+   identity — Rule C), **room = the channel**, **gated by `CanAccessChannel`**
+   (Rule B; a non-member can't get a token). Returns `{url, token}` when SFU is
+   configured, else `{sfu:false}` → client uses mesh.
+3. **Client SFU path.** When the server returns a token, connect with
+   `livekit-client` (publish mic, subscribe to others, LiveKit gives active-speaker
+   events for the existing speaking ring) instead of building the mesh; when not,
+   the mesh path is unchanged. Reuse the voice-bar UI (roster/mute/volume/PTT) over
+   whichever transport is active.
+4. **Scale polish.** Active-speaker selection (forward top-N loudest), optional
+   self-hosted TURN for hostile NATs, later cascaded SFUs.
+
+**Railway demo: DEFERRED.** Running a LiveKit instance on the `talented-curiosity`
+Railway project is a *separate* decision, not required to ship the integration.
+Flags if/when adopted: Railway has no native UDP (LiveKit there is **TCP-only** =
+degraded media, won't demonstrate the no-fidelity-loss bar), and SFU egress is
+**usage-unbounded** ($0.05/GB fan-out → tens of $/mo under load). If ever run: cap
+it + wire its Railway usage into the statusline (Rule 16.4) so egress can't bill
+silently. The integration itself (slices 2–3) ships and is testable without it.

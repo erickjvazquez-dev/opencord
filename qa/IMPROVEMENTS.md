@@ -3,7 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 65) — push-to-talk (advanced the AUDIO component toward the parity bar)
+## 2026-06-14 (iter 66) — SFU decision tick: vetted + chose LiveKit, wrote the mesh→SFU SPEC (no code — decide first)
+
+Component advanced: **audio**, toward its north star (thousands/call). A deliberately code-free tick: the next
+audio leap is the SFU (mesh is N²-bound at ~4 peers), which is a Rule-16 adoption — so the right move was to
+**decide before building**. Ran `stack-guardian`: **APPROVE LiveKit** (Apache-2, Go + first-class server SDK
+= lowest integration cost here; genuinely free single-node self-host) over mediasoup (Node/C++, no Go API)
+and Janus (GPLv3 + C). Wrote SPEC "mesh → OSS SFU (LiveKit) scale path": strictly opt-in (`OPENCORD_SFU_URL`
+empty ⇒ mesh; one-command stack stays SFU-free — Rule A), server mints room=channel tokens from the verified
+JWT gated by `CanAccessChannel` (Rule B/C), Railway demo instance DEFERRED (TCP-only + unbounded egress).
+
+**Why no code this tick (and why that's the disciplined call):** adding a config field + status endpoint that
+no client consumes yet would be a speculative half-feature (Rule 6 — "no speculative abstractions"). The SFU
+is a multi-slice change touching go.mod (server-sdk-go), a new endpoint, and a whole client transport path;
+each slice should land complete. The decision + SPEC IS the gate everything else depends on — real artifact,
+not churn.
+
+**Highest-value next item:** build SFU **slice 2** — the server token endpoint. Add optional SFU config (all
+default empty), pull `github.com/livekit/server-sdk-go`, and `POST /api/voice/token?channel=<id>` minting a
+room=channel JWT from the verified user, `CanAccessChannel`-gated, returning `{sfu:false}` when unconfigured.
+Adversarial pass (Rule 15): a non-member must get 403, not a token; a forged/tampered JWT must not mint one.
+DB-integration test for the access gate. No client change yet (mesh stays) — keep the slice complete + testable.
 
 Shipped push-to-talk — the last non-trivial voice-control gap. Component advanced: **audio**, toward the
 owner's Discord-parity/"crisp" bar (voice now has mute, device auto-follow + picker, active-speaker ring,

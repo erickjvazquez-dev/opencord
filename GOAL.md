@@ -61,13 +61,16 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   auto-detect** (defaults to the OS's active mic/headset and auto-follows on
   plug/unplug) plus a **manual mic + output picker** (hot-swaps the track with no
   renegotiation; `setSinkId` routes output); two-browser E2E proves connectionState
-  `connected` + live remote audio (qa/voice.mjs); (3) **open-source SFU** (LiveKit
-  is the leading candidate — Apache-2, Go, scales, free self-host; mediasoup/Janus
-  alternatives) with **active-speaker selection** (forward only the top-N loudest, the
-  Discord/Clubhouse technique) for thousands-scale audio; (4) distributed/cascaded
-  SFUs + optional self-hosted TURN. Adopting an SFU is a Rule-16 decision → run
-  `stack-guardian` first (must be OSS + self-hostable, no required paid tier). Voice
-  must degrade gracefully when an SFU isn't configured (mesh fallback) — Rule A.
+  `connected` + live remote audio (qa/voice.mjs); (3) **open-source SFU — DECIDED:
+  LiveKit** (Apache-2, Go + first-class server SDK, free single-node self-host;
+  `stack-guardian` APPROVE 2026-06-14 over mediasoup/Janus). Strictly **opt-in**
+  (`OPENCORD_SFU_URL` empty ⇒ mesh; one-command stack stays SFU-free — Rule A);
+  server mints room=channel tokens from the verified JWT, gated by `CanAccessChannel`
+  (Rule B/C). Plan in SPEC "mesh → OSS SFU (LiveKit) scale path"; **not yet built**
+  (slices: config+token endpoint → client SFU path → active-speaker/TURN). Railway
+  demo instance DEFERRED (Railway is TCP-only + egress-unbounded). With
+  **active-speaker selection** (forward only the top-N loudest) this reaches
+  thousands-scale audio; (4) distributed/cascaded SFUs + optional self-hosted TURN.
   Signaling is hardened: a dedicated voice rate bucket bounds a flood (Rule 15),
   and the WS send channel is close-race-proof (`done`-channel, `-race` clean).
   **Active-speaker indicator shipped** (client-side Web Audio VAD → green speaking
