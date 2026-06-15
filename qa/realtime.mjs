@@ -295,6 +295,23 @@ async function main() {
     'owner promotes B to admin via the members panel',
   )
 
+  // 7 — Member list (Discord-style right sidebar): in a server channel it lists members
+  // grouped by role. Close the on-demand panel first so it doesn't overlay the view.
+  step('member-list sidebar shows server members grouped by role')
+  await a.locator('.search-results-head .link', { hasText: 'close' }).click().catch(() => {})
+  const ml = a.locator('.member-list')
+  check(await ml.isVisible().catch(() => false), 'member-list sidebar shows in a server channel')
+  check(
+    (await ml.locator('[data-member]').filter({ hasText: userA }).count()) > 0,
+    'member list includes the owner (A)',
+  )
+  check(
+    (await ml.locator('[data-member]').filter({ hasText: userB }).count()) > 0,
+    'member list includes B',
+  )
+  check((await ml.locator('.member-group-head').count()) > 0, 'members are grouped by role')
+  await a.screenshot({ path: join(SHOTS, 'rt-09-member-list.png') })
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

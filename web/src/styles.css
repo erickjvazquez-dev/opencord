@@ -300,6 +300,50 @@ button:disabled {
   flex-direction: column;
 }
 
+/* Right-hand member list (Discord-style) — shown for server channels on desktop. */
+.member-list {
+  width: 220px;
+  flex-shrink: 0;
+  background: #1a1b1e;
+  border-left: 1px solid rgba(0, 0, 0, 0.3);
+  overflow-y: auto;
+  padding: 12px 8px;
+}
+.member-group + .member-group {
+  margin-top: 14px;
+}
+.member-group-head {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.member-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.member-list-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.member-list-row .author {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Discord hides the member list on narrow screens. */
+@media (max-width: 900px) {
+  .member-list {
+    display: none;
+  }
+}
+
 .chat-header {
   display: flex;
   align-items: center;

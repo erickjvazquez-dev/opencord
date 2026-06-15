@@ -172,6 +172,8 @@ export function Chat({
   const [membersOf, setMembersOf] = useState<{ serverId: number; members: ServerMember[] } | null>(
     null,
   )
+  // Persistent right-hand member list (Discord-style) for the current server channel.
+  const [memberList, setMemberList] = useState<ServerMember[]>([])
   // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
@@ -690,7 +692,9 @@ export function Chat({
   const openMembers = async (serverId: number) => {
     try {
       setPins(null)
-      setMembersOf({ serverId, members: await fetchServerMembers(token, serverId) })
+      const members = await fetchServerMembers(token, serverId)
+      setMembersOf({ serverId, members })
+      if (String(serverId) === activeServerId) setMemberList(members) // keep the sidebar in sync
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not load members')
     }
@@ -713,7 +717,9 @@ export function Chat({
   const changeRole = async (serverId: number, userId: number, role: string) => {
     try {
       await setServerMemberRole(token, serverId, userId, role)
-      setMembersOf({ serverId, members: await fetchServerMembers(token, serverId) })
+      const members = await fetchServerMembers(token, serverId)
+      setMembersOf({ serverId, members })
+      if (String(serverId) === activeServerId) setMemberList(members) // sidebar stays in sync
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not change role')
     }
@@ -822,6 +828,28 @@ export function Chat({
   const canPost = !activeIsReadOnly || canModerate
   // Pinning matches the server's rule: admins in a server channel, any member elsewhere.
   const canPin = !activeServerChannel || canModerate
+
+  // Load the persistent member list when viewing a server channel (Discord shows it
+  // for servers, not DMs / the global channel). Polls so a member who joins/leaves or
+  // is promoted shows up without a manual refresh (we have no per-member presence
+  // event yet — a live member-joined broadcast is a follow-up).
+  useEffect(() => {
+    if (!activeServerId) {
+      setMemberList([])
+      return
+    }
+    let live = true
+    const load = () =>
+      fetchServerMembers(token, Number(activeServerId))
+        .then((m) => live && setMemberList(m))
+        .catch(() => {})
+    void load()
+    const timer = setInterval(load, 15000)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [activeServerId, token])
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -1663,6 +1691,43 @@ export function Chat({
           <button disabled={!connected || !canPost || !draft.trim()}>Send</button>
         </form>
       </div>
+
+      {activeServerId && memberList.length > 0 && (
+        <aside className="member-list" aria-label="server members">
+          {(
+            [
+              ['Admins', memberList.filter((m) => m.role === 'owner' || m.role === 'admin')],
+              ['Members', memberList.filter((m) => m.role === 'member')],
+            ] as const
+          )
+            .filter(([, group]) => group.length > 0)
+            .map(([label, group]) => (
+              <div key={label} className="member-group">
+                <div className="member-group-head">
+                  {label} — {group.length}
+                </div>
+                {group.map((mb) => (
+                  <div key={mb.userId} className="member-list-row" data-member={mb.userId}>
+                    <div
+                      className="avatar"
+                      style={{
+                        backgroundColor: avatarColor(mb.username),
+                        color: avatarTextColor(mb.username),
+                      }}
+                      aria-hidden
+                    >
+                      {initials(mb.username)}
+                    </div>
+                    <span className="author">{mb.username}</span>
+                    {mb.role !== 'member' && (
+                      <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+        </aside>
+      )}
     </div>
   )
 }

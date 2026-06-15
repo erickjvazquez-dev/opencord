@@ -3,6 +3,23 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (parity) — Discord-style member-list sidebar (servers)
+
+First Discord-parity tick under the new North Star ("match Discord's layout/design/features").
+Shipped the **right-hand member list** for server channels — the iconic Discord column: members
+grouped by role (Admins/Members) with avatars + role badges, hidden ≤900px (Discord behavior).
+Reused the existing member-row/role-badge UI + `fetchServerMembers`; polls every 15s and syncs on
+panel-open/role-change so joins/promotions appear without a manual refresh.
+
+**Two bugs caught by QA before ship (the value of the two-client suite):** (1) the sidebar added a
+SECOND `.role-badge.role-owner`, breaking browser.mjs's strict-mode locator — fixed by scoping that
+assertion to `.member-row` (the panel). (2) the list was stale (loaded before B joined, never
+refreshed) — fixed with the poll + on-fetch sync. Both surfaced only by driving the real two-client
+server flow; the static build was green.
+
+**Follow-ups (queued):** live `member-joined`/`member-left` WS broadcast (so the list updates
+instantly, not on a 15s poll) + per-member online/idle presence (needs the presence protocol).
+
 ## 2026-06-15 (owner bug report) — "doesn't work when another person joins" → WS reconnect + UX
 
 Owner: on the public deploy, a second person on another computer found voice worked but chat

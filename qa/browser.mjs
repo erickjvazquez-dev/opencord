@@ -366,7 +366,10 @@ async function main() {
     .click()
   await page.locator('.member-row').first().waitFor({ timeout: 8000 })
   await shot('07d-members.png')
-  check(await page.locator('.role-badge.role-owner').isVisible(), 'members panel shows the owner role')
+  check(
+    await page.locator('.member-row .role-badge.role-owner').first().isVisible(),
+    'members panel shows the owner role',
+  )
   await page.getByRole('button', { name: 'close' }).click()
 
   // 7e — Read-only: the owner toggles the server channel read-only.

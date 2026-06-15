@@ -165,7 +165,10 @@ item from here as the structural milestones above land.
 - [ ] Invites (links, max-uses, expiry, temporary membership)
 - [ ] Server discovery / community servers · vanity invite URLs
 - [ ] Welcome screen + rules screening · server templates
-- [ ] Server boosts / tiers (cosmetic) · member list
+- [~] Server boosts / tiers (cosmetic) TODO · **member list DONE** — Discord-style
+  right sidebar in server channels, grouped by role (Admins/Members) with avatars +
+  role badges, polled for join/leave/promote (live member-joined event is a follow-up;
+  per-member online/idle presence still TODO); hidden ≤900px. E2E + AI-vision verified.
 - [ ] Audit log · scheduled events
 
 ### Channels
