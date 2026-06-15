@@ -130,6 +130,8 @@ async function main() {
   check((await rosterHas(c, userA)) && (await rosterHas(c, userB)), "C's roster lists A and B")
 
   step('remote audio arrives from both peers (two live inbound tracks each)')
+  // Poll, don't one-shot: ontrack can land a beat after connectionState flips to
+  // "connected", and over a real (production) network that gap is wider.
   const remoteTrackCount = (page) =>
     page.evaluate(
       () =>
@@ -137,9 +139,17 @@ async function main() {
           (el) => el.srcObject && el.srcObject.getAudioTracks?.().length > 0,
         ).length,
     )
-  check((await remoteTrackCount(a)) >= 2, 'A has live remote audio from both peers')
-  check((await remoteTrackCount(b)) >= 2, 'B has live remote audio from both peers')
-  check((await remoteTrackCount(c)) >= 2, 'C has live remote audio from both peers')
+  const waitForRemoteTracks = async (page, n, ms = 15000) => {
+    const end = Date.now() + ms
+    while (Date.now() < end) {
+      if ((await remoteTrackCount(page)) >= n) return true
+      await new Promise((r) => setTimeout(r, 300))
+    }
+    return false
+  }
+  check(await waitForRemoteTracks(a, 2), 'A has live remote audio from both peers')
+  check(await waitForRemoteTracks(b, 2), 'B has live remote audio from both peers')
+  check(await waitForRemoteTracks(c, 2), 'C has live remote audio from both peers')
 
   step('device auto-detect + manual override UI is present')
   check(
