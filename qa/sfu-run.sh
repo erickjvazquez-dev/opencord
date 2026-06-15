@@ -18,7 +18,8 @@ LK_URL=ws://localhost:7880
 cleanup() {
   echo "[sfu] tearing down…"
   kill "${SERVER_PID:-}" 2>/dev/null
-  lsof -ti tcp:8080 2>/dev/null | xargs -r kill -9 2>/dev/null
+  lsof -ti tcp:8080 -ti tcp:5173 2>/dev/null | xargs -r kill -9 2>/dev/null
+  pkill -f "vite" 2>/dev/null
   docker rm -f oc-livekit >/dev/null 2>&1
   docker compose down >/dev/null 2>&1
 }
@@ -49,8 +50,12 @@ SERVER_PID=$!
 for _ in $(seq 1 60); do curl -sf http://localhost:8080/healthz >/dev/null 2>&1 && break; sleep 1; done
 curl -sf http://localhost:8080/healthz >/dev/null 2>&1 || { echo "[sfu] server didn't come up"; exit 1; }
 
+echo "[sfu] starting Vite dev (:5173) so the REAL app drives the SFU path…"
+( cd web && npm install --silent && npm run dev >/tmp/oc-sfu-vite.log 2>&1 ) &
+for _ in $(seq 1 60); do curl -sf http://localhost:5173 >/dev/null 2>&1 && break; sleep 1; done
+
 echo "[sfu] installing qa deps (livekit-client, playwright)…"
 ( cd qa && npm install --silent && npx --yes playwright install chromium >/dev/null 2>&1 )
 
-echo "[sfu] running SFU proof…"
-OC_API=http://localhost:8080 node "$ROOT/qa/sfu.mjs"
+echo "[sfu] running SFU E2E (real app over LiveKit)…"
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/sfu.mjs"

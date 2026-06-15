@@ -20,6 +20,7 @@ import {
   setChannelPolicy,
   setChannelSlowmode,
   setChannelTopic,
+  voiceToken,
   setMessagePinned,
   setServerMemberRole,
 } from '../api'
@@ -34,7 +35,8 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
-import { VoiceSession, type VoicePeer } from '../voice'
+import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
+import { SfuSession } from '../sfu'
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -115,7 +117,7 @@ export function Chat({
   const [transmitting, setTransmitting] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
-  const voiceRef = useRef<VoiceSession | null>(null)
+  const voiceRef = useRef<VoiceTransport | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
@@ -274,12 +276,19 @@ export function Chat({
 
   const joinVoice = async () => {
     if (voiceRef.current || channelId == null || wsRef.current?.readyState !== WebSocket.OPEN) return
-    const session = new VoiceSession(
-      user.id,
-      (frame) => wsRef.current?.send(JSON.stringify(frame)),
-      setVoicePeers,
-      setSpeakingSelf,
+    // Use the SFU when the server offers one (scales to thousands); else mesh.
+    const t = await voiceToken(token, channelId).catch(
+      (): { sfu: boolean; url?: string; room?: string; token?: string } => ({ sfu: false }),
     )
+    const session: VoiceTransport =
+      t.sfu && t.url && t.token && t.room
+        ? new SfuSession({ url: t.url, room: t.room, token: t.token }, setVoicePeers, setSpeakingSelf)
+        : new VoiceSession(
+            user.id,
+            (frame) => wsRef.current?.send(JSON.stringify(frame)),
+            setVoicePeers,
+            setSpeakingSelf,
+          )
     voiceRef.current = session
     try {
       await session.start(inputDevice || undefined)

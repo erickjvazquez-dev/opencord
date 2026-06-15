@@ -26,6 +26,21 @@ export interface VoiceInbound {
 
 export type PeerState = 'connecting' | 'connected' | 'failed'
 
+// The surface Chat.tsx drives, implemented by BOTH the mesh VoiceSession and the
+// SFU SfuSession — so the UI is transport-agnostic (mesh by default; SFU when the
+// server hands out a token).
+export interface VoiceTransport {
+  start(deviceId?: string): Promise<void>
+  stop(): void
+  toggleMute(): boolean
+  setInputDevice(deviceId?: string): Promise<void>
+  setOutputDevice(deviceId: string): void
+  setPeerVolume(id: number, volume: number): void
+  setPushToTalk(enabled: boolean): void
+  setTransmitting(on: boolean): void
+  handle(ev: VoiceInbound): void | Promise<void>
+}
+
 // A remote participant as shown in the roster.
 export interface VoicePeer {
   id: number

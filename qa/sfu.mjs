@@ -1,17 +1,16 @@
-// Opencord SFU proof — connects TWO browsers to a REAL LiveKit server using tokens
-// minted by Opencord's POST /api/voice/token, and asserts each sees the other as a
-// remote participant. This closes the deferred gap from the token-endpoint slice:
-// it proves a real LiveKit *accepts* our minted token (format correct) and that the
-// SFU forwards participants — the foundation for the client SFU transport.
+// Opencord SFU E2E — drives the REAL app voice path over a local LiveKit. Two
+// fake-media browsers register, open the same channel, and Join voice. With the
+// server wired to LiveKit (OPENCORD_SFU_*), the app's joinVoice fetches a token and
+// connects via the SfuSession (livekit-client) instead of mesh; each must then see
+// the other in the voice roster as connected — proving the whole client SFU path
+// (token endpoint → SfuSession → real LiveKit → roster) and, implicitly, that a real
+// LiveKit accepts our minted tokens.
 //
-// Assumes a running LiveKit + an Opencord server wired to it (OPENCORD_SFU_*). Boot
-// both with qa/sfu-run.sh. Env: OC_API (Opencord base, default http://localhost:8080).
+// Boot the stack with qa/sfu-run.sh (LiveKit + Opencord-SFU + vite). Env QA_BASE_URL
+// (default http://localhost:5173).
 import { chromium } from 'playwright'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 
-const OC = process.env.OC_API || 'http://localhost:8080'
-const UMD = readFileSync(join(import.meta.dirname, 'node_modules/livekit-client/dist/livekit-client.umd.js'), 'utf8')
+const BASE = process.env.QA_BASE_URL || 'http://localhost:5173'
 
 let failed = 0
 const step = (s) => console.log('  → ' + s)
@@ -19,93 +18,72 @@ const check = (cond, msg) => {
   console.log((cond ? '  ✓ ' : '  ✗ FAIL: ') + msg)
   if (!cond) failed++
 }
-
-async function register(user) {
-  const r = await fetch(`${OC}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: user, password: 'hunter2pass' }),
-  })
-  if (!r.ok) throw new Error(`register ${user}: ${r.status}`)
-  return (await r.json()).token
-}
-
-async function voiceToken(authToken) {
-  const r = await fetch(`${OC}/api/voice/token?channel=1`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${authToken}` },
-  })
-  if (!r.ok) throw new Error(`voice token: ${r.status}`)
-  return r.json() // { sfu, url, room, token }
-}
-
-// Connect a page to LiveKit with the given token; keep the room on window.__room
-// so we can poll its participant set afterward. Returns {state} or {error}.
-async function connectLiveKit(page, url, token) {
-  await page.addScriptTag({ content: UMD })
-  return page.evaluate(
-    async ([url, token]) => {
-      const LK = window.LivekitClient || window.LiveKitClient || window.livekit
-      if (!LK || !LK.Room) return { error: 'livekit-client UMD global not found' }
-      const room = new LK.Room()
-      window.__room = room
-      try {
-        await room.connect(url, token)
-      } catch (e) {
-        return { error: 'connect failed: ' + (e && e.message) }
-      }
-      return { state: room.state }
-    },
-    [url, token],
-  )
-}
-
-// Poll how many remote participants this page's room currently sees.
-async function pollRemotes(page, want = 1, ms = 10000) {
+const waitForCount = async (loc, n, ms = 25000) => {
   const end = Date.now() + ms
   while (Date.now() < end) {
-    const n = await page.evaluate(() =>
-      window.__room && window.__room.remoteParticipants ? window.__room.remoteParticipants.size : -1,
-    )
-    if (n >= want) return true
+    if ((await loc.count()) >= n) return true
     await new Promise((r) => setTimeout(r, 250))
   }
   return false
 }
 
-async function main() {
-  const sfx = String(Date.now()).slice(-7)
-  step(`register two users + mint LiveKit tokens via Opencord (${OC})`)
-  const tokA = await voiceToken(await register('sfua' + sfx))
-  const tokB = await voiceToken(await register('sfub' + sfx))
-  check(tokA.sfu === true && !!tokA.token && tokA.room === 'opencord-ch-1', 'endpoint returned an SFU token for A')
-  check(tokB.sfu === true && !!tokB.token, 'endpoint returned an SFU token for B')
-  const url = tokA.url
-  console.log('  livekit url: ' + url + '  room: ' + tokA.room)
+async function register(page, user) {
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  await page.getByPlaceholder('username').waitFor({ timeout: 15000 })
+  await page.getByRole('button', { name: 'No account? Register' }).click()
+  await page.getByPlaceholder('username').fill(user)
+  await page.getByPlaceholder('password').fill('hunter2')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByPlaceholder(/Message #/).waitFor({ timeout: 15000 })
+}
 
+async function main() {
   const browser = await chromium.launch({
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: [
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      '--autoplay-policy=no-user-gesture-required',
+    ],
   })
-  // localhost is a secure context (needed for WebRTC); load the Opencord SPA origin.
-  const a = await (await browser.newContext()).newPage()
-  const b = await (await browser.newContext()).newPage()
+  const a = await (await browser.newContext({ viewport: { width: 1100, height: 820 } })).newPage()
+  const b = await (await browser.newContext({ viewport: { width: 1100, height: 820 } })).newPage()
   for (const [who, pg] of [['A', a], ['B', b]]) {
+    pg.on('pageerror', (e) => { console.log(`  [pageerror ${who}] ` + e.message); failed++ })
     pg.on('console', (m) => { if (m.type() === 'error') console.log(`  [console ${who}] ` + m.text()) })
-    await pg.goto(OC + '/', { waitUntil: 'domcontentloaded' })
   }
 
-  step('both browsers connect to the REAL LiveKit with the minted tokens')
-  const [ra, rb] = await Promise.all([connectLiveKit(a, url, tokA.token), connectLiveKit(b, url, tokB.token)])
-  console.log('  A:', JSON.stringify(ra), ' B:', JSON.stringify(rb))
-  check(ra.state === 'connected', 'A connected to LiveKit (token accepted by a real server)')
-  check(rb.state === 'connected', 'B connected to LiveKit (token accepted)')
+  const sfx = String(Date.now()).slice(-7)
+  step(`register two users (in #general) against ${BASE}`)
+  await register(a, 'sfua' + sfx)
+  await register(b, 'sfub' + sfx)
+  for (const pg of [a, b]) await pg.locator('.dot.online').waitFor({ timeout: 10000 })
 
-  step('the SFU forwards presence — each sees the other')
-  check(await pollRemotes(a), 'A sees B as a remote participant')
-  check(await pollRemotes(b), 'B sees A as a remote participant')
+  step('A joins voice (SFU transport)')
+  await a.getByRole('button', { name: /Join voice/ }).click()
+  await a.locator('.voice-bar').waitFor({ timeout: 10000 })
+  check(await a.locator('.voice-bar').isVisible(), 'A is in the voice bar')
+
+  step('B joins voice')
+  await b.getByRole('button', { name: /Join voice/ }).click()
+  await b.locator('.voice-bar').waitFor({ timeout: 10000 })
+  check(await b.locator('.voice-bar').isVisible(), 'B is in the voice bar')
+
+  step('each sees the other connected via the SFU (roster over LiveKit)')
+  check(
+    await waitForCount(a.locator('[data-voice-peer][data-state="connected"]'), 1),
+    'A sees B connected through the SFU',
+  )
+  check(
+    await waitForCount(b.locator('[data-voice-peer][data-state="connected"]'), 1),
+    'B sees A connected through the SFU',
+  )
+
+  step('leaving removes the peer')
+  await b.getByRole('button', { name: 'leave' }).click()
+  check(await waitForCount(a.locator('[data-voice-peer]'), 0, 12000), "A's roster drops B after B leaves")
 
   await browser.close()
-  console.log(failed === 0 ? '\nSFU PROOF PASSED' : `\nSFU PROOF FAILED (${failed})`)
+  console.log(failed === 0 ? '\nSFU E2E PASSED' : `\nSFU E2E FAILED (${failed})`)
   process.exit(failed === 0 ? 0 : 1)
 }
 

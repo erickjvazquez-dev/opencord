@@ -173,6 +173,20 @@ export async function setChannelTopic(
   }
 }
 
+// Ask the server for a voice transport for this channel. Returns {sfu:false} when
+// no SFU is configured (the client then uses mesh), else a LiveKit url + token.
+export async function voiceToken(
+  token: string,
+  channelId: number,
+): Promise<{ sfu: boolean; url?: string; room?: string; token?: string }> {
+  const res = await fetch(`/api/voice/token?channel=${channelId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return { sfu: false } // any error → fall back to mesh
+  return res.json()
+}
+
 export async function setChannelSlowmode(
   token: string,
   channelId: number,

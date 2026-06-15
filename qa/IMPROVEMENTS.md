@@ -3,7 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-15 (iter 69) — SFU slice 3a: proved a REAL LiveKit accepts our tokens (closed the deferred gap)
+## 2026-06-15 (iter 70) — SFU slice 3: the client transport (mesh ↔ SFU, both E2E green)
+
+Component advanced: **audio**, toward the thousands-scale north star. Shipped the client SFU path:
+`web/src/sfu.ts` `SfuSession` over `livekit-client`, implementing the SAME `VoiceTransport` interface as the
+mesh `VoiceSession`, so `joinVoice` just picks one on the `/api/voice/token` response and the voice-bar UI
+(roster/mute/PTT/volume/devices/speaking) is transport-agnostic. The tick-69 harness paid off exactly as
+intended: because token-acceptance + the LiveKit-docker ICE gotcha were already solved, building the client was
+low-risk wiring, and the real-app E2E (`qa/sfu-run.sh` now boots vite too — two browsers Join voice over a
+local LiveKit and see each other) passed without a networking rabbit hole.
+
+**Two design wins worth recording:**
+- **Defined `VoiceTransport` as the seam.** Instead of branching mesh-vs-SFU all over Chat.tsx, both sessions
+  implement one interface and `voiceRef` holds the abstract type. The whole transport swap is *one ternary* in
+  joinVoice; everything downstream (mute/PTT/volume/leave/roster) is untouched. The right abstraction made a
+  scary-sounding "second voice stack" a small, contained change.
+- **Lazy-imported livekit-client** (`await import(...)`) → Vite code-split it into its own 133 KB-gzip chunk,
+  OUT of the 58 KB main bundle. A mesh-only self-hoster never downloads it. Verified in the build output, not
+  assumed — the chunk is listed separately. (Matters for the "lean to self-host" ethos.)
+
+**Highest-value next item:** the SFU connects, but the audio north star is *thousands without fidelity loss*,
+which needs **active-speaker selection** (forward only the top-N loudest) — LiveKit supports this via
+subscription/`setSubscribed` + the active-speakers event I already wire. Next tick: cap how many remote audio
+tracks the client subscribes to (e.g. top 10 speakers), so a 1000-person room doesn't try to mix 999 streams.
+Also a real follow-up logged in SPEC: browser-autoplay gesture handling (`room.startAudio()` + an enable-audio
+prompt) for the blocked-autoplay case — invisible under the test's autoplay flag, but real for users.
 
 Component advanced: **audio** (SFU scale path). De-risked slice 3 before building the big client refactor:
 stood up a local LiveKit (`livekit-server --dev`, docker) and had **two real browsers** connect to it with

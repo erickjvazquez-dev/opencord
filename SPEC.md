@@ -631,11 +631,17 @@ Janus = GPLv3 copyleft + C, no Go SDK (license friction + highest integration co
    token format is **accepted by a real server** and the SFU forwards participants.
    (Docker gotcha encoded: LiveKit must advertise `--node-ip 127.0.0.1` or its WebRTC
    candidates point at the container IP and ICE fails from the host browser.)
-3. **Client SFU path.** When the server returns a token, connect with
-   `livekit-client` (publish mic, subscribe to others, LiveKit gives active-speaker
-   events for the existing speaking ring) instead of building the mesh; when not,
-   the mesh path is unchanged. Reuse the voice-bar UI (roster/mute/volume/PTT) over
-   whichever transport is active. E2E it through `qa/sfu-run.sh` (now proven).
+3. **[DONE 2026-06-15] Client SFU path.** `web/src/sfu.ts` `SfuSession` implements the
+   same `VoiceTransport` surface as the mesh `VoiceSession`, over `livekit-client`
+   (**lazy-imported** → code-split into its own 133 KB-gzip chunk, so mesh-only
+   deployments never download it). `joinVoice` fetches `/api/voice/token`: `sfu:true`
+   → SfuSession (publishes mic; roster/active-speaker/mute/PTT/volume/devices mapped
+   to LiveKit), else the mesh path, unchanged. The voice-bar UI is transport-agnostic.
+   E2E'd through `qa/sfu-run.sh` (now boots vite too): two real browsers Join voice
+   against a local LiveKit and see each other connected via the SFU; the mesh harness
+   (`qa/run.sh`, no SFU env) still passes — `{sfu:false}` falls back to mesh.
+   *Follow-up: browser-autoplay gesture handling (`room.startAudio()` + an
+   "enable audio" prompt) for the rare blocked-autoplay case.*
 4. **Scale polish.** Active-speaker selection (forward top-N loudest), optional
    self-hosted TURN for hostile NATs, later cascaded SFUs.
 
