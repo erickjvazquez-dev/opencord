@@ -60,6 +60,9 @@ QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/browser.mjs"; RC1=$?
 echo "[qa] running realtime QA (two clients)…"
 QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/realtime.mjs"; RC2=$?
 
-echo "[qa] browser=$RC1 realtime=$RC2"
-[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ]
+echo "[qa] running voice QA (two clients, mesh WebRTC)…"
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/voice.mjs"; RC3=$?
+
+echo "[qa] browser=$RC1 realtime=$RC2 voice=$RC3"
+[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$RC3" -eq 0 ]
 exit $?

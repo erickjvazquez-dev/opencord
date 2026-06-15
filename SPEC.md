@@ -467,5 +467,39 @@ offers; only existing members ever create offers, so there is no glare except on
 simultaneous joins (broken by user id). Map signal payloads: SDP offer/answer and
 each ICE candidate are separate `voice-signal` frames (trickle ICE).
 
-**Slices:** (1) backend signaling relay [this commit] · (2) client WebRTC + UI ·
+**Slices:** (1) backend signaling relay [done] · (2) client WebRTC + UI [done] ·
 (3) later: optional TURN config, SFU for larger calls, video/screenshare.
+
+### Voice channels — client slice (v0.4, 2026-06-14)
+
+Slice 2: the mesh WebRTC client + UI. `web/src/voice.ts` holds a `VoiceSession`
+class (plain, non-React, so the connection graph survives re-renders); `Chat.tsx`
+owns one instance per call, forwards relayed `voice-*` frames to it, and renders
+the roster it emits.
+
+- **One `RTCPeerConnection` per peer.** Glare (simultaneous joins) is resolved
+  with the WebRTC **perfect-negotiation** pattern; politeness is `myId > peerId`
+  so the two sides always pick opposite roles with no server coordination. The
+  existing member learns of a joiner via `voice-join` and opens the peer; the
+  joiner needs no roster — it answers the incoming offer. STUN-only (public);
+  on loopback/LAN host candidates connect without it. TURN is a later slice.
+- **Crisp audio (owner directive 2026-06-14: "as crisp as possible, close the
+  gap Discord has").** Capture uses echo cancellation + noise suppression +
+  auto-gain, 48 kHz mono; the sender's `maxBitrate` is raised to ~96 kbps Opus
+  (above Discord's ~64 kbps default), best-effort via `setParameters`.
+- **Device auto-detect + override (owner directive).** With no `deviceId`,
+  `getUserMedia` captures the OS's *current* default — whatever headset/mic the
+  user is actually on. On `devicechange` (plug/unplug) while set to "Auto", the
+  client re-acquires so the new default takes over. A manual 🎙 input + 🎧 output
+  picker overrides: input hot-swaps the track via `replaceTrack` (no
+  renegotiation); output routes via `HTMLAudioElement.setSinkId`.
+- **UI:** a "🎙 Join voice" header control; an in-call voice bar with a live
+  roster (each remote peer shows a connecting/connected/failed dot), the device
+  pickers, mute (toggles the local track's `enabled`), and leave. Leaving the
+  channel or logging out leaves the call (sends `voice-leave`, frees the mic).
+
+**Verification (Rule 14):** `qa/voice.mjs` launches two Chromium contexts with
+fake media (`--use-fake-device/-ui-for-media-stream`), both Join voice in
+`#general`, and asserts a real `connectionState === "connected"` mesh link on
+*both* sides, live remote audio tracks, the device picker, mute, and live roster
+teardown on leave. Wired into `qa/run.sh` after the realtime suite.

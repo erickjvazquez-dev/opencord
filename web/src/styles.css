@@ -122,6 +122,12 @@ button:disabled {
   padding: 4px;
 }
 
+.link:disabled {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: none;
+}
+
 .error {
   color: var(--danger);
   font-size: 14px;
@@ -805,4 +811,88 @@ button:disabled {
     font-size: 12px;
     gap: 8px;
   }
+}
+
+/* ── Voice call bar ──────────────────────────────────────────────────────── */
+.voice-join {
+  color: var(--online);
+  font-weight: 600;
+}
+
+.voice-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 18px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+}
+
+.voice-bar-title {
+  font-weight: 700;
+  color: var(--online);
+}
+
+.voice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.voice-chip.you {
+  background: var(--bg-input);
+}
+
+.voice-chip .dot {
+  width: 8px;
+  height: 8px;
+}
+
+.dot.voice-connecting {
+  background: #faa61a;
+}
+
+.dot.voice-connected {
+  background: var(--online);
+}
+
+.dot.voice-failed {
+  background: var(--danger);
+}
+
+.voice-empty {
+  color: var(--text-muted);
+}
+
+/* Pushes the device pickers + controls to the right edge. */
+.voice-spacer {
+  flex: 1;
+}
+
+.voice-device {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.voice-device select {
+  max-width: 168px;
+  padding: 3px 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.voice-leave {
+  color: var(--danger);
+  font-weight: 600;
 }

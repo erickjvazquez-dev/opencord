@@ -44,14 +44,22 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 
 - [~] Voice channels (audio) — **NORTH STAR (owner-set 2026-06-14): thousands of
   participants per call with no fidelity loss, disconnects, or choppiness, using the
-  best open-source tech, free to self-host.** Path: (1) ✅ WS signaling relay; (2) mesh
-  WebRTC client for small calls (2–4, in progress); (3) **open-source SFU** (LiveKit
+  best open-source tech, free to self-host.** Path: (1) ✅ WS signaling relay; (2) ✅
+  **mesh WebRTC client for small calls (2–4)** — one RTCPeerConnection per peer with
+  perfect-negotiation glare handling, crisp capture DSP (echo cancellation + noise
+  suppression + auto-gain, 48 kHz, ~96 kbps Opus, above Discord's default), **device
+  auto-detect** (defaults to the OS's active mic/headset and auto-follows on
+  plug/unplug) plus a **manual mic + output picker** (hot-swaps the track with no
+  renegotiation; `setSinkId` routes output); two-browser E2E proves connectionState
+  `connected` + live remote audio (qa/voice.mjs); (3) **open-source SFU** (LiveKit
   is the leading candidate — Apache-2, Go, scales, free self-host; mediasoup/Janus
   alternatives) with **active-speaker selection** (forward only the top-N loudest, the
   Discord/Clubhouse technique) for thousands-scale audio; (4) distributed/cascaded
   SFUs + optional self-hosted TURN. Adopting an SFU is a Rule-16 decision → run
   `stack-guardian` first (must be OSS + self-hostable, no required paid tier). Voice
   must degrade gracefully when an SFU isn't configured (mesh fallback) — Rule A.
+  *Next voice polish: per-user volume/mute, voice-activity/speaking indicator,
+  push-to-talk, separate voice rate bucket (Rule 15).*
 - [ ] Screen share
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
@@ -98,9 +106,12 @@ item from here as the structural milestones above land.
 - [ ] Message search (from/in/has/before/after) · polls · timestamp grouping
 
 ### Voice / Video
-- [ ] Voice channels (WebRTC + SFU, e.g. mediasoup) · video calls
+- [~] Voice channels — mesh WebRTC audio for small calls (2–4): join/leave, live
+  roster with per-peer connection state, crisp DSP, device auto-detect + picker,
+  mute (E2E verified). SFU for scale + video calls still TODO.
 - [ ] Screen share / Go Live · soundboard
-- [ ] Push-to-talk · voice activity · noise suppression · per-user volume/mute/deafen
+- [~] Voice controls — noise suppression + mute shipped; push-to-talk · voice
+  activity/speaking indicator · per-user volume · deafen still TODO
 
 ### Direct messages
 - [ ] 1:1 DMs · group DMs · friends / friend requests / blocking

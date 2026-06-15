@@ -71,9 +71,18 @@ export interface ServerEvent {
     | 'typing'
     | 'presence'
     | 'error'
+    // Mesh-voice signaling, relayed verbatim and stamped with the sender (`from`).
+    | 'voice-join'
+    | 'voice-leave'
+    | 'voice-signal'
   message?: Message
   history?: Message[]
   username?: string
   online?: number
   error?: string
+  // Voice signaling fields: who sent it, who it targets, and the opaque WebRTC
+  // SDP/ICE payload (only present on voice-* events).
+  from?: number
+  target?: number
+  signal?: unknown
 }

@@ -18,5 +18,8 @@ web/vite.config.d.ts
 .env
 .ccf/project.env
 
+# Claude Code loop artifacts (transient lock written by /self-improve-opencord)
+.claude/scheduled_tasks.lock
+
 # OS
 .DS_Store

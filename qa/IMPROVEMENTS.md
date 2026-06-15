@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 59) — Voice slice 2 shipped (mesh WebRTC client + device intelligence); the WS-race the E2E nearly hid
+
+Built voice **slice 2**: `web/src/voice.ts` (`VoiceSession`, one RTCPeerConnection per peer,
+**perfect-negotiation** glare handling, crisp DSP + ~96 kbps Opus, **device auto-detect** following the
+OS default with a manual mic/output picker — the owner's mid-tick directive), wired into `Chat.tsx`, and
+a two-context fake-media E2E (`qa/voice.mjs`) proving a real `connectionState === "connected"` mesh link
++ live remote audio on both sides. Full harness green: `browser=0 realtime=0 voice=0`.
+
+**The lesson — a green-looking E2E that was actually a silent product/test race.** The *first* full-harness
+run failed at "A joins voice" (`.voice-bar` never appeared). Root cause wasn't the WebRTC code: `joinVoice`
+guards on `wsRef.current?.readyState === WebSocket.OPEN`, and the test clicked "Join voice" the instant
+after register — before the channel WS finished opening — so the guard silently returned and nothing
+happened. **Two process gaps this exposes:**
+1. **QA gap (fixed this tick):** any action that depends on the WS being OPEN must first wait for the
+   connected signal (`.dot.online`). I added that wait; voice.mjs is now deterministic. The browser/realtime
+   suites happen to avoid this because their first WS action is slower-arriving, but the pattern is latent
+   there too — a good audit target.
+2. **Product polish (fixed this tick):** `joinVoice` *silently no-ops* when the WS isn't open yet — a real
+   user clicking Join voice in the first second after load got nothing, no feedback. Fixed: the Join-voice
+   button is now `disabled` until `connected` (with a "Connecting…" title + a `.link:disabled` style).
+   Silent guards that eat a user action are a UX bug, not just a test race — worth a broader sweep for
+   other controls that fire before the WS is ready.
+
+**Highest-value next-tick item:** the biggest remaining voice coverage gap is that **`qa/voice.mjs` only
+covers the happy 2-peer path** — add a **3rd peer** (proves the mesh is genuinely N-way, not just pairwise,
+and exercises the simultaneous-join glare path that perfect-negotiation exists to handle) and a
+mute-audibility assertion. Then start voice slice 3 (active-speaker / SFU) groundwork.
+
 ## 2026-06-14 (iter 58) — Voice signaling shipped; clearing context for the WebRTC client build
 
 Shipped voice **slice 1** (WS signaling relay: `voice-join`/`voice-leave`/`voice-signal`, dumb relay,

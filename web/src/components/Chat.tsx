@@ -33,6 +33,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
+import { VoiceSession, type VoicePeer } from '../voice'
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -101,7 +102,14 @@ export function Chat({
   const [membersOf, setMembersOf] = useState<{ serverId: number; members: ServerMember[] } | null>(
     null,
   )
+  // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
+  // VoiceSession in voiceRef owns the peer connections and emits the roster.
+  const [inCall, setInCall] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
+
   const wsRef = useRef<WebSocket | null>(null)
+  const voiceRef = useRef<VoiceSession | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
@@ -192,10 +200,26 @@ export function Chat({
           setTyping((prev) => prev.filter((u) => u !== who))
           delete typingTimers.current[who]
         }, 3000)
+      } else if (
+        data.type === 'voice-join' ||
+        data.type === 'voice-leave' ||
+        data.type === 'voice-signal'
+      ) {
+        // Mesh-voice signaling: hand the relayed frame to the active call.
+        void voiceRef.current?.handle(data)
       } else if (data.type === 'presence') setOnline(data.online ?? 0)
       else if (data.type === 'error' && data.error) window.alert(data.error)
     }
     return () => {
+      // Leaving the channel leaves any voice call on it (tell peers, free the mic)
+      // before the socket closes so the voice-leave frame still goes out.
+      if (voiceRef.current) {
+        voiceRef.current.stop()
+        voiceRef.current = null
+        setInCall(false)
+        setVoicePeers([])
+        setMuted(false)
+      }
       ws.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
       typingTimers.current = {}
@@ -217,6 +241,81 @@ export function Chat({
     e.preventDefault()
     submitDraft()
   }
+
+  // ── Voice call (mesh WebRTC) ────────────────────────────────────────────────
+  // Available audio devices + the user's pick ('' = follow the OS default, i.e.
+  // whatever headset/mic they're currently using). Labels only populate after the
+  // mic permission is granted, so we (re)enumerate once in a call.
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([])
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([])
+  const [inputDevice, setInputDevice] = useState('')
+  const [outputDevice, setOutputDevice] = useState('')
+  const inputDeviceRef = useRef('')
+  inputDeviceRef.current = inputDevice
+
+  const refreshDevices = async () => {
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices()
+      setAudioInputs(devs.filter((d) => d.kind === 'audioinput'))
+      setAudioOutputs(devs.filter((d) => d.kind === 'audiooutput'))
+    } catch {
+      /* enumeration unsupported — selectors just stay empty */
+    }
+  }
+
+  const joinVoice = async () => {
+    if (voiceRef.current || channelId == null || wsRef.current?.readyState !== WebSocket.OPEN) return
+    const session = new VoiceSession(
+      user.id,
+      (frame) => wsRef.current?.send(JSON.stringify(frame)),
+      setVoicePeers,
+    )
+    voiceRef.current = session
+    try {
+      await session.start(inputDevice || undefined)
+      if (outputDevice) session.setOutputDevice(outputDevice)
+      setInCall(true)
+      setMuted(false)
+      void refreshDevices()
+    } catch {
+      voiceRef.current = null
+      window.alert('Could not access your microphone. Check the browser permission and try again.')
+    }
+  }
+
+  const leaveVoice = () => {
+    voiceRef.current?.stop()
+    voiceRef.current = null
+    setInCall(false)
+    setVoicePeers([])
+    setMuted(false)
+  }
+
+  const toggleMute = () => {
+    if (voiceRef.current) setMuted(voiceRef.current.toggleMute())
+  }
+
+  const changeInputDevice = (id: string) => {
+    setInputDevice(id)
+    void voiceRef.current?.setInputDevice(id || undefined)
+  }
+
+  const changeOutputDevice = (id: string) => {
+    setOutputDevice(id)
+    voiceRef.current?.setOutputDevice(id)
+  }
+
+  // Auto-detect device changes (e.g. a gaming headset plugged in): refresh the
+  // lists and, when on "Auto", re-acquire so the OS's new default takes over.
+  useEffect(() => {
+    if (!inCall) return
+    const onChange = () => {
+      void refreshDevices()
+      if (inputDeviceRef.current === '') void voiceRef.current?.setInputDevice(undefined)
+    }
+    navigator.mediaDevices?.addEventListener?.('devicechange', onChange)
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', onChange)
+  }, [inCall])
 
   const addChannel = async () => {
     const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
@@ -604,6 +703,16 @@ export function Chat({
               pins
             </button>
           )}
+          {channelId != null && !inCall && (
+            <button
+              className="link voice-join"
+              onClick={() => void joinVoice()}
+              disabled={!connected}
+              title={connected ? 'Start a voice call in this channel' : 'Connecting…'}
+            >
+              🎙 Join voice
+            </button>
+          )}
           <form className="search-form" onSubmit={runSearch}>
             <input
               className="search-input"
@@ -620,6 +729,61 @@ export function Chat({
             </button>
           </div>
         </header>
+
+        {inCall && (
+          <div className="voice-bar" role="region" aria-label="voice call">
+            <span className="voice-bar-title">🔊 In voice</span>
+            <span className="voice-chip you" data-voice-self>
+              {user.username} (you){muted ? ' · muted' : ''}
+            </span>
+            {voicePeers.map((p) => (
+              <span key={p.id} className="voice-chip" data-voice-peer data-state={p.state}>
+                <span className={`dot voice-${p.state}`} aria-hidden />
+                {p.username || `user ${p.id}`}
+              </span>
+            ))}
+            {voicePeers.length === 0 && <span className="voice-empty">waiting for others…</span>}
+            <span className="voice-spacer" />
+            <label className="voice-device" title="Microphone — Auto follows your system default">
+              🎙
+              <select
+                value={inputDevice}
+                onChange={(e) => changeInputDevice(e.target.value)}
+                aria-label="microphone"
+              >
+                <option value="">Auto (system default)</option>
+                {audioInputs.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Microphone ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {audioOutputs.length > 0 && (
+              <label className="voice-device" title="Output — where you hear others">
+                🎧
+                <select
+                  value={outputDevice}
+                  onChange={(e) => changeOutputDevice(e.target.value)}
+                  aria-label="audio output"
+                >
+                  <option value="">Auto (system default)</option>
+                  {audioOutputs.map((d, i) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Output ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button className="link voice-mute" onClick={toggleMute}>
+              {muted ? 'unmute' : 'mute'}
+            </button>
+            <button className="link voice-leave" onClick={leaveVoice}>
+              leave
+            </button>
+          </div>
+        )}
 
         <main className="messages">
           {membersOf !== null && (
