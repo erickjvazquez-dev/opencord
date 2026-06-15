@@ -3,6 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 76) — voice deafen (audio product feature, both transports)
+
+Rotated to **audio** (per the iter-75 plan) — shipped **deafen**, the baseline Discord voice
+control missing alongside mute/PTT. Transport-agnostic: `VoiceTransport.setDeafened(on)` in BOTH
+the mesh `VoiceSession` and the SFU `SfuSession`. Deafen sets every remote `<audio>` element's
+`.muted` (and mutes any peer/track that arrives while deafened) and adds a `!deafened &&` guard to
+`applyMicState` so it also forces the mic off (Discord convention); un-deafen restores incoming +
+the prior mute/PTT state. Playback-only muting means **speaking rings still show** while deafened.
+UI: a deafen/undeafen toggle in the voice bar + "· deafened" on the self chip (resets on leave).
+
+**Verified (real product, not just tests):** web build + tsc + vitest (6/6) green; `voice.mjs`
+deafen flow in the **3-way mesh** asserts every remote audio element flips `.muted` true→false and
+the self chip flags deafened; AI-vision on `voice-05-deafened.png` confirmed the bar renders clean
+(undeafen highlighted danger, rings intact, no overflow). The existing 390px overflow check now
+also covers the new button. Shipped to Railway + live-verified.
+
+**Process win:** this was the planned product tick after two QA-only ticks — the rotation
+(chat 73-74 → security 75 → audio 76) is keeping both the product AND its test net moving.
+
+**Next:** audio still has *global PTT hotkey* (keyboard-driven Talk) open; or rotate to **infra**
+(the single-goroutine hub vs the "scales" north star) / **UI** polish. Pick furthest-from-north-star.
+
 ## 2026-06-15 (iter 75) — adversarial WS-frame guard (security → hostile-input-proof)
 
 Rotated off chat to **security**. The WS suite covered the *handshake* surface (auth 401,

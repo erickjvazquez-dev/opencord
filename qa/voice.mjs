@@ -191,8 +191,30 @@ async function main() {
   }, vpid)
   check(Math.abs(vol - 0.4) < 0.05, `slider at 40% sets that peer's audio volume to ~0.4 (got ${vol})`)
 
+  // Deafen: silences ALL incoming audio (mutes every remote <audio>) + flags the self
+  // chip; undeafen restores. Verified by reading the elements' .muted directly.
+  step('deafen: mutes every remote audio + flags self chip; undeafen restores')
+  const deafenBtn = a.locator('.voice-deafen')
+  await deafenBtn.click()
+  check((await deafenBtn.getAttribute('data-deafened')) === 'true', 'deafen toggles on')
+  const allMuted = await a.evaluate(() =>
+    [...document.querySelectorAll('audio[data-voice-audio]')].every((au) => au.muted),
+  )
+  check(allMuted, 'deafen mutes every remote audio element')
+  check(
+    ((await a.locator('[data-voice-self]').textContent()) ?? '').includes('deafened'),
+    'self chip shows "deafened"',
+  )
+  await a.screenshot({ path: join(SHOTS, 'voice-05-deafened.png') })
+  await deafenBtn.click()
+  check((await deafenBtn.getAttribute('data-deafened')) === 'false', 'undeafen toggles off')
+  const noneMuted = await a.evaluate(() =>
+    [...document.querySelectorAll('audio[data-voice-audio]')].every((au) => !au.muted),
+  )
+  check(noneMuted, 'undeafen unmutes every remote audio element')
+
   // The voice bar is dense (roster + speaking ring + volume + 2 device selectors +
-  // mute/leave); guard that it wraps cleanly on a phone instead of clipping.
+  // mute/deafen/leave); guard that it wraps cleanly on a phone instead of clipping.
   step('voice bar stays usable + does not overflow at phone width (≤640px)')
   await a.setViewportSize({ width: 390, height: 780 })
   await new Promise((r) => setTimeout(r, 250))

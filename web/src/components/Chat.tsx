@@ -130,6 +130,8 @@ export function Chat({
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
   const [muted, setMuted] = useState(false)
+  // Deafened: silences all incoming audio and forces your own mic off (Discord-style).
+  const [deafened, setDeafened] = useState(false)
   const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
   // Whether the local user is currently talking (drives their own speaking ring).
   const [speakingSelf, setSpeakingSelf] = useState(false)
@@ -249,6 +251,7 @@ export function Chat({
         setInCall(false)
         setVoicePeers([])
         setMuted(false)
+        setDeafened(false)
         setSpeakingSelf(false)
         setPttOn(false)
         setTransmitting(false)
@@ -331,6 +334,7 @@ export function Chat({
     setInCall(false)
     setVoicePeers([])
     setMuted(false)
+    setDeafened(false)
     setSpeakingSelf(false)
     setPttOn(false)
     setTransmitting(false)
@@ -338,6 +342,15 @@ export function Chat({
 
   const toggleMute = () => {
     if (voiceRef.current) setMuted(voiceRef.current.toggleMute())
+  }
+
+  // Deafen: silence all incoming audio + force your own mic off. The session also
+  // gates the mic, so reflect that locally (deafen implies muted; un-deafen does not
+  // auto-unmute — Discord leaves you muted if you were before).
+  const toggleDeafen = () => {
+    const next = !deafened
+    setDeafened(next)
+    voiceRef.current?.setDeafened(next)
   }
 
   // Push-to-talk: toggling the mode resets transmission; holding the Talk control
@@ -834,7 +847,7 @@ export function Chat({
               data-voice-self
               data-speaking={speakingSelf}
             >
-              {user.username} (you){muted ? ' · muted' : ''}
+              {user.username} (you){deafened ? ' · deafened' : muted ? ' · muted' : ''}
             </span>
             {voicePeers.map((p) => (
               <span
@@ -917,6 +930,14 @@ export function Chat({
                 {muted ? 'unmute' : 'mute'}
               </button>
             )}
+            <button
+              className={`link voice-deafen${deafened ? ' on' : ''}`}
+              onClick={toggleDeafen}
+              title="Deafen: silence everyone (also mutes your mic)"
+              data-deafened={deafened}
+            >
+              {deafened ? 'undeafen' : 'deafen'}
+            </button>
             <button className="link voice-leave" onClick={leaveVoice}>
               leave
             </button>

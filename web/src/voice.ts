@@ -33,6 +33,9 @@ export interface VoiceTransport {
   start(deviceId?: string): Promise<void>
   stop(): void
   toggleMute(): boolean
+  // Silence ALL incoming audio and force the local mic off (deafen). Un-deafening
+  // restores incoming audio and returns the mic to its prior mute/PTT state.
+  setDeafened(on: boolean): void
   setInputDevice(deviceId?: string): Promise<void>
   setOutputDevice(deviceId: string): void
   setPeerVolume(id: number, volume: number): void
@@ -121,6 +124,8 @@ export class VoiceSession {
   private peers = new Map<number, Peer>()
   private localStream: MediaStream | null = null
   private muted = false
+  // Deafened: all incoming audio is silenced AND the local mic is forced off.
+  private deafened = false
   // Push-to-talk: when enabled, the mic is live ONLY while `transmitting` (you're
   // holding the Talk control); otherwise it's silent. Supersedes `muted`.
   private pttEnabled = false
@@ -302,6 +307,15 @@ export class VoiceSession {
     return this.muted
   }
 
+  // Deafen / un-deafen: mute (or restore) every remote audio element and force the
+  // mic off while deafened. Playback only — the remote MediaStreams are untouched, so
+  // speaking rings keep showing who's talking.
+  setDeafened(on: boolean): void {
+    this.deafened = on
+    this.peers.forEach((p) => (p.audioEl.muted = on))
+    this.applyMicState()
+  }
+
   // Turn push-to-talk on/off. Enabling it silences the mic until you hold Talk.
   setPushToTalk(enabled: boolean): void {
     this.pttEnabled = enabled
@@ -319,7 +333,7 @@ export class VoiceSession {
   // Drive the mic track + speaking ring from the current mute / PTT state. The mic
   // is live when: PTT on → only while transmitting; PTT off → unless muted.
   private applyMicState(): void {
-    const live = this.pttEnabled ? this.transmitting : !this.muted
+    const live = !this.deafened && (this.pttEnabled ? this.transmitting : !this.muted)
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = live))
     // A silent mic can't be "speaking" — clear the ring immediately, don't wait
     // for the VAD hang window.
@@ -358,6 +372,7 @@ export class VoiceSession {
     audioEl.autoplay = true
     audioEl.dataset.voiceAudio = String(id)
     audioEl.style.display = 'none'
+    audioEl.muted = this.deafened // a peer arriving while deafened stays silent
     document.body.appendChild(audioEl)
     const peer: Peer = {
       pc,

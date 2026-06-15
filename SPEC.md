@@ -728,3 +728,23 @@ in the **same channel** and renders a compact quoted preview above the new messa
 - **Verify:** store-integration (same-channel ref populates preview · cross-channel ref
   dropped · nonexistent ref dropped · deleted target → "[deleted]") + browser-QA flow
   (click reply → bar shows → send → preview renders) + two-browser live check (Rule 14).
+
+## Voice deafen — audio control (v0.3, 2026-06-15)
+
+Audio north star is "thousands/HD/no-drops/free"; deafen is a baseline Discord voice
+control that was missing alongside mute/PTT. Deafen silences ALL incoming audio AND
+(Discord convention) forces your own mic off; un-deafening restores incoming audio and
+returns the mic to its prior mute/PTT state.
+
+- **Transport-agnostic:** `VoiceTransport.setDeafened(on)` implemented by BOTH the mesh
+  `VoiceSession` and the SFU `SfuSession`, so the voice bar drives either.
+- **Incoming:** each remote `<audio>` element's `.muted` is set to `deafened` (mesh:
+  per-peer `audioEl`; SFU: the attached `audioEls`), and any peer/track that arrives
+  while deafened is muted on creation. Playback only — the MediaStream is untouched, so
+  **speaking rings still show** who's talking while deafened (matches Discord).
+- **Mic:** `applyMicState` gains a `!deafened &&` guard so deafen forces the local mic
+  off regardless of mute/PTT; un-deafen restores `!muted` (or the PTT hold state).
+- **UI:** a `deafen`/`undeafen` toggle in the voice bar (always visible, next to leave);
+  the self chip shows "· deafened" (takes precedence over "· muted"). Resets on leave.
+- **Verify:** browser-QA flow (join → deafen → remote audio elements muted + self chip
+  shows deafened → undeafen restores) + AI-vision on the voice bar.

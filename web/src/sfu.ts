@@ -57,6 +57,8 @@ function idFromIdentity(identity: string): number {
 export class SfuSession implements VoiceTransport {
   private room: Room | null = null
   private muted = false
+  // Deafened: all incoming audio silenced AND the local mic forced off.
+  private deafened = false
   private pttEnabled = false
   private transmitting = false
   private stopped = false
@@ -131,6 +133,14 @@ export class SfuSession implements VoiceTransport {
     return this.muted
   }
 
+  // Deafen / un-deafen: mute (or restore) every attached remote audio element and
+  // force the mic off while deafened. Playback only — speaking rings still work.
+  setDeafened(on: boolean): void {
+    this.deafened = on
+    this.audioEls.forEach((el) => (el.muted = on))
+    void this.applyMicState()
+  }
+
   setPushToTalk(enabled: boolean): void {
     this.pttEnabled = enabled
     this.transmitting = false
@@ -145,7 +155,7 @@ export class SfuSession implements VoiceTransport {
 
   // The mic is live when: PTT on → only while transmitting; PTT off → unless muted.
   private async applyMicState(): Promise<void> {
-    const live = this.pttEnabled ? this.transmitting : !this.muted
+    const live = !this.deafened && (this.pttEnabled ? this.transmitting : !this.muted)
     await this.room?.localParticipant.setMicrophoneEnabled(live)
     if (!live) this.onLocalSpeaking?.(false)
   }
@@ -178,6 +188,7 @@ export class SfuSession implements VoiceTransport {
     el.dataset.voiceAudio = String(id)
     el.style.display = 'none'
     el.volume = this.volumes.get(id) ?? 1
+    el.muted = this.deafened // a track arriving while deafened stays silent
     document.body.appendChild(el)
     this.audioEls.get(id)?.remove()
     this.audioEls.set(id, el)

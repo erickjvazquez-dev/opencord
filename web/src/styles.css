@@ -984,6 +984,12 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Deafen toggle: highlighted (danger tint) while active, since it cuts all audio. */
+.voice-deafen.on {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /* Press-and-hold "Talk" button shown in push-to-talk mode. */
 .voice-talk {
   padding: 3px 10px;
