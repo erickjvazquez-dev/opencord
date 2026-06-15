@@ -3,7 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-15 (iter 70) — SFU slice 3: the client transport (mesh ↔ SFU, both E2E green)
+## 2026-06-15 (iter 71) — active-speaker selection (top-N) + the web's FIRST unit tests
+
+Component advanced: **audio**, toward "thousands without fidelity loss." The SFU client now connects with
+`autoSubscribe:false` and pulls only the **top-N loudest** remote audio streams (`MAX_AUDIO_SUBSCRIPTIONS`=12)
+— a 1000-person room can't mix 1000 streams, so this is the piece that turns "the SFU connects" into "scales."
+
+**Closed a long-standing coverage gap on the way:** the web client had **zero unit tests** — voice.ts's
+perfect-negotiation, markdown.tsx, all of it only ever E2E'd. The top-N picker is exactly the kind of pure
+logic that's painful to E2E (you'd need >12 fake clients) but trivial to unit-test, so I added **vitest** (the
+web's first test runner) and 6 cases for `selectAudioSubscriptions` (cap, active-priority, sticky recency,
+quiet-room fill, stale-id filtering, no-overflow). That seam — extracting the decision into a pure function —
+is the reusable trick: the at-scale behavior is now provable without a 1000-browser test.
+
+**The verification trap I avoided:** with `autoSubscribe:false`, the *presence* roster still populates even if
+the subscription logic subscribes to NOBODY — so the existing SFU E2E (roster-only) would have stayed green
+while audio silently broke. Added an explicit "client actually subscribed to the peer's audio track" assertion
+(SfuSession now attaches the audio element with `data-voice-audio`, like mesh). Lesson: when you flip a default
+that gates a side effect (audio), assert the side effect, not the proxy (presence) that survives the bug.
+
+**Highest-value next item:** the at-scale path (>12 participants) is unit-tested but never exercised against a
+real LiveKit. A cheap, high-value harness upgrade: have `qa/sfu.mjs` spin up ~15 lightweight livekit-client
+connections (the synthetic kind from iter 69, no UI) in one room and assert a 16th client subscribes to ≤12
+audio tracks — proving the cap end-to-end against the real SFU without 15 full browser UIs. Target next.
 
 Component advanced: **audio**, toward the thousands-scale north star. Shipped the client SFU path:
 `web/src/sfu.ts` `SfuSession` over `livekit-client`, implementing the SAME `VoiceTransport` interface as the

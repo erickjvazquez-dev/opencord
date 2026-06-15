@@ -642,8 +642,17 @@ Janus = GPLv3 copyleft + C, no Go SDK (license friction + highest integration co
    (`qa/run.sh`, no SFU env) still passes — `{sfu:false}` falls back to mesh.
    *Follow-up: browser-autoplay gesture handling (`room.startAudio()` + an
    "enable audio" prompt) for the rare blocked-autoplay case.*
-4. **Scale polish.** Active-speaker selection (forward top-N loudest), optional
-   self-hosted TURN for hostile NATs, later cascaded SFUs.
+4. **Scale polish.** **[active-speaker selection DONE 2026-06-15]** The SFU client
+   connects with `autoSubscribe:false` and subscribes to only the **top-N loudest**
+   remote audio streams (`MAX_AUDIO_SUBSCRIPTIONS`=12), so a 1000-person room never
+   tries to mix 1000 streams. The picker `selectAudioSubscriptions(all, activeNow,
+   recent, max)` is a pure function (≤max → everyone; else current speakers → sticky
+   recently-active → deterministic fill) — **unit-tested with vitest** (the web's
+   first unit tests). Recomputed on every ActiveSpeakersChanged / join / leave.
+   *Verified:* vitest (cap/priority/stickiness) + the SFU E2E now asserts the client
+   actually *subscribes* to the peer's audio (small room → all). At-scale capping
+   (>12) is unit-tested, not browser-E2E'd (would need >12 fake clients). *Remaining:*
+   optional self-hosted TURN for hostile NATs, later cascaded SFUs.
 
 **Railway demo: DEFERRED.** Running a LiveKit instance on the `talented-curiosity`
 Railway project is a *separate* decision, not required to ship the integration.

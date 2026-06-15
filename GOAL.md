@@ -70,8 +70,10 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   endpoint; ✅ real-LiveKit acceptance proven; ✅ **client SFU path** (`web/src/sfu.ts`
   `SfuSession` over lazy-imported `livekit-client`; `joinVoice` picks SFU when the
   server offers a token, else mesh; transport-agnostic voice-bar; two-browser SFU E2E
-  via `qa/sfu-run.sh`). **Mesh ↔ SFU both work E2E.** Next: active-speaker selection
-  (top-N) for true thousands-scale, optional self-host TURN. Railway
+  via `qa/sfu-run.sh`). **Mesh ↔ SFU both work E2E.** ✅ **active-speaker selection**
+  (`autoSubscribe:false` + top-N loudest audio subscription, `selectAudioSubscriptions`
+  pure fn, vitest-tested) so a huge room never mixes every stream. Next: optional
+  self-host TURN (hostile NATs), cascaded SFUs for true thousands-scale. Railway
   demo instance DEFERRED (Railway is TCP-only + egress-unbounded). With
   **active-speaker selection** (forward only the top-N loudest) this reaches
   thousands-scale audio; (4) distributed/cascaded SFUs + optional self-hosted TURN.

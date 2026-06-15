@@ -78,6 +78,27 @@ async function main() {
     'B sees A connected through the SFU',
   )
 
+  // With autoSubscribe:false + top-N selection, presence alone isn't enough — prove
+  // the client actually SUBSCRIBED to the peer's audio (a small room → everyone).
+  step('each actually subscribes to the other audio (top-N selection, small room → all)')
+  const hasRemoteAudio = (page) =>
+    page.evaluate(
+      () =>
+        [...document.querySelectorAll('audio[data-voice-audio]')].some(
+          (el) => el.srcObject && el.srcObject.getAudioTracks?.().length > 0,
+        ),
+    )
+  const waitAudio = async (page, ms = 12000) => {
+    const end = Date.now() + ms
+    while (Date.now() < end) {
+      if (await hasRemoteAudio(page)) return true
+      await new Promise((r) => setTimeout(r, 300))
+    }
+    return false
+  }
+  check(await waitAudio(a), 'A subscribed to a remote audio track via the SFU')
+  check(await waitAudio(b), 'B subscribed to a remote audio track via the SFU')
+
   step('leaving removes the peer')
   await b.getByRole('button', { name: 'leave' }).click()
   check(await waitForCount(a.locator('[data-voice-peer]'), 0, 12000), "A's roster drops B after B leaves")
