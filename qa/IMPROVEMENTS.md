@@ -3,7 +3,25 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 60) — voice flood guard (Rule 15) uncovered a server-crash panic; and the test gate silently skips integration tests
+## 2026-06-14 (iter 61) — closed the false-green test gate (integration tests now actually run)
+
+Fixed the iter-60 P1: the health-gate `go test ./...` ran without `DATABASE_URL`, so every
+`*Integration` test (`t.Skip`ped without a DB) silently no-op'd — the gate reported green while never
+running the auth/channel/DM-access/role/moderation/voice-flood security tests. `scripts/test.sh` now boots
+the compose Postgres (when `DATABASE_URL` is unset and docker is up), runs the full suite so the integration
+tests execute, and tears the DB down; `make test` and `CCF_TEST_CMD` point at it. Verified: 20+ `*Integration`
+tests that were skipping now RUN and pass. CI was already correct (sets `DATABASE_URL`), so this is
+local/loop ↔ CI parity, not new coverage in CI.
+
+**Reflection — the meta-lesson across iters 59b→61.** Three ticks in a row the failure mode was the same
+shape: *a green signal that wasn't actually exercising the thing.* 59b: a `git push` that didn't deploy but
+looked like it did. 60: a flood test that crashed because the gate never ran integration tests. 61: the gate
+itself skipping silently. The through-line: **a skip/200/"pushed" is not a pass — verify the work actually
+happened.** The loop now (a) diffs the live bundle after deploy, (b) runs integration tests against a real
+DB. **Highest-value next item:** the loop's Step 1 wording still says "`eval $CCF_TEST_CMD` (go test)" and the
+skill text shown at fire-time lags the on-disk file — but more concretely, the next *product* gap is voice
+**polish toward the owner's "crisp" bar**: a voice-activity/speaking indicator (active-speaker highlight),
+which also lays groundwork for the SFU's active-speaker selection. Target that next tick.
 
 Hardened the voice signaling surface I shipped last tick (Rule 15: adversarial pass on a new input). Two
 backend fixes: a **dedicated voice rate bucket** (voice frames were rate-limit-*exempt* → an unthrottled

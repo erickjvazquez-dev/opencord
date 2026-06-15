@@ -26,8 +26,8 @@ dev-server: ## Run the Go server locally (needs dev-db running)
 dev-web: ## Run the Vite dev server with hot reload (http://localhost:5173)
 	cd web && npm install && npm run dev
 
-test: ## Run Go tests
-	go test ./...
+test: ## Run Go tests (boots a Postgres so integration tests actually run)
+	bash scripts/test.sh
 
 qa-browser: ## Browser QA — boot a dev stack, drive the real UI (Playwright), tear down
 	bash qa/run.sh

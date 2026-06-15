@@ -10,11 +10,11 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 
-- [ ] **P1 (loop-process): the health-gate `go test ./...` runs without `DATABASE_URL`,
-  so every `TestServeWS*` / DB integration test SKIPS.** The gate has been green while
-  silently skipping its security tests (rate limit, voice flood guard, DM access control).
-  Fix: Step 1 should boot the compose DB and run `DATABASE_URL=… go test ./...` (or bake it
-  into `CCF_TEST_CMD`) so integration tests actually execute. Found iter 60.
+- [x] **P1 (loop-process): the health-gate `go test ./...` silently skipped every DB/WS
+  integration test** (no `DATABASE_URL`) — a false-green gate. Fixed iter 61: `scripts/test.sh`
+  boots the compose Postgres, runs the full suite (integration tests now execute), and tears
+  it down; `make test` + `CCF_TEST_CMD` point at it. CI already ran them (sets `DATABASE_URL`);
+  this brings the local/loop gate to parity. Verified: 20+ `*Integration` tests now RUN, not skip.
 
 ---
 
