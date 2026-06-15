@@ -207,6 +207,22 @@ async function main() {
   await a.screenshot({ path: join(SHOTS, 'voice-04-mobile.png') })
   await a.setViewportSize({ width: 1100, height: 820 })
 
+  step('push-to-talk: toggling on swaps mute → Hold-to-talk; holding gates transmission')
+  const pttBtn = a.locator('.voice-ptt-toggle')
+  await pttBtn.click()
+  check((await pttBtn.getAttribute('data-ptt')) === 'true', 'PTT toggles on')
+  const talk = a.locator('.voice-talk')
+  check((await talk.count()) > 0, 'PTT on shows the Hold-to-talk button')
+  check((await a.locator('.voice-mute').count()) === 0, 'PTT on hides the mute button')
+  check((await talk.getAttribute('data-transmitting')) === 'false', 'not transmitting until held')
+  await talk.dispatchEvent('pointerdown')
+  check((await talk.getAttribute('data-transmitting')) === 'true', 'holding Talk transmits')
+  await a.screenshot({ path: join(SHOTS, 'voice-05-ptt-talking.png') })
+  await talk.dispatchEvent('pointerup')
+  check((await talk.getAttribute('data-transmitting')) === 'false', 'releasing Talk stops transmitting')
+  await pttBtn.click()
+  check((await a.locator('.voice-mute').count()) > 0, 'PTT off restores the mute button')
+
   step('mute toggles the local mic label')
   await a.getByRole('button', { name: 'mute' }).click()
   check(

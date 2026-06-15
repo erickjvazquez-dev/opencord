@@ -565,3 +565,22 @@ Two small additions:
   connects, joins solo (the in-voice bar with your chip appears), and that leaving
   removes the bar — so the voice entry point is guarded even without the multi-peer
   `qa/voice.mjs` run.
+
+## Voice — push-to-talk (v0.4, 2026-06-14)
+
+A press-and-hold Talk control so the mic only transmits while you're holding it —
+the last non-trivial voice-control gap toward Discord parity.
+
+- **Model.** The mic track's `enabled` is driven by one rule: PTT off → live unless
+  muted; PTT on → live only while `transmitting`. PTT supersedes mute (the mute
+  button is swapped for the Talk button while PTT is on). A `setPushToTalk(on)` /
+  `setTransmitting(on)` pair on `VoiceSession` funnels through a single
+  `applyMicState()`, which also clears your speaking ring the instant the mic goes
+  silent (no VAD hang).
+- **Control.** A **press-and-hold button** (`pointerdown`→transmit, `pointerup`/
+  `pointerleave`→stop) — works on desktop *and* touch with no key-vs-composer
+  conflict (a global PTT hotkey is a later nicety). It turns green ("🎙 Talking…")
+  while live; `data-transmitting` mirrors the state.
+- **Verification:** `qa/voice.mjs` toggles PTT on (Talk button appears, mute hides),
+  asserts not-transmitting by default, `pointerdown`→transmitting, `pointerup`→not,
+  and PTT-off restores mute (`voice-05-ptt-talking.png` for the vision pass).

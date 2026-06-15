@@ -3,7 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 64) — the flagged "mobile voice bar is cramped" P1 was a non-issue; verified + covered instead of churned
+## 2026-06-14 (iter 65) — push-to-talk (advanced the AUDIO component toward the parity bar)
+
+Shipped push-to-talk — the last non-trivial voice-control gap. Component advanced: **audio**, toward the
+owner's Discord-parity/"crisp" bar (voice now has mute, device auto-follow + picker, active-speaker ring,
+per-user volume, and PTT). The design choice that paid off: a **single `applyMicState()`** deriving the mic
+track's `enabled` from one rule (PTT on → live only while transmitting; PTT off → live unless muted) instead
+of scattering `track.enabled = …` across mute/PTT/device-swap paths. mute, PTT, device switching, and the VAD
+ring all read from that one function, so they can't disagree. Chose a **press-and-hold button** over a
+keyboard hotkey: works on desktop + touch and sidesteps the key-vs-message-composer conflict (global hotkey
+noted as a later nicety).
+
+**QA-growth note:** driving press-and-hold from Playwright is just `locator.dispatchEvent('pointerdown'|'pointerup')`
+against the React `onPointerDown/Up` handlers, with `data-transmitting` mirroring state — clean and
+deterministic, no mouse-coordinate math. Reused the "snap a screenshot at the transient state" trick
+(`voice-05-ptt-talking.png`) from the speaking-ring tick.
+
+**Highest-value next item:** voice controls are now broad but the audio north star is **thousands per call**,
+which mesh can't reach — every participant uploads to every other (N² fan-out). The real next leap is the
+**OSS SFU** (LiveKit candidate). That's a Rule-16 adoption → must run `stack-guardian` first and stay free to
+self-host. Next tick: *scope* it — `stack-guardian` on LiveKit (self-host cost/footprint), and a SPEC for the
+mesh→SFU switch with graceful mesh fallback when no SFU is configured (Rule A). Don't adopt yet; decide first.
 
 Last tick I predicted the dense in-voice bar would "wrap badly ≤640px" and queued a redesign (move volume into
 a popover). Did the AI-vision pass at 390px first: it wraps **cleanly** — title + your chip, peer chip + volume

@@ -109,6 +109,9 @@ export function Chat({
   const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
   // Whether the local user is currently talking (drives their own speaking ring).
   const [speakingSelf, setSpeakingSelf] = useState(false)
+  // Push-to-talk: `pttOn` enables the mode; `transmitting` is true while holding Talk.
+  const [pttOn, setPttOn] = useState(false)
+  const [transmitting, setTransmitting] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceSession | null>(null)
@@ -222,6 +225,8 @@ export function Chat({
         setVoicePeers([])
         setMuted(false)
         setSpeakingSelf(false)
+        setPttOn(false)
+        setTransmitting(false)
       }
       ws.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
@@ -294,10 +299,25 @@ export function Chat({
     setVoicePeers([])
     setMuted(false)
     setSpeakingSelf(false)
+    setPttOn(false)
+    setTransmitting(false)
   }
 
   const toggleMute = () => {
     if (voiceRef.current) setMuted(voiceRef.current.toggleMute())
+  }
+
+  // Push-to-talk: toggling the mode resets transmission; holding the Talk control
+  // opens the mic, releasing closes it.
+  const togglePtt = () => {
+    const next = !pttOn
+    setPttOn(next)
+    setTransmitting(false)
+    voiceRef.current?.setPushToTalk(next)
+  }
+  const setTalk = (on: boolean) => {
+    setTransmitting(on)
+    voiceRef.current?.setTransmitting(on)
   }
 
   const changeInputDevice = (id: string) => {
@@ -802,9 +822,30 @@ export function Chat({
                 </select>
               </label>
             )}
-            <button className="link voice-mute" onClick={toggleMute}>
-              {muted ? 'unmute' : 'mute'}
+            <button
+              className={`link voice-ptt-toggle${pttOn ? ' on' : ''}`}
+              onClick={togglePtt}
+              title="Push-to-talk: mic is live only while you hold Talk"
+              data-ptt={pttOn}
+            >
+              {pttOn ? 'PTT on' : 'PTT'}
             </button>
+            {pttOn ? (
+              <button
+                className={`voice-talk${transmitting ? ' talking' : ''}`}
+                onPointerDown={() => setTalk(true)}
+                onPointerUp={() => setTalk(false)}
+                onPointerLeave={() => setTalk(false)}
+                data-transmitting={transmitting}
+                aria-label="hold to talk"
+              >
+                {transmitting ? '🎙 Talking…' : '🎙 Hold to talk'}
+              </button>
+            ) : (
+              <button className="link voice-mute" onClick={toggleMute}>
+                {muted ? 'unmute' : 'mute'}
+              </button>
+            )}
             <button className="link voice-leave" onClick={leaveVoice}>
               leave
             </button>

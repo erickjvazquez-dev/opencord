@@ -73,7 +73,9 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   **Active-speaker indicator shipped** (client-side Web Audio VAD → green speaking
   ring on local + remote chips; E2E + AI-vision verified). **Per-user volume shipped**
   (a local-only slider per peer → `HTMLAudioElement.volume`; E2E verified).
-  *Next voice polish: push-to-talk, deafen.*
+  **Push-to-talk shipped** (press-and-hold Talk button gates the mic via
+  `track.enabled`, supersedes mute; E2E + AI-vision verified).
+  *Next voice polish: deafen, global PTT hotkey.*
 - [ ] Screen share
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
@@ -125,7 +127,7 @@ item from here as the structural milestones above land.
   mute (E2E verified). SFU for scale + video calls still TODO.
 - [ ] Screen share / Go Live · soundboard
 - [~] Voice controls — noise suppression, mute, voice-activity/speaking indicator,
-  and per-user volume shipped; push-to-talk · deafen still TODO
+  per-user volume, and push-to-talk shipped; deafen · global PTT hotkey still TODO
 
 ### Direct messages
 - [ ] 1:1 DMs · group DMs · friends / friend requests / blocking

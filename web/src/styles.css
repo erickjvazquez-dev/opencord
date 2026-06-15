@@ -912,3 +912,28 @@ button:disabled {
   color: var(--danger);
   font-weight: 600;
 }
+
+.voice-ptt-toggle.on {
+  color: var(--online);
+  font-weight: 600;
+}
+
+/* Press-and-hold "Talk" button shown in push-to-talk mode. */
+.voice-talk {
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.voice-talk.talking {
+  background: var(--online);
+  border-color: var(--online);
+  color: #0b0c0e;
+  font-weight: 600;
+}

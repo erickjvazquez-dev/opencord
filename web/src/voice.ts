@@ -106,6 +106,10 @@ export class VoiceSession {
   private peers = new Map<number, Peer>()
   private localStream: MediaStream | null = null
   private muted = false
+  // Push-to-talk: when enabled, the mic is live ONLY while `transmitting` (you're
+  // holding the Talk control); otherwise it's silent. Supersedes `muted`.
+  private pttEnabled = false
+  private transmitting = false
   private stopped = false
   // Chosen devices (undefined/'' = follow the OS default). Output is applied to
   // every peer's <audio> sink; input is the constraint for capture.
@@ -189,10 +193,13 @@ export class VoiceSession {
   // speaking flags, and notify the UI only when something changed.
   private sampleVad(buf: Uint8Array<ArrayBuffer>): void {
     const now = Date.now()
-    if (this.localAnalyser && !this.muted && this.rms(this.localAnalyser, buf) > VAD_THRESHOLD) {
+    // Only your live mic can register as speaking (silent under mute, or under PTT
+    // when you're not holding Talk).
+    const micLive = this.pttEnabled ? this.transmitting : !this.muted
+    if (this.localAnalyser && micLive && this.rms(this.localAnalyser, buf) > VAD_THRESHOLD) {
       this.localLoudAt = now
     }
-    const localSpeaking = !this.muted && now - this.localLoudAt < VAD_HANG_MS
+    const localSpeaking = micLive && now - this.localLoudAt < VAD_HANG_MS
     if (localSpeaking !== this.localSpeaking) {
       this.localSpeaking = localSpeaking
       this.onLocalSpeaking?.(localSpeaking)
@@ -217,7 +224,8 @@ export class VoiceSession {
     const next = await navigator.mediaDevices.getUserMedia(audioConstraints(deviceId))
     const track = next.getAudioTracks()[0]
     if (!track) return
-    track.enabled = !this.muted
+    // Match the current mute / push-to-talk state on the freshly captured track.
+    track.enabled = this.pttEnabled ? this.transmitting : !this.muted
     for (const peer of this.peers.values()) {
       const sender = peer.pc.getSenders().find((s) => s.track?.kind === 'audio')
       if (sender) {
@@ -271,17 +279,39 @@ export class VoiceSession {
     this.emitRoster()
   }
 
-  // Toggle the local mic by enabling/disabling the audio track (keeps the peer
-  // connections up). Returns the new muted state.
+  // Toggle the local mic (keeps the peer connections up). Returns the new muted
+  // state. No-op effect under push-to-talk (transmitting governs the mic there).
   toggleMute(): boolean {
     this.muted = !this.muted
-    this.localStream?.getAudioTracks().forEach((t) => (t.enabled = !this.muted))
-    // Muting immediately clears your speaking ring (don't wait for the hang window).
-    if (this.muted && this.localSpeaking) {
+    this.applyMicState()
+    return this.muted
+  }
+
+  // Turn push-to-talk on/off. Enabling it silences the mic until you hold Talk.
+  setPushToTalk(enabled: boolean): void {
+    this.pttEnabled = enabled
+    this.transmitting = false
+    this.applyMicState()
+  }
+
+  // While push-to-talk is on, open (hold) or close (release) the mic.
+  setTransmitting(on: boolean): void {
+    if (!this.pttEnabled) return
+    this.transmitting = on
+    this.applyMicState()
+  }
+
+  // Drive the mic track + speaking ring from the current mute / PTT state. The mic
+  // is live when: PTT on → only while transmitting; PTT off → unless muted.
+  private applyMicState(): void {
+    const live = this.pttEnabled ? this.transmitting : !this.muted
+    this.localStream?.getAudioTracks().forEach((t) => (t.enabled = live))
+    // A silent mic can't be "speaking" — clear the ring immediately, don't wait
+    // for the VAD hang window.
+    if (!live && this.localSpeaking) {
       this.localSpeaking = false
       this.onLocalSpeaking?.(false)
     }
-    return this.muted
   }
 
   // Feed a server-stamped voice-* frame relayed on the channel WS.
