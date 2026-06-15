@@ -748,3 +748,28 @@ returns the mic to its prior mute/PTT state.
   the self chip shows "· deafened" (takes precedence over "· muted"). Resets on leave.
 - **Verify:** browser-QA flow (join → deafen → remote audio elements muted + self chip
   shows deafened → undeafen restores) + AI-vision on the voice bar.
+
+## Voice — global push-to-talk hotkey (v0.3, 2026-06-15)
+
+Push-to-talk previously only worked via the on-screen press-and-hold Talk button. Discord's
+PTT is a keyboard hotkey you hold from anywhere; this adds that (web-scoped — a browser page
+can only capture keys while focused, no OS-global hook).
+
+- **Binding:** the key is stored by its physical `KeyboardEvent.code` (layout-independent) in
+  `localStorage['opencord.pttKey']`, defaulting to `Backquote` (`` ` ``) — an unobtrusive key.
+  Survives reloads. A "key: X / press a key…" control in the voice bar enters a capture mode;
+  the next keydown becomes the binding (Escape cancels).
+- **Behavior:** while `inCall && pttOn`, a window-level `keydown`/`keyup` listener on the bound
+  key drives `setTransmitting(true/false)` (same path the on-screen Talk button uses, so the
+  session's `setTransmitting` gates the mic via `track.enabled`). `keydown` ignores auto-repeat
+  and meta/ctrl/alt combos; a window `blur` releases the mic so a held key can't leave it open
+  after tab-away.
+- **No mic hijack:** the listener **stands down when the event target is a text field**
+  (`isEditableTarget`: INPUT/TEXTAREA/SELECT/contentEditable) — so holding it to talk never
+  types into the composer, and a chat keystroke never opens the mic. The trade-off (vs Discord
+  desktop's OS hook): the hotkey is inert while you're focused in an input.
+- **Reset:** binding-capture mode and transmission reset on leave, channel switch, and PTT-off.
+- **Verify:** `qa/voice.mjs` (3-way mesh) — default Backquote; hotkey-down transmits / up stops;
+  **suppressed while focused in the composer**; rebind-capture (→ KeyV) then the rebound key
+  transmits. Web build + tsc + vitest green; AI-vision on `voice-05-ptt-talking.png` (the
+  `key:` control sits cleanly in the dense bar).

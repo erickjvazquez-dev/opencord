@@ -10,6 +10,11 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 
+- [ ] **P1 (QA gap, found iter 77): voice-bar ≤640px overflow check skips the PTT-on state.**
+  `qa/voice.mjs` runs the 390px overflow assertion BEFORE toggling PTT on, so the extra-width
+  PTT-on controls (`Hold to talk` + `key:` rebind button) are never overflow-checked at phone
+  width. Add a PTT-on mobile-width `scrollWidth <= clientWidth` assertion next tick.
+
 - [x] **P1 (loop-process): the health-gate `go test ./...` silently skipped every DB/WS
   integration test** (no `DATABASE_URL`) — a false-green gate. Fixed iter 61: `scripts/test.sh`
   boots the compose Postgres, runs the full suite (integration tests now execute), and tears
@@ -83,8 +88,11 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   ring on local + remote chips; E2E + AI-vision verified). **Per-user volume shipped**
   (a local-only slider per peer → `HTMLAudioElement.volume`; E2E verified).
   **Push-to-talk shipped** (press-and-hold Talk button gates the mic via
-  `track.enabled`, supersedes mute; E2E + AI-vision verified).
-  *Next voice polish: deafen, global PTT hotkey.*
+  `track.enabled`, supersedes mute; E2E + AI-vision verified). **Deafen shipped**
+  (silences all incoming audio + forces the mic off; E2E verified). **Global PTT
+  hotkey shipped** (hold a bound key — default `` ` ``, rebindable + persisted —
+  anywhere to talk; stands down while typing; E2E + AI-vision verified).
+  *Next voice polish: screen share, video, soundboard.*
 - [ ] Screen share
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
@@ -137,8 +145,8 @@ item from here as the structural milestones above land.
   roster with per-peer connection state, crisp DSP, device auto-detect + picker,
   mute (E2E verified). SFU for scale + video calls still TODO.
 - [ ] Screen share / Go Live · soundboard
-- [~] Voice controls — noise suppression, mute, voice-activity/speaking indicator,
-  per-user volume, and push-to-talk shipped; deafen · global PTT hotkey still TODO
+- [x] Voice controls — noise suppression, mute, voice-activity/speaking indicator,
+  per-user volume, push-to-talk, deafen, and a rebindable global PTT hotkey all shipped
 
 ### Direct messages
 - [ ] 1:1 DMs · group DMs · friends / friend requests / blocking

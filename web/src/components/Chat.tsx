@@ -43,6 +43,40 @@ const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
 // Local key for "the viewer reacted with this emoji on this message".
 const rkey = (msgId: number, emoji: string) => `${msgId}:${emoji}`
 
+// ── Push-to-talk global hotkey ──────────────────────────────────────────────
+// The bound key is stored by its physical `KeyboardEvent.code` (layout-independent)
+// in localStorage so it survives reloads; Backquote (`) is an unobtrusive default.
+const PTT_KEY_STORAGE = 'opencord.pttKey'
+const PTT_KEY_DEFAULT = 'Backquote'
+
+function loadPttKey(): string {
+  try {
+    return localStorage.getItem(PTT_KEY_STORAGE) || PTT_KEY_DEFAULT
+  } catch {
+    return PTT_KEY_DEFAULT
+  }
+}
+
+// A short, human-readable label for a KeyboardEvent.code (e.g. 'Backquote' → '`',
+// 'KeyV' → 'V', 'Space' → 'Space').
+function keyLabel(code: string): string {
+  if (code === 'Backquote') return '`'
+  if (code === 'Space') return 'Space'
+  if (code.startsWith('Key')) return code.slice(3)
+  if (code.startsWith('Digit')) return code.slice(5)
+  return code
+}
+
+// True when the event originated in a text-entry element, so the PTT hotkey stands
+// down — otherwise holding it to talk would type into the composer, and a keystroke
+// meant for chat would open the mic.
+function isEditableTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+}
+
 // Apply a count delta for one emoji to a message's reaction list (immutably):
 // inserts a chip when adding the first, drops it when the last is removed.
 function applyDelta(reactions: Reaction[] | undefined, emoji: string, delta: number): Reaction[] {
@@ -138,6 +172,10 @@ export function Chat({
   // Push-to-talk: `pttOn` enables the mode; `transmitting` is true while holding Talk.
   const [pttOn, setPttOn] = useState(false)
   const [transmitting, setTransmitting] = useState(false)
+  // Global PTT hotkey: `pttKey` is the bound physical key (held anywhere to talk);
+  // `bindingKey` is the rebind-capture mode.
+  const [pttKey, setPttKey] = useState(loadPttKey)
+  const [bindingKey, setBindingKey] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
@@ -255,6 +293,7 @@ export function Chat({
         setSpeakingSelf(false)
         setPttOn(false)
         setTransmitting(false)
+        setBindingKey(false)
       }
       ws.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
@@ -338,6 +377,7 @@ export function Chat({
     setSpeakingSelf(false)
     setPttOn(false)
     setTransmitting(false)
+    setBindingKey(false)
   }
 
   const toggleMute = () => {
@@ -359,12 +399,65 @@ export function Chat({
     const next = !pttOn
     setPttOn(next)
     setTransmitting(false)
+    setBindingKey(false)
     voiceRef.current?.setPushToTalk(next)
   }
   const setTalk = (on: boolean) => {
     setTransmitting(on)
     voiceRef.current?.setTransmitting(on)
   }
+
+  // Global push-to-talk hotkey: while in a call with PTT enabled, holding the bound
+  // key opens the mic from anywhere in the app; releasing (or losing window focus)
+  // closes it. Suppressed while typing in a field and while rebinding the key.
+  useEffect(() => {
+    if (!inCall || !pttOn || bindingKey) return
+    const open = (on: boolean) => {
+      setTransmitting(on)
+      voiceRef.current?.setTransmitting(on)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== pttKey || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+      if (isEditableTarget(e.target)) return
+      e.preventDefault()
+      open(true)
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== pttKey) return
+      e.preventDefault()
+      open(false)
+    }
+    // Release on blur so the mic can't stay open if you tab away mid-hold.
+    const onBlur = () => open(false)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+      open(false)
+    }
+  }, [inCall, pttOn, pttKey, bindingKey])
+
+  // Rebind capture: the next key press becomes the PTT hotkey (Escape cancels).
+  useEffect(() => {
+    if (!bindingKey) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault()
+      if (e.code !== 'Escape') {
+        setPttKey(e.code)
+        try {
+          localStorage.setItem(PTT_KEY_STORAGE, e.code)
+        } catch {
+          /* storage unavailable — the key still applies for this session */
+        }
+      }
+      setBindingKey(false)
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [bindingKey])
 
   const changeInputDevice = (id: string) => {
     setInputDevice(id)
@@ -915,16 +1008,29 @@ export function Chat({
               {pttOn ? 'PTT on' : 'PTT'}
             </button>
             {pttOn ? (
-              <button
-                className={`voice-talk${transmitting ? ' talking' : ''}`}
-                onPointerDown={() => setTalk(true)}
-                onPointerUp={() => setTalk(false)}
-                onPointerLeave={() => setTalk(false)}
-                data-transmitting={transmitting}
-                aria-label="hold to talk"
-              >
-                {transmitting ? '🎙 Talking…' : '🎙 Hold to talk'}
-              </button>
+              <>
+                <button
+                  className={`voice-talk${transmitting ? ' talking' : ''}`}
+                  onPointerDown={() => setTalk(true)}
+                  onPointerUp={() => setTalk(false)}
+                  onPointerLeave={() => setTalk(false)}
+                  data-transmitting={transmitting}
+                  title={`Hold to talk, or hold ${keyLabel(pttKey)} anywhere`}
+                  aria-label="hold to talk"
+                >
+                  {transmitting ? '🎙 Talking…' : '🎙 Hold to talk'}
+                </button>
+                <button
+                  type="button"
+                  className={`link voice-ptt-key${bindingKey ? ' binding' : ''}`}
+                  onClick={() => setBindingKey((b) => !b)}
+                  title="Rebind the push-to-talk hotkey (hold it anywhere to talk)"
+                  data-ptt-key={pttKey}
+                  data-binding={bindingKey}
+                >
+                  {bindingKey ? 'press a key…' : `key: ${keyLabel(pttKey)}`}
+                </button>
+              </>
             ) : (
               <button className="link voice-mute" onClick={toggleMute}>
                 {muted ? 'unmute' : 'mute'}

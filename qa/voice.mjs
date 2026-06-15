@@ -242,6 +242,39 @@ async function main() {
   await a.screenshot({ path: join(SHOTS, 'voice-05-ptt-talking.png') })
   await talk.dispatchEvent('pointerup')
   check((await talk.getAttribute('data-transmitting')) === 'false', 'releasing Talk stops transmitting')
+
+  step('global PTT hotkey: holding the bound key opens the mic from anywhere')
+  const keyBtn = a.locator('.voice-ptt-key')
+  check((await keyBtn.count()) > 0, 'PTT shows the rebind hotkey control')
+  check((await keyBtn.getAttribute('data-ptt-key')) === 'Backquote', 'default hotkey is Backquote (`)')
+  // Focus must be off any text field so the hotkey is not suppressed as "typing".
+  await a.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur())
+  await a.keyboard.down('Backquote')
+  check((await talk.getAttribute('data-transmitting')) === 'true', 'holding the hotkey transmits')
+  await a.keyboard.up('Backquote')
+  check((await talk.getAttribute('data-transmitting')) === 'false', 'releasing the hotkey stops transmitting')
+
+  step('PTT hotkey stands down while typing in the composer (no mic hijack)')
+  await a.getByPlaceholder(/Message #/).focus()
+  await a.keyboard.down('Backquote')
+  check(
+    (await talk.getAttribute('data-transmitting')) === 'false',
+    'hotkey is suppressed while focused in the composer',
+  )
+  await a.keyboard.up('Backquote')
+  await a.getByPlaceholder(/Message #/).fill('') // drop the backtick the input received
+
+  step('rebind: the next key press becomes the new PTT hotkey')
+  await keyBtn.click()
+  check((await keyBtn.getAttribute('data-binding')) === 'true', 'clicking enters rebind (capture) mode')
+  await a.keyboard.press('KeyV')
+  check((await keyBtn.getAttribute('data-ptt-key')) === 'KeyV', 'pressed key (V) becomes the new hotkey')
+  check((await keyBtn.getAttribute('data-binding')) === 'false', 'rebind mode exits after capture')
+  await a.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur())
+  await a.keyboard.down('KeyV')
+  check((await talk.getAttribute('data-transmitting')) === 'true', 'the rebound key (V) now transmits')
+  await a.keyboard.up('KeyV')
+
   await pttBtn.click()
   check((await a.locator('.voice-mute').count()) > 0, 'PTT off restores the mute button')
 

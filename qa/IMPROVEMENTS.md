@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 77) — voice global PTT hotkey (audio product feature)
+
+Stayed on **audio** (per the iter-76 plan) — shipped the last open voice-control item, a
+**rebindable global push-to-talk hotkey**: while in a call with PTT on, holding a bound key
+(default `` ` ``/Backquote, stored by physical `KeyboardEvent.code` in localStorage so it survives
+reloads) opens the mic from anywhere in the app; releasing or losing window focus closes it. A
+window-level keydown/keyup listener gates `setTransmitting`; it **stands down when focus is in a
+text field** (`isEditableTarget`) so holding it to talk never types into the composer and a chat
+keystroke never opens the mic. A "key: X / rebind" control in the voice bar enters a capture mode
+(next key press becomes the binding, Escape cancels). All reset on leave / PTT-off.
+
+**Verified (real product, not just tests):** web build + tsc + vitest (6/6) green; extended
+`voice.mjs` (3-way mesh) with 6 new checks — default Backquote, hotkey-down transmits, hotkey-up
+stops, **suppressed while typing in the composer**, rebind-capture (→ KeyV), rebound key transmits;
+full `qa/run.sh` browser+realtime+voice all PASS. AI-vision on `voice-05-ptt-talking.png` confirmed
+the new `key: \`` control sits cleanly in the dense voice bar (no overlap/clip, single row).
+
+**QA gap found (next tick):** the 390px mobile-overflow check on the voice bar runs BEFORE PTT is
+toggled on, so the PTT-on controls (`Hold to talk` + `key:` button — extra width) are never
+overflow-checked at ≤640px. Add a PTT-on mobile-width overflow assertion. Logged as a GOAL.md polish.
+
+**Next:** audio voice-controls are now complete (mute, deafen, VAD, per-user volume, PTT + hotkey).
+Rotate to **infra** (single-goroutine hub vs the "scales" north star) or **UI** polish next tick.
+
 ## 2026-06-15 (iter 76) — voice deafen (audio product feature, both transports)
 
 Rotated to **audio** (per the iter-75 plan) — shipped **deafen**, the baseline Discord voice

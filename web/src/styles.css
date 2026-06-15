@@ -1009,3 +1009,13 @@ button:disabled {
   color: #0b0c0e;
   font-weight: 600;
 }
+
+/* The bound push-to-talk hotkey, shown next to the Talk button; click to rebind. */
+.voice-ptt-key {
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-ptt-key.binding {
+  color: var(--online-text);
+  font-weight: 600;
+}
