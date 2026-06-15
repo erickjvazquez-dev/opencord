@@ -3,6 +3,23 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 80) — close the PTT-on mobile-overflow QA gap (Track-0 self-improvement)
+
+Closed the **P1 QA gap I logged last tick (iter 77)**: the voice-bar ≤640px overflow assertion ran
+in the PTT-OFF state, so the densest layout (PTT-on adds `Hold to talk` + `key:`/rebind) was never
+mobile-overflow-checked — exactly the kind of blind spot the meta-QA step exists to catch. Added a
+PTT-on 390px block to `qa/voice.mjs`: asserts `scrollWidth <= clientWidth`, Talk + key controls
+reachable, and saves `voice-06-ptt-mobile.png`. Full `qa/run.sh` (browser+realtime+voice) green;
+AI-vision on the new shot confirms a clean wrap (every control readable/tappable, no clip).
+
+**Process note:** this is the loop's "find a gap → log it → close it next tick" cycle working as
+intended — a QA-only change (no app/bundle delta), so committed + pushed to `origin` but **NOT
+redeployed** (anti-churn: nothing new to serve; a `railway up` would rebuild an identical bundle).
+
+**QA gap found (next tick):** the mobile checks all run on client A only; tablet/landscape (e.g.
+768px) and the PTT-on bar at that width are unverified. Low priority. Likely rotate to **infra** or
+**UI** product work next tick — audio voice-controls + their QA are now complete.
+
 ## 2026-06-15 (iter 77) — voice global PTT hotkey (audio product feature)
 
 Stayed on **audio** (per the iter-76 plan) — shipped the last open voice-control item, a

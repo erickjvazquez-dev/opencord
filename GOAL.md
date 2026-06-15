@@ -10,10 +10,10 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 
-- [ ] **P1 (QA gap, found iter 77): voice-bar ≤640px overflow check skips the PTT-on state.**
-  `qa/voice.mjs` runs the 390px overflow assertion BEFORE toggling PTT on, so the extra-width
-  PTT-on controls (`Hold to talk` + `key:` rebind button) are never overflow-checked at phone
-  width. Add a PTT-on mobile-width `scrollWidth <= clientWidth` assertion next tick.
+- [x] **P1 (QA gap, found iter 77, closed iter 80): voice-bar ≤640px overflow check skipped the
+  PTT-on state.** `qa/voice.mjs` now re-checks overflow at 390px WITH PTT on (widest controls:
+  `Hold to talk` + `key:` rebind), asserting `scrollWidth <= clientWidth`, Talk + key reachable,
+  + `voice-06-ptt-mobile.png` AI-vision verified (clean wrap, no clip). 3 new checks, QA green.
 
 - [x] **P1 (loop-process): the health-gate `go test ./...` silently skipped every DB/WS
   integration test** (no `DATABASE_URL`) — a false-green gate. Fixed iter 61: `scripts/test.sh`

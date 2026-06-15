@@ -275,6 +275,22 @@ async function main() {
   check((await talk.getAttribute('data-transmitting')) === 'true', 'the rebound key (V) now transmits')
   await a.keyboard.up('KeyV')
 
+  // PTT-on adds the widest controls to the bar (Hold-to-talk + key/rebind button);
+  // the earlier 390px check ran in the PTT-OFF state, so re-check overflow here so
+  // the densest layout is also guarded on a phone (GOAL.md P1, iter 77 gap).
+  step('voice bar with PTT-on controls still fits at phone width (≤640px)')
+  await a.setViewportSize({ width: 390, height: 780 })
+  await new Promise((r) => setTimeout(r, 250))
+  check(await talk.isVisible(), 'Hold-to-talk is reachable at 390px (PTT on)')
+  check(await keyBtn.isVisible(), 'PTT key/rebind control is reachable at 390px')
+  const noOverflowPtt = await a.evaluate(() => {
+    const el = document.querySelector('.voice-bar')
+    return el ? el.scrollWidth <= el.clientWidth + 1 : false
+  })
+  check(noOverflowPtt, 'voice bar with PTT-on controls wraps cleanly — no overflow at 390px')
+  await a.screenshot({ path: join(SHOTS, 'voice-06-ptt-mobile.png') })
+  await a.setViewportSize({ width: 1100, height: 820 })
+
   await pttBtn.click()
   check((await a.locator('.voice-mute').count()) > 0, 'PTT off restores the mute button')
 
