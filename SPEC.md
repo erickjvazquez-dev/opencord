@@ -455,8 +455,10 @@ hostile NATs). So the one-command stack stays intact.
     (SDP offer/answer or ICE candidate; trickle ICE keeps frames small).
 - **Roster is client-derived** from join/leave frames — no server-side voice state.
 - **WS read limit raised to 16 KiB** (`maxFrameSize`) so SDP fits; text bodies stay
-  bounded to `maxMessageSize` (4 KiB). Voice frames are **exempt from the text token
-  bucket** (ICE is bursty). *Hardening TODO: a separate voice rate bucket (Rule 15).*
+  bounded to `maxMessageSize` (4 KiB). Voice frames are exempt from the strict text
+  token bucket (ICE is bursty) but ride their **own, more generous voice bucket**
+  (`voiceBurst` 100, `+voiceRefillPerSec` 50/s) so a flood can't be amplified to the
+  whole channel — closed 2026-06-14, adversarially tested (`TestServeWSVoiceFloodGuard`).
 
 **Client (next slice):** `getUserMedia({audio})` → an `RTCPeerConnection` per peer
 (public STUN), exchange offer/answer/ICE via the frames above, play remote audio; a
@@ -503,3 +505,26 @@ fake media (`--use-fake-device/-ui-for-media-stream`), both Join voice in
 `#general`, and asserts a real `connectionState === "connected"` mesh link on
 *both* sides, live remote audio tracks, the device picker, mute, and live roster
 teardown on leave. Wired into `qa/run.sh` after the realtime suite.
+
+## WS gateway hardening — voice flood guard + send-channel close race (v0.4, 2026-06-14)
+
+Hardening the voice signaling surface (Rule 15) shipped two backend fixes:
+
+- **Dedicated voice rate bucket.** `voice-join`/`voice-leave`/`voice-signal` are
+  exempt from the strict text token bucket (ICE is legitimately bursty) but now ride
+  their own bucket (`voiceBurst` 100, `+voiceRefillPerSec` 50/s). Every voice frame is
+  fanned out to the whole channel, so an unthrottled flood was an amplification DoS;
+  the bucket caps it at the source while still passing a real 2–4 peer setup burst.
+
+- **`send` channel is never closed (close-race fix).** The flood test surfaced a
+  pre-existing panic: `Hub.emitToChannel` did `close(c.send)` to drop a stuck
+  consumer, but `ServeWS` (history) and `readPump` (the read-only error reply) also
+  write to `c.send` — a concurrent close panics the connection goroutine with "send on
+  closed channel". Fix: `c.send` is **never** closed; the hub closes a per-client
+  `done` channel instead (only on the hub goroutine, so at most once). Producers use
+  `sendSafe` (`select { case c.send<-data: case <-c.done: }`) and `writePump` exits on
+  `<-c.done`. Verified race-free (`go test -race ./internal/ws`).
+
+**Verification:** `TestServeWSVoiceFloodGuard` (Rule 15) — a legitimate burst is
+relayed in full; a 500-frame flood is bounded (no crash). Reproduced the panic first,
+applied the fix, re-attacked → bounded + no panic. Full `go test ./...` + `-race` green.

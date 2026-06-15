@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-14 (iter 60) — voice flood guard (Rule 15) uncovered a server-crash panic; and the test gate silently skips integration tests
+
+Hardened the voice signaling surface I shipped last tick (Rule 15: adversarial pass on a new input). Two
+backend fixes: a **dedicated voice rate bucket** (voice frames were rate-limit-*exempt* → an unthrottled
+flood is fanned out to the whole channel = amplification DoS) and — the bigger find — a **send-channel
+close-race panic**. Writing the flood test crashed the server: `Hub.emitToChannel` did `close(c.send)` to
+drop a stuck consumer, but `ServeWS` (history) and `readPump` (error reply) also write to `c.send`, so a
+concurrent close panics with "send on closed channel". A flood reliably triggered it. Fix: **never close
+`c.send`** — close a per-client `done` channel (hub goroutine only, ≤once); producers `sendSafe` via
+`select{case send<-d: case <-done:}`; writePump exits on `<-done`. `go test -race` clean; full E2E green.
+Reproduced the panic first, fixed, re-attacked → bounded + no crash (Rule 15 cycle).
+
+**Highest-value loop-process gap (fix next tick): the health-gate `go test ./...` runs WITHOUT a DATABASE_URL,
+so every DB/WS integration test SKIPS.** I only caught the panic because I manually exported `DATABASE_URL`
+and ran the ws tests against a booted Postgres — the loop's Step-1 gate has been green every tick while
+silently skipping `TestServeWS*` (rate limit, voice signaling, voice flood, DM access control, …). The
+browser/realtime/voice E2E in `qa/run.sh` covers the path end-to-end, but the Go integration tests that assert
+specific security logic never run in the gate. **→ GOAL P1:** Step 1 should boot the compose DB and run
+`DATABASE_URL=… go test ./...` so integration tests actually execute (or CCF_TEST_CMD should). A gate that
+green-lights while skipping its security tests is a false floor — exactly the "verify, don't assume" lesson
+from iter 59b, one layer down.
+
+**Secondary smell (logged, not yet fixed):** the consumer-buffer-overflow drop penalizes the *victim* — when
+A floods, it's B (or A's own echo) whose 32-frame buffer overflows and gets dropped, not the attacker. The
+new per-sender voice bucket throttles at the right layer (the source), but the buffer-drop backstop drops the
+wrong party. Fine as a backstop; worth revisiting if voice scales.
+
 ## 2026-06-14 (iter 59b, owner-directed) — 3-peer N-way mesh test + the deploy was never actually verified
 
 Owner asks this turn: (1) add a 3rd peer to the voice test, (2) "always push it to railway opencord, it

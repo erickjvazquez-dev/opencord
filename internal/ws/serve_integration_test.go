@@ -315,3 +315,89 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 		t.Fatalf("voice-signal payload not relayed intact: %s", sig.Signal)
 	}
 }
+
+// TestServeWSVoiceFloodGuard is the voice abuse-protection guard (Rule 15). Voice
+// signaling is exempt from the strict text bucket (ICE is legitimately bursty), but
+// must NOT be unbounded: every voice frame is fanned out to the whole channel, so an
+// unthrottled flood is an amplification DoS. A connection that floods voice-signal
+// frames must be capped by the dedicated voice bucket (burst voiceBurst,
+// +voiceRefillPerSec/s) — most of a rapid flood is dropped before rebroadcast, while
+// a legitimate setup burst still gets through.
+func TestServeWSVoiceFloodGuard(t *testing.T) {
+	h := newWSHarness(t)
+	_, aTok := h.user(t)
+	b, bTok := h.user(t)
+
+	connA, sA := h.dial(t, "?token="+aTok)
+	if connA == nil {
+		t.Fatalf("dial A failed (status %d)", sA)
+	}
+	defer connA.Close()
+	connB, sB := h.dial(t, "?token="+bTok)
+	if connB == nil {
+		t.Fatalf("dial B failed (status %d)", sB)
+	}
+	defer connB.Close()
+
+	// A drains too: the relay fans each voice frame back to the whole channel
+	// (sender included), so if A never reads, its own echoes fill its buffer and
+	// the hub drops it — which would end the flood early and skew the measurement.
+	go func() {
+		for {
+			if _, _, err := connA.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	// B drains continuously (so the hub never blocks on a full send buffer) and
+	// counts the voice-signals it actually receives = those that passed A's bucket.
+	var received int64
+	go func() {
+		for {
+			_, data, err := connB.ReadMessage()
+			if err != nil {
+				return
+			}
+			var f struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(data, &f) == nil && f.Type == "voice-signal" {
+				atomic.AddInt64(&received, 1)
+			}
+		}
+	}()
+
+	payload := []byte(fmt.Sprintf(`{"type":"voice-signal","target":%d,"signal":{"c":"x"}}`, b.ID))
+	send := func(n int) {
+		for i := 0; i < n; i++ {
+			if err := connA.WriteMessage(gws.TextMessage, payload); err != nil {
+				t.Fatalf("write %d: %v", i, err)
+			}
+		}
+	}
+
+	// Phase 1 — a legitimate setup-sized burst (well within the bucket and B's
+	// buffer) must be relayed IN FULL: the guard must not false-drop real ICE.
+	const legit = 25
+	send(legit)
+	time.Sleep(400 * time.Millisecond)
+	if got := atomic.LoadInt64(&received); got < legit {
+		t.Fatalf("voice guard throttled a legitimate burst: relayed %d of %d", got, legit)
+	}
+	atomic.StoreInt64(&received, 0)
+
+	// Phase 2 — a flood far beyond the bucket must be bounded: most frames are
+	// dropped at the source, never amplified to the channel.
+	const flood = 500
+	send(flood)
+	time.Sleep(500 * time.Millisecond)
+	got := atomic.LoadInt64(&received)
+	if got >= flood {
+		t.Fatalf("voice flood guard dropped nothing: relayed %d of %d sent", got, flood)
+	}
+	if got > flood/2 {
+		t.Fatalf("voice flood guard too leaky: relayed %d of %d sent", got, flood)
+	}
+	t.Logf("voice flood guard: legit burst relayed in full; flood of %d bounded to %d", flood, got)
+}

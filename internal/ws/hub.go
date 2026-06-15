@@ -77,7 +77,7 @@ func (h *Hub) Run() {
 		case c := <-h.unregister:
 			if _, ok := h.clients[c]; ok {
 				delete(h.clients, c)
-				close(c.send)
+				close(c.done)
 				h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
 			}
 		case m := <-h.broadcast:
@@ -102,6 +102,8 @@ func (h *Hub) countInChannel(channelID int64) int {
 
 // emitToChannel serializes an event and pushes it to every client subscribed to
 // channelID, dropping any client whose send buffer is full (a stuck consumer).
+// Runs only on the hub goroutine, so closing `done` here is serialized with the
+// unregister path — `done` is closed at most once per client.
 func (h *Hub) emitToChannel(channelID int64, e Event) {
 	data, err := json.Marshal(e)
 	if err != nil {
@@ -114,7 +116,9 @@ func (h *Hub) emitToChannel(channelID int64, e Event) {
 		select {
 		case c.send <- data:
 		default:
-			close(c.send)
+			// Stuck consumer: drop it. Signal via done, never close(send) —
+			// other goroutines write to send and would panic.
+			close(c.done)
 			delete(h.clients, c)
 		}
 	}

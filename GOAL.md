@@ -10,6 +10,12 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 
+- [ ] **P1 (loop-process): the health-gate `go test ./...` runs without `DATABASE_URL`,
+  so every `TestServeWS*` / DB integration test SKIPS.** The gate has been green while
+  silently skipping its security tests (rate limit, voice flood guard, DM access control).
+  Fix: Step 1 should boot the compose DB and run `DATABASE_URL=… go test ./...` (or bake it
+  into `CCF_TEST_CMD`) so integration tests actually execute. Found iter 60.
+
 ---
 
 ## Now (v0.1 — Minimal Realtime MVP)
@@ -58,8 +64,10 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   SFUs + optional self-hosted TURN. Adopting an SFU is a Rule-16 decision → run
   `stack-guardian` first (must be OSS + self-hostable, no required paid tier). Voice
   must degrade gracefully when an SFU isn't configured (mesh fallback) — Rule A.
+  Signaling is hardened: a dedicated voice rate bucket bounds a flood (Rule 15),
+  and the WS send channel is close-race-proof (`done`-channel, `-race` clean).
   *Next voice polish: per-user volume/mute, voice-activity/speaking indicator,
-  push-to-talk, separate voice rate bucket (Rule 15).*
+  push-to-talk.*
 - [ ] Screen share
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
