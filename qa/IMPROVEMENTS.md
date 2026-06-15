@@ -3,6 +3,38 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 90) — AI-vision caught a header that text-wrapped; the FIRST regression test didn't catch it
+
+Browser-QA AI-vision pass flagged a real **P1**: in a server channel (member-list
+sidebar present → narrow column) the chat header wrapped its labels across lines —
+"Join voice"→2, "1 online ·"→3, "log out"→2, brand→2 — looking broken. The plain
+`#general` view has the full width so it never showed. Fixed with `flex-wrap` +
+`row-gap` on `.chat-header`, `min-width:0` on the brand, `white-space:nowrap` +
+`margin-left:auto` on the meta, `nowrap` on Join-voice. Header now flows into two
+clean rows; AI-vision verified in both single- and two-user server views.
+
+**Highest-value lesson — a regression test you haven't PROVEN against the broken
+state can silently test the wrong thing.** My first assertion checked bounding-box
+*overlap* and *horizontal overflow*. I ran it both ways (Rule 15) and it **passed
+even with the fix reverted** — because the real defect was flex items shrinking to
+min-content and wrapping their *text* (taller header), not boxes overlapping or the
+bar overflowing. Without the prove-it-fails step I'd have shipped a green check that
+never guards the bug. The correct signal was rendered **text-line count per control**
+(padding/border-corrected `height / line-height`): each header label must be exactly
+one line. That version goes red without the fix (brand/Join-voice/log-out = 2 lines)
+and green with it.
+
+- **Loop-process rule (apply every tick):** a UI regression assertion must be run
+  against the **broken** state and observed to FAIL before it counts — same bar the
+  iter-3 deadlock entry set for concurrency. "Exit code flipped red" isn't enough:
+  confirm the *specific* new check failed, not unrelated flakiness (this run's
+  reverted-CSS pass also showed flaky grouping/shift-enter/image/a11y failures that
+  were green in the clean run — don't mistake harness churn for the regression).
+- **QA gap to watch:** the header is the most control-dense surface and only the
+  server-channel layout exercises its narrow width. Other dense surfaces under the
+  member-list (e.g. the voice bar IN a server channel, the search-results header)
+  aren't yet line-count-checked — candidate for a future tick.
+
 ## 2026-06-15 (parity) — Discord-style member-list sidebar (servers)
 
 First Discord-parity tick under the new North Star ("match Discord's layout/design/features").

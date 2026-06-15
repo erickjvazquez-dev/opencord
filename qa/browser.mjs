@@ -384,6 +384,45 @@ async function main() {
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
+  // 7a-fix — Header must stay clean in a server channel. The member-list sidebar
+  // (~220px, shown >900px) narrows this column, so the header controls have far
+  // less room than in #general. Regression for the iter-90 AI-vision finding:
+  // without flex-wrap the flex items shrank to min-content and wrapped their TEXT
+  // across lines — "Join voice" → 2 lines, "1 online ·" → 3 lines, "log out" →
+  // 2 lines — a cramped, broken-looking header. The objective signal is rendered
+  // text-line count per control: each label control must occupy a single line.
+  step('server-channel header stays clean under the member-list sidebar (no text wrapping)')
+  check(await page.locator('.member-list').isVisible(), 'member-list sidebar is present (the narrow-header case)')
+  const headerLines = await page.locator('.chat-header').evaluate((header) => {
+    // Rendered text lines of an element, padding/border-corrected (robust to
+    // inline-block buttons whose getClientRects() collapses to one box).
+    const lines = (sel) => {
+      const el = header.querySelector(sel)
+      if (!el) return null
+      const cs = getComputedStyle(el)
+      const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4
+      const padV = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+      const bV = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth)
+      const contentH = el.getBoundingClientRect().height - padV - bV
+      return Math.max(1, Math.round(contentH / lh))
+    }
+    return {
+      brand: lines('.brand'),
+      voice: lines('.voice-join'),
+      logout: lines('.meta .link'),
+      hOverflow: header.scrollWidth - header.clientWidth,
+    }
+  })
+  check(headerLines.brand === 1, `brand ("Opencord #channel") stays on one line (got ${headerLines.brand})`)
+  check(headerLines.voice === 1, `"Join voice" stays on one line (got ${headerLines.voice})`)
+  check(headerLines.logout === 1, `"log out" stays on one line (got ${headerLines.logout})`)
+  check(headerLines.hOverflow <= 1, 'header has no horizontal overflow (scrollWidth ≤ clientWidth)')
+  check(
+    await page.getByRole('button', { name: /Join voice/ }).isVisible(),
+    'Join voice button is reachable in the server-channel header',
+  )
+  check(await page.getByRole('button', { name: 'log out' }).isVisible(), 'log out is reachable in the server-channel header')
+
   // 7b — Invite: the invite button mints a code (shown in a prompt to copy).
   step('click invite → a server invite code is generated')
   lastPromptDefault = ''

@@ -30,6 +30,19 @@ tunnel, paid cloud only for 24/7 hosting.**
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 
+- [x] **P1 (UI polish, found+fixed iter 90 via AI-vision QA): the channel header wrapped its text in
+  server channels.** With the member-list sidebar present (~220px, shown >900px) the chat column is
+  narrow; `.chat-header` had no `flex-wrap`, so its flex items shrank to min-content and wrapped their
+  *text* across lines — "Join voice" → 2 lines, "1 online ·" → 3 lines, "log out" → 2 lines, brand →
+  2 lines — a cramped, broken-looking bar (the plain `#general` view has the full width and never
+  triggered it). Fix: `.chat-header` now wraps with a `row-gap` (same pattern as the voice bar), the
+  brand can shrink (`min-width:0`, its topic already ellipsizes), and the action/meta labels stay
+  single-line (`white-space:nowrap`); `.meta` is right-anchored (`margin-left:auto`). Header now flows
+  into two tidy rows. Regression: `qa/browser.mjs` measures rendered text-line count per control in a
+  server channel and asserts each is single-line — **proven to catch it** (reverting the CSS makes
+  brand/Join-voice/log-out report 2 lines + horizontal overflow). Full browser+realtime+voice QA green;
+  AI-vision verified clean in both single- and two-user server views.
+
 - [x] **P1 (QA gap, found iter 77, closed iter 80): voice-bar ≤640px overflow check skipped the
   PTT-on state.** `qa/voice.mjs` now re-checks overflow at 390px WITH PTT on (widest controls:
   `Hold to talk` + `key:` rebind), asserting `scrollWidth <= clientWidth`, Talk + key reachable,

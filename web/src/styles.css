@@ -347,6 +347,12 @@ button:disabled {
 .chat-header {
   display: flex;
   align-items: center;
+  /* Wrap gracefully: in a server channel the member-list sidebar narrows this
+     column, so the controls (mod links, pins, Join voice, search, meta) can't
+     all fit on one line. A row-gap keeps wrapped rows from overlapping — the
+     same pattern the voice bar uses. */
+  flex-wrap: wrap;
+  gap: 8px 14px;
   justify-content: space-between;
   padding: 14px 18px;
   background: var(--bg-elevated);
@@ -355,6 +361,9 @@ button:disabled {
 
 .brand {
   font-weight: 700;
+  /* Allow the brand to shrink so its topic ellipsis kicks in instead of pushing
+     the trailing controls off the row and forcing an overlap. */
+  min-width: 0;
 }
 
 .channel {
@@ -368,6 +377,11 @@ button:disabled {
   gap: 8px;
   color: var(--text-muted);
   font-size: 14px;
+  /* Keep the presence + avatar + log-out group on one line (never split "log
+     out" across two rows) and anchor it to the right edge of whatever header
+     row it lands on. */
+  white-space: nowrap;
+  margin-left: auto;
 }
 
 .dot {
@@ -1097,6 +1111,8 @@ button:disabled {
 .voice-join {
   color: var(--online-text);
   font-weight: 600;
+  /* Never split "Join voice" across two lines when the header is tight. */
+  white-space: nowrap;
 }
 
 .voice-bar {
