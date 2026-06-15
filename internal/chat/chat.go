@@ -973,6 +973,48 @@ func (s *Store) SetServerRole(ctx context.Context, serverID, actorID, targetID i
 	return nil
 }
 
+// RemoveServerMember kicks targetID out of serverID. The actor must be an owner or
+// admin of the server; nobody can kick the owner; the actor can't kick themselves;
+// and an admin can't kick a fellow admin (only the owner can). Returns ErrForbidden
+// for any of those, ErrUserNotFound if the target isn't a member. The target's
+// authored messages are left intact (Discord keeps history). The caller is
+// responsible for evicting the kicked user's live sockets (see Hub.EvictUserFromChannels).
+func (s *Store) RemoveServerMember(ctx context.Context, serverID, actorID, targetID int64) error {
+	if targetID == actorID {
+		return ErrForbidden // can't kick yourself (leaving is a separate action)
+	}
+	actorRole, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden // non-members and plain members can't kick
+	}
+	targetRole, err := s.ServerRole(ctx, serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if targetRole == "" {
+		return ErrUserNotFound // target isn't a member of this server
+	}
+	if targetRole == "owner" {
+		return ErrForbidden // nobody can kick the owner
+	}
+	if actorRole == "admin" && targetRole == "admin" {
+		return ErrForbidden // admins can't kick fellow admins — only the owner can
+	}
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2 AND role <> 'owner'`,
+		serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotFound // raced away or was the owner (defense-in-depth)
+	}
+	return nil
+}
+
 // ListServerMembers returns a server's members with roles, owner/admin first.
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,

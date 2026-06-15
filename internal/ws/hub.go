@@ -38,6 +38,14 @@ type targetedEvent struct {
 	event     Event
 }
 
+// evictReq tells the hub to disconnect every live socket belonging to userID that
+// is subscribed to one of `channels` — used when a user loses access (e.g. kicked
+// from a server) since WS access is otherwise only checked at connect time.
+type evictReq struct {
+	userID   int64
+	channels map[int64]bool
+}
+
 // Hub owns the set of connected clients and serializes all mutations through a
 // single goroutine (Run), so the client map needs no locking.
 type Hub struct {
@@ -47,6 +55,7 @@ type Hub struct {
 	events     chan targetedEvent
 	register   chan *Client
 	unregister chan *Client
+	evict      chan evictReq
 }
 
 func NewHub(store *chat.Store) *Hub {
@@ -57,7 +66,24 @@ func NewHub(store *chat.Store) *Hub {
 		events:     make(chan targetedEvent, 64),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		evict:      make(chan evictReq),
 	}
+}
+
+// EvictUserFromChannels disconnects every live socket belonging to userID that is
+// subscribed to one of channelIDs. Used when a user loses realtime access (e.g. is
+// kicked from a server) — without this an already-open socket would keep streaming
+// the channel, since access is only checked at connect (ServeWS → CanAccessChannel).
+// Pure in-memory; the actual disconnect runs on the hub goroutine.
+func (h *Hub) EvictUserFromChannels(userID int64, channelIDs []int64) {
+	if len(channelIDs) == 0 {
+		return
+	}
+	set := make(map[int64]bool, len(channelIDs))
+	for _, id := range channelIDs {
+		set[id] = true
+	}
+	h.evict <- evictReq{userID: userID, channels: set}
 }
 
 // BroadcastEvent fans an already-built event out to its channel (derived from the
@@ -91,6 +117,24 @@ func (h *Hub) Run() {
 			h.emitToChannel(msg.ChannelID, Event{Type: "message", Message: &msg})
 		case te := <-h.events:
 			h.emitToChannel(te.channelID, te.event)
+		case ev := <-h.evict:
+			// Collect first (don't mutate the map while detecting matches), then drop
+			// each — mirrors the unregister/emitToChannel drop: delete + close(done),
+			// guarded so `done` is closed at most once. writePump then sends a Close
+			// frame and readPump's deferred unregister becomes a safe no-op.
+			var hit []*Client
+			for c := range h.clients {
+				if c.user.ID == ev.userID && ev.channels[c.channelID] {
+					hit = append(hit, c)
+				}
+			}
+			for _, c := range hit {
+				if _, ok := h.clients[c]; ok {
+					delete(h.clients, c)
+					close(c.done)
+					h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
+				}
+			}
 		}
 	}
 }

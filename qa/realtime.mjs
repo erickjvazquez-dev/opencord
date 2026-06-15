@@ -358,6 +358,42 @@ async function main() {
   check((await ml.locator('.member-group-head').count()) > 0, 'members are grouped by role')
   await a.screenshot({ path: join(SHOTS, 'rt-09-member-list.png') })
 
+  // 8 — Kick (moderation): A (owner) removes B from the server. B disappears from A's
+  // member views. (The WS eviction that cuts B's live access is proven by the Go
+  // integration test; here we verify the user-visible kick UI + removal.)
+  step('A (owner) kicks B → B is removed from the server')
+  await a
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .getByRole('button', { name: 'members' })
+    .click()
+  const aOwnRow = a.locator('.member-row', { hasText: userA })
+  await aOwnRow.waitFor({ timeout: 8000 })
+  // The owner can't kick themselves: no kick button on A's own row.
+  check(
+    (await aOwnRow.getByRole('button', { name: 'kick' }).count()) === 0,
+    "the owner's own row has no kick button (can't kick yourself)",
+  )
+  const bKickRow = a.locator('.member-row', { hasText: userB })
+  check(
+    (await bKickRow.getByRole('button', { name: 'kick' }).count()) > 0,
+    'owner sees a kick button on B’s row (may kick a non-owner)',
+  )
+  await bKickRow.getByRole('button', { name: 'kick' }).click() // confirm auto-accepts
+  await a
+    .locator('.member-row', { hasText: userB })
+    .waitFor({ state: 'detached', timeout: 8000 })
+    .catch(() => {})
+  check(
+    (await a.locator('.member-row', { hasText: userB }).count()) === 0,
+    'B is gone from the members panel after the kick',
+  )
+  await a.screenshot({ path: join(SHOTS, 'rt-10-kicked.png') })
+  await a.locator('.search-results-head .link', { hasText: 'close' }).click().catch(() => {})
+  check(
+    (await a.locator('.member-list [data-member]').filter({ hasText: userB }).count()) === 0,
+    'B is gone from the member-list sidebar after the kick',
+  )
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

@@ -25,6 +25,7 @@ import {
   voiceToken,
   setMessagePinned,
   setServerMemberRole,
+  kickServerMember,
 } from '../api'
 import type {
   Channel,
@@ -759,6 +760,17 @@ export function Chat({
       window.alert(err instanceof Error ? err.message : 'could not change role')
     }
   }
+  const kickMember = async (serverId: number, userId: number, username: string) => {
+    if (!window.confirm(`Kick ${username} from this server?`)) return
+    try {
+      await kickServerMember(token, serverId, userId)
+      const members = await fetchServerMembers(token, serverId)
+      setMembersOf({ serverId, members })
+      if (String(serverId) === activeServerId) setMemberList(members) // sidebar stays in sync
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not kick member')
+    }
+  }
 
   const addServerChannel = async (serverId: number) => {
     const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
@@ -849,8 +861,9 @@ export function Chat({
     .flat()
     .find((c) => c.id === channelId)
   const activeChannelName = current?.name ?? activeServerChannel?.name
-  const iAmServerOwner =
-    membersOf?.members.find((x) => x.userId === user.id)?.role === 'owner'
+  // My role in the server whose member panel is open (owner/admin/member/undefined).
+  const myRoleInPanel = membersOf?.members.find((x) => x.userId === user.id)?.role
+  const iAmServerOwner = myRoleInPanel === 'owner'
   // Moderation: in a server channel, an owner/admin may delete anyone's message.
   const activeServerId = Object.keys(serverChannels).find((sid) =>
     serverChannels[Number(sid)]?.some((c) => c.id === channelId),
@@ -1438,6 +1451,19 @@ export function Chat({
                       {mb.role === 'admin' ? 'demote' : 'make admin'}
                     </button>
                   )}
+                  {/* Kick: owner may remove any non-owner; an admin may remove plain
+                      members only. The server enforces this regardless of the UI. */}
+                  {mb.userId !== user.id &&
+                    mb.role !== 'owner' &&
+                    (myRoleInPanel === 'owner' ||
+                      (myRoleInPanel === 'admin' && mb.role === 'member')) && (
+                      <button
+                        className="link kick-btn"
+                        onClick={() => void kickMember(membersOf.serverId, mb.userId, mb.username)}
+                      >
+                        kick
+                      </button>
+                    )}
                 </div>
               ))}
             </div>

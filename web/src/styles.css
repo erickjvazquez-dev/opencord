@@ -1035,8 +1035,22 @@ button:disabled {
   background: rgba(35, 165, 90, 0.15);
 }
 
+/* Member name grows so the role badge + action buttons cluster on the right. */
+.member-row .author {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .role-toggle {
   margin-left: auto;
+}
+
+/* Kick is destructive — tint it like other danger actions. */
+.kick-btn {
+  color: var(--danger);
 }
 
 .search-results .message {

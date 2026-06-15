@@ -207,6 +207,61 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterKickMemberIntegration walks the kick endpoint (DELETE
+// /servers/{id}/members/{userId}) through the HTTP layer: unauth, the authz matrix,
+// malformed ids, and the success path — asserting the status the store→HTTP mapping
+// returns to a hostile caller (Rule B/15).
+func TestRouterKickMemberIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	admin, adminTok := hs.user(t)
+	member, _ := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Kick Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := hs.store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member: %v", err)
+		}
+	}
+	if err := hs.store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	memberPath := fmt.Sprintf("/api/servers/%d/members/%d", srv.ID, member.ID)
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", memberPath, "", ""), http.StatusUnauthorized, "unauth kick")
+	})
+	t.Run("malformed ids are 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", fmt.Sprintf("/api/servers/abc/members/%d", member.ID), ownerTok, ""), http.StatusBadRequest, "bad server id")
+		wantStatus(t, hs.req(t, "DELETE", fmt.Sprintf("/api/servers/%d/members/xyz", srv.ID), ownerTok, ""), http.StatusBadRequest, "bad user id")
+	})
+	t.Run("non-member/non-admin can't kick", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", memberPath, strangerTok, ""), http.StatusForbidden, "stranger kicks")
+	})
+	t.Run("can't kick the owner", func(t *testing.T) {
+		p := fmt.Sprintf("/api/servers/%d/members/%d", srv.ID, owner.ID)
+		wantStatus(t, hs.req(t, "DELETE", p, adminTok, ""), http.StatusForbidden, "admin kicks owner")
+	})
+	t.Run("kicking a non-member target is 404", func(t *testing.T) {
+		p := fmt.Sprintf("/api/servers/%d/members/%d", srv.ID, owner.ID+99999)
+		wantStatus(t, hs.req(t, "DELETE", p, ownerTok, ""), http.StatusNotFound, "kick non-member")
+	})
+	t.Run("admin kicks a member → 204 and they lose access", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", memberPath, adminTok, ""), http.StatusNoContent, "admin kicks member")
+		if ok, _ := hs.store.IsServerMember(ctx, srv.ID, member.ID); ok {
+			t.Fatal("kicked member should no longer be a server member")
+		}
+		// Kicking the same (now non-member) again is a 404.
+		wantStatus(t, hs.req(t, "DELETE", memberPath, adminTok, ""), http.StatusNotFound, "re-kick non-member")
+	})
+}
+
 // TestRouterMessageEndpointsIntegration covers the edit + reaction REST endpoints,
 // which carry their own authorization (edit is author-only; reactions are gated by
 // channel access) and map store errors to HTTP status. The message under test lives

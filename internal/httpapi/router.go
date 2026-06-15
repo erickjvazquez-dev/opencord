@@ -119,7 +119,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			})
 			r.Get("/dms", chat.HandleListDMs(store))
 			r.Post("/dms", chat.HandleCreateDM(store))
-			mountServerRoutes(r, store)
+			mountServerRoutes(r, store, hub)
 			r.Get("/messages", chat.HandleRecent(store))
 			// Create a message carrying file/image attachments (multipart). Plain
 			// text messages keep flowing over the WS; files don't fit a 4 KiB frame.
@@ -346,7 +346,7 @@ func serverIDParam(r *http.Request) (int64, error) {
 // mountServerRoutes wires the servers/guilds REST surface (auth applied by the
 // caller's group). Server channels are members-only — non-members get 403. Routes
 // are registered flat to avoid chi's trailing-slash matching on a sub-router.
-func mountServerRoutes(r chi.Router, store *chat.Store) {
+func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 	r.Get("/servers", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
 		servers, err := store.ListServers(r.Context(), me.ID)
@@ -494,6 +494,41 @@ func mountServerRoutes(r chi.Router, store *chat.Store) {
 		case err != nil:
 			http.Error(w, `{"error":"could not set role"}`, http.StatusInternalServerError)
 		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	// Kick a member out of a server: {userId} via the path. Owner/admin only; can't
+	// kick the owner or yourself; an admin can't kick a fellow admin (store enforces).
+	r.Delete("/servers/{id}/members/{userId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		targetID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.RemoveServerMember(r.Context(), id, me.ID, targetID); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not remove member"}`, http.StatusInternalServerError)
+		default:
+			// Evict the kicked user's live sockets on this server's channels so they
+			// immediately stop receiving messages (WS access is otherwise only checked
+			// at connect). Best-effort — a channel-lookup error doesn't undo the kick.
+			if chans, err := store.ListServerChannels(r.Context(), id); err == nil {
+				ids := make([]int64, 0, len(chans))
+				for _, c := range chans {
+					ids = append(ids, c.ID)
+				}
+				hub.EvictUserFromChannels(targetID, ids)
+			}
 			w.WriteHeader(http.StatusNoContent)
 		}
 	})

@@ -103,6 +103,22 @@ export async function setServerMemberRole(
   }
 }
 
+// Kick a member out of a server (owner/admin only; server enforces who may act).
+export async function kickServerMember(
+  token: string,
+  serverId: number,
+  userId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/members/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not kick member')
+  }
+}
+
 export async function fetchServerChannels(token: string, serverId: number): Promise<Channel[]> {
   const res = await fetch(`/api/servers/${serverId}/channels`, {
     headers: { Authorization: `Bearer ${token}` },

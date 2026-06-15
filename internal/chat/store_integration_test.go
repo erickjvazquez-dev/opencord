@@ -646,6 +646,82 @@ func TestServerRolesIntegration(t *testing.T) {
 	}
 }
 
+func TestRemoveServerMemberIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	admin := regUser(t, pool)
+	admin2 := regUser(t, pool)
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Kick Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, admin2, member} {
+		if err := store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member %d: %v", u.ID, err)
+		}
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, admin2.ID, "admin"); err != nil {
+		t.Fatalf("promote admin2: %v", err)
+	}
+	ch, err := store.CreateServerChannel(ctx, srv.ID, "kick-chan")
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+
+	// --- forbidden / adversarial cases: none of these may remove anyone (Rule 15) ---
+	cases := []struct {
+		name           string
+		actor, target  int64
+		want           error
+	}{
+		{"plain member can't kick", member.ID, admin.ID, chat.ErrForbidden},
+		{"non-member can't kick", stranger.ID, member.ID, chat.ErrForbidden},
+		{"nobody can kick the owner", admin.ID, owner.ID, chat.ErrForbidden},
+		{"can't kick yourself", admin.ID, admin.ID, chat.ErrForbidden},
+		{"an admin can't kick a fellow admin", admin.ID, admin2.ID, chat.ErrForbidden},
+		{"kicking a non-member target → not found", owner.ID, stranger.ID, chat.ErrUserNotFound},
+	}
+	for _, c := range cases {
+		if err := store.RemoveServerMember(ctx, srv.ID, c.actor, c.target); !errors.Is(err, c.want) {
+			t.Fatalf("%s: err = %v, want %v", c.name, err, c.want)
+		}
+	}
+	// Guard: every member above is still a member (no rejected call removed anyone).
+	for _, u := range []auth.User{admin, admin2, member} {
+		if ok, _ := store.IsServerMember(ctx, srv.ID, u.ID); !ok {
+			t.Fatalf("user %d should still be a member after the rejected kicks", u.ID)
+		}
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, member.ID); !ok {
+		t.Fatal("member should still access the server channel after the rejected kicks")
+	}
+
+	// --- happy paths ---
+	// An admin CAN kick a plain member, who then loses membership AND channel access.
+	if err := store.RemoveServerMember(ctx, srv.ID, admin.ID, member.ID); err != nil {
+		t.Fatalf("admin kicking member: %v", err)
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, member.ID); ok {
+		t.Fatal("kicked member should no longer be a server member")
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, member.ID); ok {
+		t.Fatal("kicked member should lose access to the server's channels")
+	}
+	// The owner CAN kick an admin.
+	if err := store.RemoveServerMember(ctx, srv.ID, owner.ID, admin2.ID); err != nil {
+		t.Fatalf("owner kicking admin: %v", err)
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, admin2.ID); ok {
+		t.Fatal("owner-kicked admin should no longer be a member")
+	}
+}
+
 func TestMessageModerationIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

@@ -946,3 +946,40 @@ zero paid service (Rule A) — avatars live on local disk like attachments.
 - Within-session avatar change needs a reload to reflect (URL is stable, client
   caches the blob) — a cache-bust token is a later polish. Banners, per-server
   nicknames, voice-chip avatars (a different chip structure) are future slices.
+
+## Server moderation — kick a member (v0.3 moderation, parity — iter 91)
+
+**Goal:** an owner/admin removes a member from a server (Discord "Kick"). Builds on the
+existing roles/members infra (`ServerRole`, `SetServerRole`, `ListServerMembers`).
+
+**Authorization (`Store.RemoveServerMember(serverID, actorID, targetID)`):**
+- actor must be `owner` or `admin` of the server (else `ErrForbidden`);
+- can't kick yourself (`ErrForbidden`) — leaving is a separate, future action;
+- nobody can kick the `owner` (`ErrForbidden`; `role <> 'owner'` in the DELETE as
+  defense-in-depth);
+- an `admin` can't kick another `admin` — only the owner can (`ErrForbidden`);
+- target must be a member (`ErrUserNotFound`).
+User is derived from the JWT (Rule C); path/body only supply the target id.
+
+**REST:** `DELETE /api/servers/{id}/members/{userId}` → 204; 400/403/404 on the cases
+above; 401 unauthenticated (parent group).
+
+**Realtime eviction (security-critical):** WS channel access is checked only at *connect*
+(`ServeWS`→`CanAccessChannel`); an open socket otherwise keeps streaming its channel.
+Kick is the first access-*revoking* op, so on success the handler evicts the kicked
+user's live sockets on this server's channels via `Hub.EvictUserFromChannels(userID,
+channelIDs)` — mirrors the hub's existing drop path (delete + close(done) on the hub
+goroutine, no DB, no locks; writePump sends a Close frame, readPump's deferred
+unregister is a safe no-op). The kicked user immediately stops receiving/posting; a
+reconnect 403s. Their authored messages remain (Discord keeps history).
+
+**Client:** members panel gets a `kick` button shown only where the actor may act
+(owner → any non-owner; admin → members only). Confirms, calls the endpoint, refreshes.
+
+**Threat model (Rule B/15 — tested):** non-member/non-admin/admin-vs-admin/self/owner
+kick → 403; non-member target → 404; **kicked user's open WS socket is evicted (proven:
+it stops receiving a subsequently-posted message)** and a fresh WS connect 403s.
+
+**Follow-ups (out of slice):** ban (kick + invite blocklist), timeout/mute, a live "you
+were removed" toast + auto-drop of the server from the kicked user's sidebar (needs a
+targeted WS user-event; today it updates on next refresh).

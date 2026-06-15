@@ -3,7 +3,9 @@ package ws_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -33,6 +35,7 @@ type wsHarness struct {
 	srv     *httptest.Server
 	authsvc *auth.Service
 	store   *chat.Store
+	hub     *ws.Hub
 }
 
 func newWSHarness(t *testing.T) wsHarness {
@@ -56,7 +59,7 @@ func newWSHarness(t *testing.T) wsHarness {
 	go hub.Run() // register/history fan-out is drained by Run; the success dial needs it.
 	srv := httptest.NewServer(ws.ServeWS(hub, authsvc, store))
 	t.Cleanup(srv.Close)
-	return wsHarness{srv: srv, authsvc: authsvc, store: store}
+	return wsHarness{srv: srv, authsvc: authsvc, store: store, hub: hub}
 }
 
 var wsUserSeq int64
@@ -528,4 +531,102 @@ func TestServeWSHostileFrameHandling(t *testing.T) {
 		}
 	}
 	t.Log("hostile-frame guard: connection survived the battery; no hostile content persisted; bad replyTo dropped")
+}
+
+// wsWaitForBody reads frames from conn until it sees a message with the given body
+// or `within` elapses. Returns false on any read error (closed/timeout) — useful
+// both to assert receipt and (negatively) non-receipt.
+func wsWaitForBody(t *testing.T, conn *gws.Conn, body string, within time.Duration) bool {
+	t.Helper()
+	_ = conn.SetReadDeadline(time.Now().Add(within))
+	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return false
+		}
+		if strings.Contains(string(data), `"body":"`+body+`"`) {
+			return true
+		}
+	}
+}
+
+// TestServeWSEvictOnKickIntegration is the security proof for kicking (Rule 15). WS
+// channel access is checked only at connect (ServeWS→CanAccessChannel), so an already
+// open socket would keep streaming the channel after the user loses membership. The
+// kick path (store.RemoveServerMember + Hub.EvictUserFromChannels) must terminate the
+// kicked user's live socket so they immediately stop receiving — while a still
+// connected owner is unaffected.
+func TestServeWSEvictOnKickIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := h.user(t)
+	member, memberTok := h.user(t)
+
+	srv, err := h.store.CreateServer(ctx, owner.ID, "Evict Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := h.store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	ch, err := h.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	chQ := fmt.Sprintf("?channel=%d&token=", ch.ID)
+
+	ownerConn, _ := h.dial(t, chQ+ownerTok)
+	if ownerConn == nil {
+		t.Fatal("owner failed to connect")
+	}
+	defer ownerConn.Close()
+	memberConn, _ := h.dial(t, chQ+memberTok)
+	if memberConn == nil {
+		t.Fatal("member failed to connect")
+	}
+	defer memberConn.Close()
+
+	// Sanity: while still a member, the member receives the owner's message live.
+	if err := ownerConn.WriteMessage(gws.TextMessage, []byte(`{"body":"before kick"}`)); err != nil {
+		t.Fatalf("owner write: %v", err)
+	}
+	if !wsWaitForBody(t, memberConn, "before kick", 4*time.Second) {
+		t.Fatal("member should receive the owner's message BEFORE being kicked")
+	}
+
+	// Kick, then evict the kicked user's live sockets — exactly what the DELETE route does.
+	if err := h.store.RemoveServerMember(ctx, srv.ID, owner.ID, member.ID); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	h.hub.EvictUserFromChannels(member.ID, []int64{ch.ID})
+
+	// The member's socket must be CLOSED by eviction. Read until an error; a close
+	// error proves eviction, a timeout would mean it stayed open (false positive guard).
+	_ = memberConn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	evicted := false
+	for i := 0; i < 30; i++ {
+		_, _, err := memberConn.ReadMessage()
+		if err == nil {
+			continue // a leftover history/presence frame — keep reading
+		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			break // timed out with the socket still open → NOT evicted
+		}
+		evicted = true // a non-timeout read error = the server closed our socket
+		break
+	}
+	if !evicted {
+		t.Fatal("kicked member's socket should be closed by eviction, but it stayed open (leak)")
+	}
+
+	// The channel still works for the owner (eviction was targeted, not a teardown).
+	if err := ownerConn.WriteMessage(gws.TextMessage, []byte(`{"body":"after kick"}`)); err != nil {
+		t.Fatalf("owner write 2: %v", err)
+	}
+	if !wsWaitForBody(t, ownerConn, "after kick", 4*time.Second) {
+		t.Fatal("the owner — still connected — should receive a message posted after the kick")
+	}
+	t.Log("kick eviction: member's live socket closed; owner unaffected")
 }
