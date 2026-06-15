@@ -15,6 +15,7 @@ run one command, and you have your own real-time chat server.
 > channels under a members-only server) · **direct messages** (private, members-only) ·
 > live messaging with **edit & delete** (owner-only) · **emoji reactions** (live
 > counts) · **replies** · **@mentions** with autocomplete · **markdown** ·
+> **file & image attachments** (local-disk, access-gated, inline images) ·
 > **grouped messages** (consecutive same-author) · **message search**
 > (in-channel) · **typing indicators** · online presence · **initials avatars** ·
 > **voice channels** (WebRTC — mute, deafen, push-to-talk + global hotkey,
@@ -78,6 +79,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `OPENCORD_SFU_URL`   | _(empty → mesh)_         | Optional LiveKit SFU URL for large voice calls (opt-in)      |
 | `OPENCORD_SFU_KEY`   | _(empty)_                | LiveKit API key (only with `OPENCORD_SFU_URL`)              |
 | `OPENCORD_SFU_SECRET`| _(empty)_                | LiveKit API secret (only with `OPENCORD_SFU_URL`)          |
+| `OPENCORD_UPLOAD_DIR`| `data/uploads`           | Where message attachments are stored on local disk (Rule A — no object store; mount a volume here to persist across restarts) |
 
 ## API surface
 
@@ -101,6 +103,8 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/servers/{id}/members`    | bearer | List members with roles (members only)         |
 | `POST`   | `/api/servers/{id}/roles`      | bearer | Set a member's role (owner only) `{userId,role}` |
 | `GET`    | `/api/messages?channel=<id>`   | bearer | Recent history (DM channels: members only)     |
+| `POST`   | `/api/messages`                | bearer | Send a message with file/image attachments (multipart: `channelId`, `body?`, `files`) |
+| `GET`    | `/api/attachments/{id}`        | bearer | Download an attachment (access-gated to the channel's members) |
 | `GET`    | `/api/messages/search?channel=<id>&q=` | bearer | Search a channel's messages (members only) |
 | `PATCH`  | `/api/messages/{id}`           | bearer | Edit your own message `{body}`                 |
 | `DELETE` | `/api/messages/{id}`           | bearer | Delete a message (author, or a server admin)   |

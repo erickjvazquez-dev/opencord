@@ -59,6 +59,22 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 CREATE INDEX IF NOT EXISTS reactions_message_id_idx ON reactions (message_id);
 
+-- Attachments (v0.4): files/images carried by a message. The bytes live on the
+-- server's local disk under OPENCORD_UPLOAD_DIR keyed by `storage_key` (a
+-- server-generated opaque random name — the client filename is display-only and is
+-- NEVER used as a path, so traversal is impossible). content_type is the sniffed
+-- type (never the client's claim). Deleting a message cascades its rows.
+CREATE TABLE IF NOT EXISTS attachments (
+    id           BIGSERIAL PRIMARY KEY,
+    message_id   BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    storage_key  TEXT NOT NULL,
+    filename     TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size         BIGINT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS attachments_message_id_idx ON attachments (message_id);
+
 -- Direct messages (v0.2): a DM is a channel of kind 'dm' with exactly two members.
 -- Public channels keep kind='public' and have no membership rows (open to everyone).
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'public';

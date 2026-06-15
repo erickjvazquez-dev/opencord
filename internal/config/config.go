@@ -28,6 +28,10 @@ type Config struct {
 	SFUURL    string
 	SFUKey    string
 	SFUSecret string
+	// UploadDir is where message attachments are written on local disk (Rule A:
+	// no external object store). Default `data/uploads` (gitignored). A self-hoster
+	// mounts a volume here for persistence; container filesystems are ephemeral.
+	UploadDir string
 }
 
 func Load() Config {
@@ -48,6 +52,7 @@ func Load() Config {
 		SFUURL:            env("OPENCORD_SFU_URL", ""),
 		SFUKey:            env("OPENCORD_SFU_KEY", ""),
 		SFUSecret:         env("OPENCORD_SFU_SECRET", ""),
+		UploadDir:         env("OPENCORD_UPLOAD_DIR", "data/uploads"),
 	}
 }
 

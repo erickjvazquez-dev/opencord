@@ -17,6 +17,7 @@ import {
   redeemInvite,
   removeReaction,
   searchMessages,
+  sendAttachments,
   setChannelPolicy,
   setChannelSlowmode,
   setChannelTopic,
@@ -35,6 +36,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
+import { AttachmentList } from './Attachment'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
 
@@ -152,6 +154,9 @@ export function Chat({
   const [online, setOnline] = useState(0)
   const [connected, setConnected] = useState(false)
   const [draft, setDraft] = useState('')
+  // Attachments staged in the composer (sent over HTTP multipart, not the WS).
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
   // Reply target: non-null shows the "Replying to …" bar and tags the next send.
@@ -209,6 +214,7 @@ export function Chat({
   const [mentionIndex, setMentionIndex] = useState(0)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const mentionRange = useRef<{ start: number; len: number } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
@@ -256,6 +262,8 @@ export function Chat({
     setSearchQuery('')
     setMembersOf(null)
     setMentionMatches([])
+    setPendingFiles([])
+    if (fileInputRef.current) fileInputRef.current.value = ''
 
     // The channel WebSocket carries chat, presence, AND voice/screen-share signaling.
     // Networks drop (Wi-Fi blips, sleep, a proxy closing an idle socket), so we
@@ -368,11 +376,48 @@ export function Chat({
 
   const submitDraft = () => {
     const body = draft.trim()
+    // Attachments go over HTTP multipart (files don't fit a 4 KiB WS frame); a
+    // plain message goes over the WS. With files, the body is optional.
+    if (pendingFiles.length > 0) {
+      void sendPending(body)
+      return
+    }
     if (!body || wsRef.current?.readyState !== WebSocket.OPEN) return
     wsRef.current.send(JSON.stringify({ body, replyTo: replyingTo?.id }))
     setDraft('')
     setReplyingTo(null)
     setMentionMatches([])
+  }
+
+  // Upload the staged files (plus the optional body) over HTTP multipart. The server
+  // broadcasts the finished message, so it renders via the WS echo like any other —
+  // we don't append it locally (avoids a double-render).
+  const sendPending = async (body: string) => {
+    if (channelId == null || uploading) return
+    setUploading(true)
+    try {
+      await sendAttachments(token, channelId, body, pendingFiles, replyingTo?.id)
+      setDraft('')
+      setReplyingTo(null)
+      setMentionMatches([])
+      setPendingFiles([])
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'could not send attachment')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // Stage files chosen via the 📎 picker (capped at 10, matching the server).
+  const onFilesPicked = (list: FileList | null) => {
+    if (!list || list.length === 0) return
+    setPendingFiles((prev) => [...prev, ...Array.from(list)].slice(0, 10))
+  }
+
+  const removePendingFile = (idx: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx))
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const send = (e: FormEvent) => {
@@ -1546,6 +1591,9 @@ export function Chat({
                   ) : (
                     <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}</div>
                   )}
+                  {!m.deleted && (m.attachments?.length ?? 0) > 0 && (
+                    <AttachmentList token={token} attachments={m.attachments!} />
+                  )}
                   {pickerFor === m.id && !m.deleted && (
                     <div className="emoji-picker">
                       {QUICK_EMOJIS.map((e) => (
@@ -1628,7 +1676,41 @@ export function Chat({
             ))}
           </div>
         )}
+        {pendingFiles.length > 0 && (
+          <div className="pending-files" aria-label="files to send">
+            {pendingFiles.map((f, i) => (
+              <span className="pending-file" key={`${f.name}-${f.size}-${i}`}>
+                <span className="pending-file-name">{f.name}</span>
+                <button
+                  type="button"
+                  className="pending-file-remove"
+                  aria-label={`remove ${f.name}`}
+                  onClick={() => removePendingFile(i)}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <form className="composer" onSubmit={send}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="file-input-hidden"
+            onChange={(e) => onFilesPicked(e.target.files)}
+          />
+          <button
+            type="button"
+            className="attach-btn"
+            aria-label="attach files"
+            title="Attach files"
+            disabled={!connected || !canPost || uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            📎
+          </button>
           <textarea
             ref={composerRef}
             className="composer-input"
@@ -1688,7 +1770,11 @@ export function Chat({
             }}
             disabled={!connected || !canPost}
           />
-          <button disabled={!connected || !canPost || !draft.trim()}>Send</button>
+          <button
+            disabled={!connected || !canPost || uploading || (!draft.trim() && pendingFiles.length === 0)}
+          >
+            {uploading ? 'Sending…' : 'Send'}
+          </button>
         </form>
       </div>
 

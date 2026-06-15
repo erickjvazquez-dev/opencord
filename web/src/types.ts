@@ -49,6 +49,17 @@ export interface Reaction {
   mine?: boolean
 }
 
+// A file/image attached to a message. `url` is the access-gated serve endpoint
+// (/api/attachments/{id}); the client fetches it with its bearer token and renders
+// via an object URL, so the session JWT never leaks into an <img src>.
+export interface Attachment {
+  id: number
+  filename: string
+  contentType: string
+  size: number
+  url: string
+}
+
 export interface Message {
   id: number
   channelId: number
@@ -65,6 +76,8 @@ export interface Message {
   replyTo?: number
   replyToAuthor?: string
   replyToBody?: string
+  // Files/images carried by this message (unset when none).
+  attachments?: Attachment[]
 }
 
 export interface ServerEvent {

@@ -120,7 +120,15 @@ tunnel, paid cloud only for 24/7 hosting.**
   per-share playback volume independent of voice. `voice-screen` WS frame (Rule-B bounded).
   Two-client E2E (B receives a live video track) + AI-vision verified. SFU path + true
   thousands-scale screen share still TODO.
-- [ ] File/image uploads + media proxy
+- [~] File/image uploads — **DONE for messages**: attach files/images to a message
+  (composer 📎 → multi-file staging → send). Stored on **local disk** under
+  `OPENCORD_UPLOAD_DIR` (Rule A, no object store), opaque random keys (no path
+  traversal), sniffed content type + nosniff + attachment-disposition for non-images
+  (no inline script), access-gated serve (`CanAccessChannel`, non-member 403). Images
+  render inline (fetched via authed blob so the JWT never hits an `<img src>`), other
+  files as a download chip. Limits: ≤10 files, ≤8 MiB each, ≤40 MiB/request.
+  Adversarial-tested (Rule 15) + browser-QA + AI-vision verified. TODO: link
+  embeds/previews, video transcode, durable/managed media store (Cloud tier).
 - [ ] Federation / multi-instance
 - [ ] Plugin/bot API
 
@@ -192,7 +200,9 @@ item from here as the structural milestones above land.
   channel-active usernames; ↑/↓ to move, Enter/Tab to accept, Esc to dismiss,
   click-to-insert) — E2E + AI-vision verified. (@role, delivery/notifications,
   threads still TODO)
-- [ ] File / image / video attachments · link embeds + previews
+- [~] File / image attachments — DONE (composer 📎, multipart upload, local-disk
+  store, access-gated serve, inline images + download chips; Rule-15 hardened +
+  vision-verified). Video transcode · link embeds + previews still TODO
 - [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
   WS update, and a "pins" panel listing all of a channel's pins; E2E + AI-vision
   verified. (bookmarks, read state / unread / mention badges TODO)

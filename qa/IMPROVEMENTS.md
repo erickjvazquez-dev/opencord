@@ -1483,3 +1483,28 @@ Reflections from the first run:
   down -v`), or stale data breaks assertions (two `(edited)` elements). Done.
 - **Next QA growth:** add reaction-chip assertions when the reactions UI ships; add
   a two-context typing-indicator check; assert per-channel message isolation in the UI.
+
+## 2026-06-15 — File/image attachments shipped + a meta-QA fix
+
+Shipped message file/image attachments end-to-end (composer 📎 → multipart upload →
+local-disk store → access-gated serve → inline image / download chip), Rule-15
+hardened (9 adversarial sub-tests: path traversal, oversized, XSS-as-download, DM
+access bypass, auth) and browser-QA + AI-vision verified.
+
+**Meta-QA fix (the highest-value lesson this tick):** the first browser-QA upload
+assertion used a **1×1 PNG**. Every check passed (`isVisible`, `naturalWidth > 0`)
+— but the AI-vision screenshot showed *nothing* (a 1-pixel dot is invisible), so the
+mandatory interaction-vision review (Step 4b-i) couldn't actually confirm the image
+renders. A test that's mechanically green but produces no human-visible artifact is a
+**QA blind spot**, the exact class GAP-026 warns about. Fix: `qa/browser.mjs` now
+generates a real **240×140 solid-colour PNG** (`makePng` via `zlib.deflateSync` +
+`zlib.crc32`) so the rendered image is plainly visible and vision-gradeable. Re-ran →
+the blurple rectangle renders inline cleanly (`06c-attachment-image.png`).
+
+- **Loop-process rule (apply every tick):** any browser-QA flow whose correctness is
+  judged BY EYE must upload/produce a **visibly-sized** artifact, never a degenerate
+  fixture that passes the DOM check but is invisible to vision. Prefer a generated
+  fixture with real dimensions/colour over a minimal blob.
+- **Next QA growth:** two-client attachment propagation (A uploads → B sees the image
+  live over the WS, the realtime path the single-client QA can't prove); a
+  non-image (download-chip) render assertion; an oversized-file UI-error vision check.

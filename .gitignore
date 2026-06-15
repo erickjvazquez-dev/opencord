@@ -21,5 +21,8 @@ web/vite.config.d.ts
 # Claude Code loop artifacts (transient lock written by /self-improve-opencord)
 .claude/scheduled_tasks.lock
 
+# Local attachment uploads (Rule A: on-disk, self-hosted)
+/data/
+
 # OS
 .DS_Store

@@ -244,6 +244,42 @@ export async function openDM(token: string, identifier: string): Promise<DMChann
   return data as DMChannel
 }
 
+// Send a message carrying file/image attachments (multipart). Body is optional when
+// files are present; the server broadcasts the finished message over the WS, so the
+// caller relies on the WS echo to render it (same as a plain message). `replyTo` is
+// optional. Returns nothing; throws with the server's error on failure.
+export async function sendAttachments(
+  token: string,
+  channelId: number,
+  body: string,
+  files: File[],
+  replyTo?: number,
+): Promise<void> {
+  const form = new FormData()
+  form.append('channelId', String(channelId))
+  if (body) form.append('body', body)
+  if (replyTo != null) form.append('replyTo', String(replyTo))
+  for (const f of files) form.append('files', f)
+  // NOTE: don't set Content-Type — the browser sets the multipart boundary.
+  const res = await fetch('/api/messages', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok && res.status !== 201) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || `could not send (${res.status})`)
+  }
+}
+
+// Fetch an access-gated attachment's bytes with the bearer token and return a blob
+// (the caller wraps it in an object URL). Keeps the JWT out of any <img src>/URL.
+export async function fetchAttachment(token: string, url: string): Promise<Blob> {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`could not load attachment (${res.status})`)
+  return res.blob()
+}
+
 export async function editMessage(token: string, id: number, body: string): Promise<void> {
   const res = await fetch(`/api/messages/${id}`, {
     method: 'PATCH',

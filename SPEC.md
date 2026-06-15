@@ -851,3 +851,59 @@ can only capture keys while focused, no OS-global hook).
   **suppressed while focused in the composer**; rebind-capture (→ KeyV) then the rebound key
   transmits. Web build + tsc + vitest green; AI-vision on `voice-05-ptt-talking.png` (the
   `key:` control sits cleanly in the dense bar).
+
+## File / image attachments (v0.4, 2026-06-15)
+
+Discord's most-used messaging feature that Opencord still lacked: attaching files
+and images to a message. Self-hostable with zero paid service (Rule A) — files
+live on the server's **local disk**, never an external object store.
+
+### Design
+
+- **Storage (Rule A):** files are written under `OPENCORD_UPLOAD_DIR` (default
+  `data/uploads`, gitignored). Each file's on-disk name is a server-generated
+  32-hex-char **opaque key** (`crypto/rand`) — the client's filename is NEVER used
+  as a path, so path-traversal is structurally impossible. The original filename is
+  stored only as display metadata. (Container filesystems are ephemeral; a
+  self-hoster mounts a volume at the upload dir, a cloud host uses a managed volume —
+  out of scope for this slice.)
+- **Upload (`POST /api/messages`, multipart/form-data):** the one path that creates
+  a message carrying attachments. Reuses the existing post authorization
+  (`CanPostInChannel` read-only + slowmode checks live in the store), derives the
+  user from the JWT (Rule C), then creates the message + attachment rows in **one
+  transaction** and broadcasts the finished message over the hub exactly like a WS
+  message (`Event{Type:"message"}`). Plain text messages keep flowing over the WS;
+  only attachment messages take this HTTP path (files don't fit a 4 KiB WS frame).
+- **Serve (`GET /api/attachments/{id}`):** access-gated — resolves the attachment's
+  message → channel and runs `CanAccessChannel(channel, viewer)` (Rule B/C); a
+  non-member gets 403, never the bytes. Served with the **sniffed** content type
+  (`http.DetectContentType`, never the client's claim), `X-Content-Type-Options:
+  nosniff`, and `Content-Disposition: attachment` for everything except a small
+  inline-image allowlist (png/jpeg/gif/webp) — so an uploaded `.html`/SVG can never
+  execute script in our origin. The client fetches with its Bearer token and renders
+  via an object URL, so the session JWT never leaks into an `<img src>`/URL/referer.
+
+### Limits (Rule B — bound every inbound payload)
+
+- ≤ 10 files per message; ≤ 8 MiB per file; ≤ 40 MiB total request
+  (`http.MaxBytesReader`). Body (optional for an attachment message) ≤ 4096 bytes,
+  matching the WS message cap. Zero files → 400 (this endpoint is attachments-only).
+
+### Threat model (Rule 15 — verified by tests)
+
+- **Path traversal** via a `../../etc/passwd` filename → impossible (opaque key; the
+  client filename is metadata only). Test: a traversal filename stores under the dir.
+- **Oversized** file/body → 413/400, nothing written. **Disallowed inline type** →
+  still uploadable but served as a download (nosniff + attachment disposition).
+- **Access bypass:** a non-member uploading to, or downloading from, a channel they
+  can't access → 403. A revoked/garbage JWT → 401 (auth middleware).
+- **XSS via served file:** nosniff + attachment disposition for non-images; inline
+  only for the image allowlist.
+
+### Client
+
+A 📎 button + hidden multi-file input in the composer; selected files show as
+removable chips above the input; Send uploads them (body optional). Messages render
+images inline (capped size, click to open) and other files as a download chip
+(icon + name + size) below the body. History (`GET /api/messages`) includes each
+message's attachments so a reload still shows them.

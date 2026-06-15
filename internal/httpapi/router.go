@@ -121,6 +121,11 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Post("/dms", chat.HandleCreateDM(store))
 			mountServerRoutes(r, store)
 			r.Get("/messages", chat.HandleRecent(store))
+			// Create a message carrying file/image attachments (multipart). Plain
+			// text messages keep flowing over the WS; files don't fit a 4 KiB frame.
+			r.Post("/messages", handleUploadMessage(cfg.UploadDir, store, hub))
+			// Access-gated serve of a message attachment's bytes.
+			r.Get("/attachments/{id}", handleServeAttachment(cfg.UploadDir, store))
 			r.Get("/messages/search", chat.HandleSearch(store))
 			r.Get("/messages/pins", chat.HandlePins(store))
 			// Mint a join token for the optional LiveKit SFU (large voice calls).

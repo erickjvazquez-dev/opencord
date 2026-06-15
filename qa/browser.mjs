@@ -8,9 +8,44 @@ import { chromium } from 'playwright'
 import { AxeBuilder } from '@axe-core/playwright'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import zlib from 'node:zlib'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:5173'
 const SHOTS = process.env.QA_SHOTS || join(import.meta.dirname, 'qa-screenshots')
+
+// Build a real, visibly-sized solid-colour PNG for the upload flow — so the
+// AI-vision review actually SEES a rendered image, not a 1px dot. (8-bit RGB.)
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4)
+  len.writeUInt32BE(data.length)
+  const typed = Buffer.concat([Buffer.from(type, 'ascii'), data])
+  const crc = Buffer.alloc(4)
+  crc.writeUInt32BE(zlib.crc32(typed) >>> 0)
+  return Buffer.concat([len, typed, crc])
+}
+function makePng(w, h, [r, g, b]) {
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0)
+  ihdr.writeUInt32BE(h, 4)
+  ihdr[8] = 8 // bit depth
+  ihdr[9] = 2 // colour type: truecolour RGB
+  const row = Buffer.alloc(1 + w * 3) // leading filter byte (0) + RGB pixels
+  for (let x = 0; x < w; x++) {
+    row[1 + x * 3] = r
+    row[2 + x * 3] = g
+    row[3 + x * 3] = b
+  }
+  const raw = Buffer.concat(Array.from({ length: h }, () => row))
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  return Buffer.concat([
+    sig,
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', zlib.deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
+// A 240×140 blurple rectangle — sniffs as image/png and renders visibly inline.
+const PNG_FIXTURE = makePng(240, 140, [88, 101, 242])
 
 let failed = 0
 const step = (s) => console.log('  → ' + s)
@@ -305,6 +340,33 @@ async function main() {
   check(
     (await follow.locator('.avatar').count()) === 1,
     'follow-up un-groups (avatar returns) when the message above it is deleted',
+  )
+
+  // 6c — Attachments: stage an image via the 📎 picker → it shows as a pending chip →
+  // Send → it renders inline (and actually decodes) in the message. (file/image
+  // attachments — the HTTP multipart path, not the WS.)
+  step('attach an image via 📎 → pending chip → send → inline image renders')
+  await page.waitForTimeout(3000) // rate-limit refill before the send
+  await page.locator('.composer input[type=file]').setInputFiles({
+    name: 'qa-pic.png',
+    mimeType: 'image/png',
+    buffer: PNG_FIXTURE,
+  })
+  await page.locator('.pending-file-name').waitFor({ timeout: 8000 })
+  await shot('06c-pending-file.png')
+  check(await page.locator('.pending-file-name').isVisible(), 'staged file shows as a pending chip')
+  await page.getByRole('button', { name: /Send|Sending/ }).click()
+  const imgAttach = page.locator('.message .attachment-image').last()
+  await imgAttach.waitFor({ timeout: 12000 })
+  await shot('06c-attachment-image.png')
+  check(await imgAttach.isVisible(), 'uploaded image renders inline in the message')
+  check(
+    await imgAttach.evaluate((el) => el.complete && el.naturalWidth > 0),
+    'inline image actually decoded (naturalWidth > 0), not a broken-image icon',
+  )
+  check(
+    (await page.locator('.pending-files').count()) === 0,
+    'the pending-files strip clears after sending',
   )
 
   // 7 — Servers: create a server, add a channel under it, and post in that channel.

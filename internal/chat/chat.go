@@ -84,11 +84,11 @@ type ServerMember struct {
 func ValidChannelName(name string) bool { return channelNameRe.MatchString(name) }
 
 type Message struct {
-	ID        int64     `json:"id"`
-	ChannelID int64     `json:"channelId"`
-	UserID    int64     `json:"userId"`
-	Username  string    `json:"username"`
-	Body      string     `json:"body"`
+	ID        int64             `json:"id"`
+	ChannelID int64             `json:"channelId"`
+	UserID    int64             `json:"userId"`
+	Username  string            `json:"username"`
+	Body      string            `json:"body"`
 	CreatedAt time.Time         `json:"createdAt"`
 	EditedAt  *time.Time        `json:"editedAt,omitempty"`
 	Deleted   bool              `json:"deleted,omitempty"`
@@ -101,6 +101,29 @@ type Message struct {
 	ReplyTo       *int64 `json:"replyTo,omitempty"`
 	ReplyToAuthor string `json:"replyToAuthor,omitempty"`
 	ReplyToBody   string `json:"replyToBody,omitempty"`
+	// Attachments (v0.4): files/images carried by the message, served access-gated
+	// from /api/attachments/{id}. Unset when the message has none.
+	Attachments []Attachment `json:"attachments,omitempty"`
+}
+
+// Attachment is a file/image on a message as seen by a client. URL is the
+// access-gated serve endpoint (the client fetches it with its bearer token).
+type Attachment struct {
+	ID          int64  `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+	URL         string `json:"url"`
+}
+
+// NewAttachment is an already-stored file (bytes written to disk under StorageKey)
+// awaiting its DB row, passed to SaveWithAttachments. Filename/ContentType are
+// metadata only; StorageKey is the opaque on-disk name (no client input).
+type NewAttachment struct {
+	StorageKey  string
+	Filename    string
+	ContentType string
+	Size        int64
 }
 
 // ReactionSummary aggregates one emoji on a message. Mine is true when the
@@ -154,27 +177,8 @@ func (s *Store) SaveReply(ctx context.Context, channelID, userID int64, username
 		return Message{}, ErrSlowMode
 	}
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
-	// Validate + denormalize the reply reference. A reference that doesn't resolve
-	// to a message in THIS channel is dropped (replyTo := nil) so the INSERT stores
-	// no link and the preview stays empty.
-	if replyTo != nil {
-		var refChannel int64
-		var refAuthor, refBody string
-		var refDeleted *time.Time
-		err := s.pool.QueryRow(ctx,
-			`SELECT m.channel_id, u.username, m.body, m.deleted_at
-			   FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = $1`, *replyTo).
-			Scan(&refChannel, &refAuthor, &refBody, &refDeleted)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows) || (err == nil && refChannel != channelID):
-			replyTo = nil // bogus or cross-channel — drop the reference
-		case err != nil:
-			return Message{}, err
-		default:
-			m.ReplyTo = replyTo
-			m.ReplyToAuthor = refAuthor
-			m.ReplyToBody = replySnippet(refBody, refDeleted)
-		}
+	if err := s.resolveReply(ctx, s.pool, channelID, &m, &replyTo); err != nil {
+		return Message{}, err
 	}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO messages (channel_id, user_id, body, reply_to) VALUES ($1, $2, $3, $4)
@@ -182,6 +186,139 @@ func (s *Store) SaveReply(ctx context.Context, channelID, userID int64, username
 		channelID, userID, body, replyTo,
 	).Scan(&m.ID, &m.CreatedAt)
 	return m, err
+}
+
+// rowQuerier is the subset of *pgxpool.Pool / pgx.Tx that resolveReply needs, so
+// the reply lookup can run either on the pool or inside a transaction.
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// resolveReply validates + denormalizes m's reply reference against channelID using
+// q. A reference that doesn't resolve to a message in THIS channel is dropped
+// (*replyTo set to nil, m's reply fields left empty) so the INSERT stores no link
+// and the preview stays empty (Rule B/C: a client can't leak a message it can't see
+// through a reply preview). A valid one fills m.ReplyTo/Author/Body.
+func (s *Store) resolveReply(ctx context.Context, q rowQuerier, channelID int64, m *Message, replyTo **int64) error {
+	if *replyTo == nil {
+		return nil
+	}
+	var refChannel int64
+	var refAuthor, refBody string
+	var refDeleted *time.Time
+	err := q.QueryRow(ctx,
+		`SELECT m.channel_id, u.username, m.body, m.deleted_at
+		   FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = $1`, **replyTo).
+		Scan(&refChannel, &refAuthor, &refBody, &refDeleted)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows) || (err == nil && refChannel != channelID):
+		*replyTo = nil // bogus or cross-channel — drop the reference
+	case err != nil:
+		return err
+	default:
+		m.ReplyTo = *replyTo
+		m.ReplyToAuthor = refAuthor
+		m.ReplyToBody = replySnippet(refBody, refDeleted)
+	}
+	return nil
+}
+
+// attachmentURL is the access-gated serve path for an attachment id (the client
+// fetches it with its bearer token).
+func attachmentURL(id int64) string {
+	return "/api/attachments/" + strconv.FormatInt(id, 10)
+}
+
+// SaveWithAttachments creates a message (optionally a reply) carrying one or more
+// already-stored attachments, atomically (message + attachment rows in one tx), and
+// returns it fully populated. Authorization mirrors SaveReply: a read-only channel
+// or active slowmode blocks the post (ErrForbidden / ErrSlowMode) and nothing is
+// written. The caller has already written each file's bytes to disk under its
+// StorageKey and must clean them up if this returns an error.
+func (s *Store) SaveWithAttachments(ctx context.Context, channelID, userID int64, username, body string, replyTo *int64, atts []NewAttachment) (Message, error) {
+	if ok, err := s.CanPostInChannel(ctx, channelID, userID); err != nil {
+		return Message{}, err
+	} else if !ok {
+		return Message{}, ErrForbidden
+	}
+	if blocked, err := s.slowmodeBlocked(ctx, channelID, userID); err != nil {
+		return Message{}, err
+	} else if blocked {
+		return Message{}, ErrSlowMode
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Message{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
+	if err := s.resolveReply(ctx, tx, channelID, &m, &replyTo); err != nil {
+		return Message{}, err
+	}
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO messages (channel_id, user_id, body, reply_to) VALUES ($1, $2, $3, $4)
+		   RETURNING id, created_at`,
+		channelID, userID, body, replyTo,
+	).Scan(&m.ID, &m.CreatedAt); err != nil {
+		return Message{}, err
+	}
+	for _, a := range atts {
+		att := Attachment{Filename: a.Filename, ContentType: a.ContentType, Size: a.Size}
+		if err := tx.QueryRow(ctx,
+			`INSERT INTO attachments (message_id, storage_key, filename, content_type, size)
+			   VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+			m.ID, a.StorageKey, a.Filename, a.ContentType, a.Size,
+		).Scan(&att.ID); err != nil {
+			return Message{}, err
+		}
+		att.URL = attachmentURL(att.ID)
+		m.Attachments = append(m.Attachments, att)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Message{}, err
+	}
+	return m, nil
+}
+
+// AttachmentsForMessages returns attachments keyed by message id for the given ids
+// (oldest row first), so history can render each message's files.
+func (s *Store) AttachmentsForMessages(ctx context.Context, messageIDs []int64) (map[int64][]Attachment, error) {
+	out := make(map[int64][]Attachment)
+	if len(messageIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, message_id, filename, content_type, size
+		   FROM attachments WHERE message_id = ANY($1) ORDER BY id`, messageIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mid int64
+		var a Attachment
+		if err := rows.Scan(&a.ID, &mid, &a.Filename, &a.ContentType, &a.Size); err != nil {
+			return nil, err
+		}
+		a.URL = attachmentURL(a.ID)
+		out[mid] = append(out[mid], a)
+	}
+	return out, rows.Err()
+}
+
+// AttachmentForServe returns an attachment's on-disk storage key + display metadata
+// + the channel of the message it belongs to, for the access-gated serve handler.
+// ErrMessageNotFound when the attachment (or its message) doesn't exist.
+func (s *Store) AttachmentForServe(ctx context.Context, id int64) (storageKey, contentType, filename string, channelID int64, err error) {
+	err = s.pool.QueryRow(ctx,
+		`SELECT a.storage_key, a.content_type, a.filename, m.channel_id
+		   FROM attachments a JOIN messages m ON m.id = a.message_id
+		  WHERE a.id = $1`, id).Scan(&storageKey, &contentType, &filename, &channelID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", 0, ErrMessageNotFound
+	}
+	return storageKey, contentType, filename, channelID, err
 }
 
 // replySnippet renders the short preview of a replied-to message: "[deleted]" if the
@@ -986,8 +1123,13 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 	if err != nil {
 		return nil, err
 	}
+	byAtt, err := s.AttachmentsForMessages(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range msgs {
 		msgs[i].Reactions = byMsg[msgs[i].ID]
+		msgs[i].Attachments = byAtt[msgs[i].ID]
 	}
 	return msgs, nil
 }

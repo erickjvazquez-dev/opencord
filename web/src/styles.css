@@ -773,6 +773,119 @@ button:disabled {
   flex: 1;
 }
 
+/* Attach button (📎) in the composer — subtle, not an accent-filled button. */
+.composer .attach-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+}
+.composer .attach-btn:hover {
+  background: var(--bg-input);
+  color: var(--text);
+}
+.file-input-hidden {
+  display: none;
+}
+
+/* Files staged in the composer, shown above it before sending. */
+.pending-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 18px 0;
+}
+.pending-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text);
+}
+.pending-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pending-file-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0 2px;
+  font-size: 12px;
+}
+.pending-file-remove:hover {
+  color: var(--text);
+}
+
+/* Attachments rendered under a message: inline images + file download chips. */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.attachment-image-link {
+  display: inline-block;
+  line-height: 0;
+}
+.attachment-image {
+  max-width: min(400px, 100%);
+  max-height: 300px;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+.attachment-loading {
+  display: inline-block;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+}
+.attachment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+}
+.attachment-file:hover {
+  border-color: var(--accent);
+}
+.attachment-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.attachment-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.attachment-size {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* In-channel search box (header) + results panel. */
 .search-form {
   flex: 0 1 240px;
