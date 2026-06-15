@@ -3,6 +3,38 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 91) — Kick a member; the feature exposed a latent realtime access leak
+
+Shipped **server kick** (Moderation parity) — owner/admin removes a member, full authz
+matrix. **Component advanced: security → "hostile-input-proof."** The high-value find:
+implementing the FIRST access-*revoking* op surfaced a latent leak — WS channel access
+is checked only at connect (`ServeWS`→`CanAccessChannel`), so a kicked user's already
+open socket would keep streaming the channel. A naive "kick = DELETE the membership row"
+would have shipped a half-secure feature (Rule 15). Fixed by `Hub.EvictUserFromChannels`
+(closes the kicked user's live sockets on the hub goroutine, mirroring the drop path),
+proven by a `-race` ws integration test (5x) AND by the browser (online count drops 2→1
+on kick — the eviction is observable end-to-end, not just in the unit test).
+
+**Highest-value lessons (two):**
+1. **A new mutation can expose a latent invariant gap elsewhere.** Before this, membership
+   only ever GREW (join via invite), so "access checked at connect" was sufficient. Kick
+   broke that assumption. Rule for new ops: ask "does this *revoke* something that an
+   open connection still trusts?" — if so, the realtime layer must be told, not just the DB.
+2. **A flaky pre-existing test surfaced under `-race` and must be fixed, not ignored.**
+   `TestChannelSlowmodeIntegration` waited only 1100ms past a 1s window; under `-race`'s
+   slowdown the server-measured `now()-created_at` could read <1s elapsed → intermittent
+   red. Widened to 1600ms (separate surgical commit, Rule 10). Reinforces the tick-89 rule:
+   run timing/concurrency assertions enough to trust them, and keep margins generous.
+
+- **QA grown this tick:** a two-user kick flow in `qa/realtime.mjs` (owner kicks B → B
+  vanishes from the panel + member-list sidebar; owner's own row has no kick button),
+  plus store/router/ws integration tests. **Coverage gap to watch next:** the kicked
+  user's *own* client has no live "you were removed" UX — it silently reconnect-loops
+  (403). A targeted WS user-event would let the client drop the server cleanly; not yet
+  QA'd because it isn't built. Also: no test yet for an admin (not owner) being unable to
+  kick a fellow admin *through the HTTP layer with the admin's token* (covered at the
+  store layer only).
+
 ## 2026-06-15 (tick 90) — AI-vision caught a header that text-wrapped; the FIRST regression test didn't catch it
 
 Browser-QA AI-vision pass flagged a real **P1**: in a server channel (member-list
