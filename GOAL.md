@@ -42,7 +42,16 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
 
 ## Later
 
-- [ ] Voice/video channels (WebRTC + SFU, e.g. mediasoup)
+- [~] Voice channels (audio) — **NORTH STAR (owner-set 2026-06-14): thousands of
+  participants per call with no fidelity loss, disconnects, or choppiness, using the
+  best open-source tech, free to self-host.** Path: (1) ✅ WS signaling relay; (2) mesh
+  WebRTC client for small calls (2–4, in progress); (3) **open-source SFU** (LiveKit
+  is the leading candidate — Apache-2, Go, scales, free self-host; mediasoup/Janus
+  alternatives) with **active-speaker selection** (forward only the top-N loudest, the
+  Discord/Clubhouse technique) for thousands-scale audio; (4) distributed/cascaded
+  SFUs + optional self-hosted TURN. Adopting an SFU is a Rule-16 decision → run
+  `stack-guardian` first (must be OSS + self-hostable, no required paid tier). Voice
+  must degrade gracefully when an SFU isn't configured (mesh fallback) — Rule A.
 - [ ] Screen share
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
@@ -124,3 +133,9 @@ item from here as the structural milestones above land.
 - Self-hostable with one command; no required paid service.
 - Treat every inbound payload as hostile (validate, bound, reject).
 - Every fix/feature verified end-to-end in the live app before "done" (Rule 14).
+- **Per-component excellence (owner-set 2026-06-14):** every component has its own
+  north star and the loop drives each toward it continuously — not just "feature
+  exists" but "best-in-class." Audio → thousands/HD/no-drops/free (above); chat →
+  instant + lossless realtime; infra → one-command + scales; UI → polished, fast,
+  accessible; security → hostile-input-proof. Use the best open-source tech for each;
+  everything must stay free to self-host.

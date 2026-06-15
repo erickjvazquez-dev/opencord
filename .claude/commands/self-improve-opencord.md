@@ -53,6 +53,18 @@ it NEVER runs ContextForge/Railway commands and NEVER touches any other repo.
    new-user-facing-flow change (Rule 6). Build the minimal thing; for new input
    surfaces do an adversarial pass (Rule 15).
 
+   **Per-component excellence (owner-set 2026-06-14).** Don't stop at "the feature
+   exists" — drive **each component toward its own north star** (see GOAL.md
+   "Non-negotiables" + each component's NORTH STAR note), continuously and in
+   rotation so no component stagnates: **audio** → thousands/HD/no-drops/free (the
+   path is mesh → OSS SFU like LiveKit with active-speaker selection → cascaded SFUs;
+   adopting an SFU runs `stack-guardian` first, Rule 16, and must stay free to
+   self-host); **chat** → instant + lossless realtime; **infra** → one-command +
+   scales; **UI** → polished/fast/accessible; **security** → hostile-input-proof.
+   Each tick, prefer the component furthest from its north star (or the one the owner
+   just flagged). Use the best open-source tech; never adopt anything that isn't free
+   to self-host. Record which component you advanced (and toward what bar) in Step 6.5.
+
 4. **Verify before "done" (Rule 14).** `go build`/`vet`/`test` green is the floor.
    For user-facing changes, boot the stack (`docker compose up -d db` + run the
    server) and exercise it for real (e.g. the two-client WebSocket check) — never
