@@ -66,8 +66,9 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   must degrade gracefully when an SFU isn't configured (mesh fallback) — Rule A.
   Signaling is hardened: a dedicated voice rate bucket bounds a flood (Rule 15),
   and the WS send channel is close-race-proof (`done`-channel, `-race` clean).
-  *Next voice polish: per-user volume/mute, voice-activity/speaking indicator,
-  push-to-talk.*
+  **Active-speaker indicator shipped** (client-side Web Audio VAD → green speaking
+  ring on local + remote chips; E2E + AI-vision verified).
+  *Next voice polish: per-user volume/mute, push-to-talk, deafen.*
 - [ ] Screen share
 - [ ] File/image uploads + media proxy
 - [ ] Federation / multi-instance
@@ -118,8 +119,8 @@ item from here as the structural milestones above land.
   roster with per-peer connection state, crisp DSP, device auto-detect + picker,
   mute (E2E verified). SFU for scale + video calls still TODO.
 - [ ] Screen share / Go Live · soundboard
-- [~] Voice controls — noise suppression + mute shipped; push-to-talk · voice
-  activity/speaking indicator · per-user volume · deafen still TODO
+- [~] Voice controls — noise suppression, mute, and voice-activity/speaking
+  indicator shipped; push-to-talk · per-user volume · deafen still TODO
 
 ### Direct messages
 - [ ] 1:1 DMs · group DMs · friends / friend requests / blocking

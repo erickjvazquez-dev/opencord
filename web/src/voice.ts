@@ -31,6 +31,8 @@ export interface VoicePeer {
   id: number
   username: string
   state: PeerState
+  // True while this peer is actively talking (client-side voice-activity detection).
+  speaking: boolean
 }
 
 // Public STUN only (Rule A: no required paid service). On loopback/LAN, host
@@ -42,6 +44,15 @@ const RTC_CONFIG: RTCConfiguration = {
 // Target outbound Opus bitrate. ~96 kbps mono is comfortably above Discord's
 // default (~64 kbps) for crisper voice while staying cheap on a mesh.
 const VOICE_BITRATE = 96_000
+
+// Voice-activity detection (the "who's talking" ring). A source whose time-domain
+// RMS exceeds VAD_THRESHOLD is loud; it stays flagged "speaking" for VAD_HANG_MS
+// after its last loud sample (hysteresis, so the ring doesn't flicker between
+// syllables). Sampled every VAD_INTERVAL_MS.
+const VAD_THRESHOLD = 0.02
+const VAD_HANG_MS = 250
+const VAD_INTERVAL_MS = 120
+const VAD_FFT_SIZE = 512
 
 // High-quality voice capture. Browser DSP (echo cancellation, noise suppression,
 // auto-gain) is the same toolchain Discord uses; 48 kHz mono keeps Opus crisp.
@@ -80,6 +91,11 @@ interface Peer {
   ignoreOffer: boolean
   polite: boolean
   audioEl: HTMLAudioElement
+  // Voice-activity state: analyser on the remote stream, last-loud timestamp, and
+  // the debounced speaking flag reported to the UI.
+  analyser: AnalyserNode | null
+  loudAt: number
+  speaking: boolean
 }
 
 export class VoiceSession {
@@ -91,11 +107,21 @@ export class VoiceSession {
   // every peer's <audio> sink; input is the constraint for capture.
   private inputDeviceId: string | undefined
   private outputDeviceId = ''
+  // Voice-activity detection: a shared AudioContext, an analyser on the local mic,
+  // a sampling timer, and the local speaking state (debounced like peers').
+  private audioCtx: AudioContext | null = null
+  private localAnalyser: AnalyserNode | null = null
+  private vadTimer: ReturnType<typeof setInterval> | null = null
+  private localLoudAt = 0
+  private localSpeaking = false
 
   constructor(
     private myId: number,
     private send: (frame: VoiceFrame) => void,
     private onRoster: (peers: VoicePeer[]) => void,
+    // Reports the local participant's speaking state (optional; the roster carries
+    // remote peers' speaking state).
+    private onLocalSpeaking?: (speaking: boolean) => void,
   ) {}
 
   // Acquire the mic and announce we're in the call. Rejects if the mic is denied
@@ -110,7 +136,73 @@ export class VoiceSession {
       this.localStream = null
       return
     }
+    this.startVad()
     this.send({ type: 'voice-join' })
+  }
+
+  // Spin up Web Audio metering for the speaking indicator. Best-effort: if Web
+  // Audio is unavailable the call still works, just without the "who's talking" ring.
+  private startVad(): void {
+    try {
+      this.audioCtx = new AudioContext()
+      void this.audioCtx.resume().catch(() => {})
+      if (this.localStream) this.localAnalyser = this.makeAnalyser(this.localStream)
+      const buf = new Uint8Array(new ArrayBuffer(VAD_FFT_SIZE))
+      this.vadTimer = setInterval(() => this.sampleVad(buf), VAD_INTERVAL_MS)
+    } catch {
+      /* Web Audio unavailable — no speaking indicator; voice itself is unaffected. */
+    }
+  }
+
+  // Build an analyser tapping a stream's audio for level metering. Not connected to
+  // the destination, so it never routes audio (no echo); purely a meter.
+  private makeAnalyser(stream: MediaStream): AnalyserNode | null {
+    if (!this.audioCtx) return null
+    try {
+      const src = this.audioCtx.createMediaStreamSource(stream)
+      const an = this.audioCtx.createAnalyser()
+      an.fftSize = VAD_FFT_SIZE
+      an.smoothingTimeConstant = 0.3
+      src.connect(an)
+      return an
+    } catch {
+      return null
+    }
+  }
+
+  // Time-domain RMS of an analyser's current frame (0 = silence, ~1 = full scale).
+  private rms(an: AnalyserNode, buf: Uint8Array<ArrayBuffer>): number {
+    an.getByteTimeDomainData(buf)
+    let sum = 0
+    for (let i = 0; i < buf.length; i++) {
+      const x = (buf[i] - 128) / 128
+      sum += x * x
+    }
+    return Math.sqrt(sum / buf.length)
+  }
+
+  // One VAD tick: refresh each source's last-loud time, recompute the debounced
+  // speaking flags, and notify the UI only when something changed.
+  private sampleVad(buf: Uint8Array<ArrayBuffer>): void {
+    const now = Date.now()
+    if (this.localAnalyser && !this.muted && this.rms(this.localAnalyser, buf) > VAD_THRESHOLD) {
+      this.localLoudAt = now
+    }
+    const localSpeaking = !this.muted && now - this.localLoudAt < VAD_HANG_MS
+    if (localSpeaking !== this.localSpeaking) {
+      this.localSpeaking = localSpeaking
+      this.onLocalSpeaking?.(localSpeaking)
+    }
+    let changed = false
+    for (const peer of this.peers.values()) {
+      if (peer.analyser && this.rms(peer.analyser, buf) > VAD_THRESHOLD) peer.loudAt = now
+      const speaking = now - peer.loudAt < VAD_HANG_MS
+      if (speaking !== peer.speaking) {
+        peer.speaking = speaking
+        changed = true
+      }
+    }
+    if (changed) this.emitRoster()
   }
 
   // Switch the capture device live: re-acquire and hot-swap the track on every
@@ -132,6 +224,8 @@ export class VoiceSession {
     this.localStream?.getTracks().forEach((t) => t.stop())
     this.localStream = next
     this.inputDeviceId = deviceId
+    // Re-tap the new mic for the speaking meter.
+    if (this.audioCtx) this.localAnalyser = this.makeAnalyser(next)
   }
 
   // Route remote audio to a chosen output device (headphones/speakers). '' (or a
@@ -150,6 +244,13 @@ export class VoiceSession {
     if (this.stopped) return
     this.stopped = true
     this.send({ type: 'voice-leave' })
+    if (this.vadTimer) {
+      clearInterval(this.vadTimer)
+      this.vadTimer = null
+    }
+    this.localAnalyser = null
+    void this.audioCtx?.close().catch(() => {})
+    this.audioCtx = null
     for (const id of [...this.peers.keys()]) this.dropPeer(id)
     this.localStream?.getTracks().forEach((t) => t.stop())
     this.localStream = null
@@ -161,6 +262,11 @@ export class VoiceSession {
   toggleMute(): boolean {
     this.muted = !this.muted
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = !this.muted))
+    // Muting immediately clears your speaking ring (don't wait for the hang window).
+    if (this.muted && this.localSpeaking) {
+      this.localSpeaking = false
+      this.onLocalSpeaking?.(false)
+    }
     return this.muted
   }
 
@@ -203,6 +309,9 @@ export class VoiceSession {
       // Total order on ids → the two sides always disagree on politeness.
       polite: this.myId > id,
       audioEl,
+      analyser: null,
+      loudAt: 0,
+      speaking: false,
     }
     this.peers.set(id, peer)
     this.applySink(audioEl)
@@ -228,8 +337,11 @@ export class VoiceSession {
       if (candidate) this.send({ type: 'voice-signal', target: id, signal: { candidate } })
     }
     pc.ontrack = ({ streams }) => {
-      peer.audioEl.srcObject = streams[0] ?? null
+      const stream = streams[0] ?? null
+      peer.audioEl.srcObject = stream
       void peer.audioEl.play().catch(() => {})
+      // Tap the remote stream for the speaking meter.
+      if (stream) peer.analyser = this.makeAnalyser(stream)
     }
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState
@@ -320,6 +432,7 @@ export class VoiceSession {
       id,
       username: p.username,
       state: p.state,
+      speaking: p.speaking,
     }))
     this.onRoster(peers)
   }

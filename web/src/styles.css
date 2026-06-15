@@ -849,6 +849,12 @@ button:disabled {
   background: var(--bg-input);
 }
 
+/* Active-speaker ring — the "who's talking" highlight (Discord-style). */
+.voice-chip.speaking {
+  box-shadow: 0 0 0 2px var(--online);
+  transition: box-shadow 80ms ease-in;
+}
+
 .voice-chip .dot {
   width: 8px;
   height: 8px;

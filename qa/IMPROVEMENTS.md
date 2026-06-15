@@ -3,7 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 61) — closed the false-green test gate (integration tests now actually run)
+## 2026-06-14 (iter 62) — active-speaker indicator (voice polish toward the "crisp" bar)
+
+Shipped the speaking ring (owner's "close the gap Discord has"): client-side Web Audio VAD — one
+`AudioContext`, an `AnalyserNode` per stream (local mic + each remote), a 120 ms RMS sampler with 250 ms
+hysteresis so the ring doesn't flicker. No new signaling: each client detects remote speakers from the audio
+it already receives (nothing to trust/rate-limit — Rule B). `VoicePeer.speaking` + a local-speaking callback
+→ a green `.speaking` ring on the voice-bar chips. E2E + AI-vision verified (the fake mic's tone lit voxb's
+ring in the screenshot).
+
+**Nice QA win:** Chromium's fake mic emits a periodic tone, so the *same* fake-media flags that let voice
+connect headlessly also exercise VAD for free — `qa/voice.mjs` asserts a `[data-speaking="true"]` chip
+appears. The vision check needed a screenshot captured *during* a loud phase (the tone pulses), so the test
+now snaps `voice-03-speaking.png` the instant it first sees the ring rather than at a fixed point — a small
+pattern worth reusing for any time-varying visual.
+
+**Highest-value next item:** the browser QA (`qa/browser.mjs`, single-client) still never touches voice at
+all — voice is only covered by `qa/voice.mjs`. That's fine (voice needs ≥2 peers), but the **single-client
+browser QA should at least assert the "🎙 Join voice" control renders + is gated** (disabled until WS
+connect), so a regression that removes/breaks the entry point is caught even without the multi-peer run.
+Target next tick. Product-wise, **per-user volume sliders** are the next voice-polish step toward the bar.
 
 Fixed the iter-60 P1: the health-gate `go test ./...` ran without `DATABASE_URL`, so every
 `*Integration` test (`t.Skip`ped without a DB) silently no-op'd — the gate reported green while never

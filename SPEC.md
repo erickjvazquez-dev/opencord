@@ -528,3 +528,22 @@ Hardening the voice signaling surface (Rule 15) shipped two backend fixes:
 **Verification:** `TestServeWSVoiceFloodGuard` (Rule 15) — a legitimate burst is
 relayed in full; a 500-frame flood is bounded (no crash). Reproduced the panic first,
 applied the fix, re-attacked → bounded + no panic. Full `go test ./...` + `-race` green.
+
+## Voice — speaking indicator (active-speaker highlight) (v0.4, 2026-06-14)
+
+Polish toward the owner's "crisp / close the gap Discord has" bar: show **who is
+talking**, like Discord's green speaking ring. Fully client-side — no new signaling,
+no server state (Rule A).
+
+- **Detection (Web Audio VAD).** One `AudioContext`; a `MediaStreamSource` +
+  `AnalyserNode` per stream — the local mic and each peer's remote stream. A single
+  ~120 ms timer samples every analyser's time-domain RMS; above a threshold = loud.
+  **Hysteresis**: a source stays "speaking" for ~250 ms after its last loud sample so
+  the ring doesn't flicker between syllables.
+- **Local + remote.** Each client detects remote speakers directly from the audio it
+  already receives (no "I'm speaking" frames to trust or rate-limit — Rule B). Muting
+  forces local speaking off (a disabled track is silence anyway; also gated on `muted`).
+- **UI.** `VoicePeer` gains `speaking`; the session also reports local speaking. The
+  voice-bar chip (incl. "you") gets a `.speaking` class → a green ring/glow.
+- **Verification:** browser QA — with Chromium's fake mic (a tone), join voice and
+  assert a chip gains the speaking state; `data-speaking` is asserted in `qa/voice.mjs`.

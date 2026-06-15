@@ -160,6 +160,22 @@ async function main() {
   await a.screenshot({ path: join(SHOTS, 'voice-01-a-mesh3.png') })
   await c.screenshot({ path: join(SHOTS, 'voice-02-c-mesh3.png') })
 
+  // Chromium's fake mic emits a periodic tone, so voice-activity detection should
+  // light a speaking ring on someone (self or a peer) within a few seconds.
+  step('speaking indicator lights up from the fake mic tone')
+  const speakingSeen = async (page, ms = 9000) => {
+    const end = Date.now() + ms
+    while (Date.now() < end) {
+      if ((await page.locator('[data-speaking="true"]').count()) > 0) {
+        await page.screenshot({ path: join(SHOTS, 'voice-03-speaking.png') })
+        return true
+      }
+      await new Promise((r) => setTimeout(r, 150))
+    }
+    return false
+  }
+  check(await speakingSeen(a), 'A sees a speaking indicator (active-speaker VAD works)')
+
   step('mute toggles the local mic label')
   await a.getByRole('button', { name: 'mute' }).click()
   check(

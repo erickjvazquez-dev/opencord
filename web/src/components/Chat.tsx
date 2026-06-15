@@ -107,6 +107,8 @@ export function Chat({
   const [inCall, setInCall] = useState(false)
   const [muted, setMuted] = useState(false)
   const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
+  // Whether the local user is currently talking (drives their own speaking ring).
+  const [speakingSelf, setSpeakingSelf] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceSession | null>(null)
@@ -219,6 +221,7 @@ export function Chat({
         setInCall(false)
         setVoicePeers([])
         setMuted(false)
+        setSpeakingSelf(false)
       }
       ws.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
@@ -269,6 +272,7 @@ export function Chat({
       user.id,
       (frame) => wsRef.current?.send(JSON.stringify(frame)),
       setVoicePeers,
+      setSpeakingSelf,
     )
     voiceRef.current = session
     try {
@@ -289,6 +293,7 @@ export function Chat({
     setInCall(false)
     setVoicePeers([])
     setMuted(false)
+    setSpeakingSelf(false)
   }
 
   const toggleMute = () => {
@@ -733,11 +738,21 @@ export function Chat({
         {inCall && (
           <div className="voice-bar" role="region" aria-label="voice call">
             <span className="voice-bar-title">🔊 In voice</span>
-            <span className="voice-chip you" data-voice-self>
+            <span
+              className={`voice-chip you${speakingSelf ? ' speaking' : ''}`}
+              data-voice-self
+              data-speaking={speakingSelf}
+            >
               {user.username} (you){muted ? ' · muted' : ''}
             </span>
             {voicePeers.map((p) => (
-              <span key={p.id} className="voice-chip" data-voice-peer data-state={p.state}>
+              <span
+                key={p.id}
+                className={`voice-chip${p.speaking ? ' speaking' : ''}`}
+                data-voice-peer
+                data-state={p.state}
+                data-speaking={p.speaking}
+              >
                 <span className={`dot voice-${p.state}`} aria-hidden />
                 {p.username || `user ${p.id}`}
               </span>
