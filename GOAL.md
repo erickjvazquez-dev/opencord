@@ -15,6 +15,10 @@ The exhaustive target list lives in "## Discord Feature Parity" below.
   boots the compose Postgres, runs the full suite (integration tests now execute), and tears
   it down; `make test` + `CCF_TEST_CMD` point at it. CI already ran them (sets `DATABASE_URL`);
   this brings the local/loop gate to parity. Verified: 20+ `*Integration` tests now RUN, not skip.
+- [ ] **P1 (UI/QA): the in-voice bar has no mobile-viewport check.** It's grown dense (roster +
+  speaking ring + per-peer volume slider + 2 device selectors + mute/leave) and will wrap badly
+  ≤640px. Next: add an in-call AI-vision pass at phone width; if cramped, move per-peer volume into
+  a click-to-open popover (Discord's pattern) instead of an always-visible inline slider. Found iter 63.
 
 ---
 
