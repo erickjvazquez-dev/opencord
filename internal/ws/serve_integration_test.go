@@ -413,3 +413,96 @@ func TestServeWSVoiceFloodGuard(t *testing.T) {
 	}
 	t.Logf("voice flood guard: legit burst relayed in full; flood of %d bounded to %d", flood, got)
 }
+
+// TestServeWSHostileFrameHandling is the inbound-frame adversarial guard (Rule B/15):
+// a VALID, authenticated connection that sends hostile MESSAGE frames must never crash
+// the gateway or persist the hostile content — and the connection must stay usable
+// afterwards. Covers non-JSON garbage, a type-confused field, empty/whitespace/oversized
+// bodies, and a hostile replyTo (bogus / negative id) on the reply path. Frames are paced
+// ~600ms apart so the per-connection rate bucket (burst 5, +2/s) refills and each frame is
+// actually PROCESSED by readPump — isolating frame-handling from rate limiting.
+func TestServeWSHostileFrameHandling(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := h.user(t)
+	srv, err := h.store.CreateServer(ctx, owner.ID, "Hostile Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := h.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+
+	conn, status := h.dial(t, fmt.Sprintf("?channel=%d&token=%s", ch.ID, ownerTok))
+	if conn == nil {
+		t.Fatalf("dial failed (status %d)", status)
+	}
+	defer conn.Close()
+	// Drain server->client frames so the writePump never blocks on us.
+	go func() {
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	// > maxMessageSize (4096, a private const in package ws) — must be dropped at the
+	// size bound, never persisted.
+	oversized := strings.Repeat("A", 5000)
+	send := func(frame string) {
+		t.Helper()
+		if err := conn.WriteMessage(gws.TextMessage, []byte(frame)); err != nil {
+			t.Fatalf("a hostile frame closed the connection (DoS): %v", err)
+		}
+		time.Sleep(600 * time.Millisecond) // let the rate bucket refill (+2/s)
+	}
+
+	// Battery of hostile frames — none may crash the connection or persist content.
+	send(`this is not json at all }{`)        // unparseable → dropped (pre-rate-limit)
+	send(`{"body":12345}`)                     // type confusion (number for string) → unmarshal fails → dropped
+	send(`{"type":"message","body":""}`)       // empty body → dropped
+	send(`{"body":"   \t  "}`)                  // whitespace-only → trims to empty → dropped
+	send(`{"body":"` + oversized + `"}`)        // oversized → dropped at the size bound
+	// Legit body + hostile replyTo: the message MUST persist, but the bogus/negative
+	// reference must be DROPPED (Rule B), leaving ReplyTo nil.
+	send(`{"body":"ok-bogus-reply","replyTo":999999999}`)
+	send(`{"body":"ok-neg-reply","replyTo":-1}`)
+	// Final legit message: if it lands, the connection survived the whole battery.
+	send(`{"body":"final-legit"}`)
+
+	msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 200)
+	if err != nil {
+		t.Fatalf("recent: %v", err)
+	}
+	byBody := map[string]chat.Message{}
+	for _, m := range msgs {
+		byBody[m.Body] = m
+	}
+
+	// 1. Connection survived the battery → the final legit message landed.
+	if _, ok := byBody["final-legit"]; !ok {
+		t.Fatal("connection did not survive the hostile battery (final legit message never persisted)")
+	}
+	// 2. No hostile content persisted.
+	if _, ok := byBody[oversized]; ok {
+		t.Fatal("oversized body (> maxMessageSize) was persisted — size bound bypassed")
+	}
+	for _, banned := range []string{"", "12345", `this is not json at all }{`} {
+		if _, ok := byBody[banned]; ok {
+			t.Fatalf("hostile frame content was persisted: %q", banned)
+		}
+	}
+	// 3. The legit-body / hostile-replyTo messages persisted but with NO reply ref.
+	for _, body := range []string{"ok-bogus-reply", "ok-neg-reply"} {
+		m, ok := byBody[body]
+		if !ok {
+			t.Fatalf("%q (legit body, bad replyTo) should have persisted", body)
+		}
+		if m.ReplyTo != nil {
+			t.Fatalf("%q kept a hostile reply reference (replyTo=%v) — should be dropped", body, *m.ReplyTo)
+		}
+	}
+	t.Log("hostile-frame guard: connection survived the battery; no hostile content persisted; bad replyTo dropped")
+}

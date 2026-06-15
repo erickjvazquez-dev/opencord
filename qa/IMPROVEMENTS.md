@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 75) — adversarial WS-frame guard (security → hostile-input-proof)
+
+Rotated off chat to **security**. The WS suite covered the *handshake* surface (auth 401,
+garbage token, bad channel-id 400, non-member 403) + rate-limit + voice flood, but had **no
+adversarial coverage of the inbound MESSAGE-frame path on a valid connection** — the exact
+"every WS frame is attacker-controlled" surface (Rule B). Added `TestServeWSHostileFrameHandling`:
+over one authenticated connection it fires non-JSON garbage, a type-confused field
+(`{"body":12345}`), empty / whitespace / oversized (>4096) bodies, and a hostile `replyTo`
+(bogus + negative id), paced ~600ms so the rate bucket refills and each frame is actually
+processed (not rate-dropped). Asserts: the connection **survives the whole battery** (a final
+legit message lands), **no hostile content persists** (size bound + empty-reject + unmarshal-drop
+all hold), and the **bad replyTo is dropped** (message posts with ReplyTo nil) — proving the new
+reply path is hostile-input-proof through the LIVE socket, not just the store unit test. No bug
+found; now regression-guarded.
+
+**Balance note (loop-process):** ticks 73→75 were feature(+tests) → test → test. Track 0 is the
+top priority so QA-heavy ticks are legitimate, but next tick should advance a real **product**
+feature (audio **deafen** or **global PTT hotkey**) so the product — not just its test net —
+keeps moving. Per-component rotation: chat ✓(73-74), security ✓(75) → **audio** next.
+
+**Next QA growth:** extend the adversarial test with a cross-channel `replyTo` over the live WS
+(only unit-tested today) and an oversized FRAME (>16384 → triggers the SetReadLimit close path).
+
 ## 2026-06-15 (iter 74) — two-client LIVE reply propagation QA (Track 0)
 
 Closed the coverage gap I logged last tick: replies were proven single-client (browser.mjs
