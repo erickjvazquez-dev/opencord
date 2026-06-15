@@ -743,6 +743,74 @@ func TestChannelPostPolicyIntegration(t *testing.T) {
 	}
 }
 
+// TestChannelSlowmodeIntegration covers the per-channel post cooldown (SPEC
+// "Slowmode"): a non-admin is throttled to one message per window, admins are
+// exempt, the cooldown expires, and only admins can set it (Rule B / Rule 15).
+func TestChannelSlowmodeIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+
+	srv, _ := store.CreateServer(ctx, owner.ID, "Slow Guild")
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	ch, _ := store.CreateServerChannel(ctx, srv.ID, "general")
+
+	// Only admins set slowmode; out-of-range is rejected.
+	if err := store.SetChannelSlowmode(ctx, ch.ID, member.ID, 30); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-admin SetChannelSlowmode = %v, want ErrForbidden", err)
+	}
+	if err := store.SetChannelSlowmode(ctx, ch.ID, owner.ID, 99999); !errors.Is(err, chat.ErrInvalidSlowmode) {
+		t.Fatalf("out-of-range slowmode = %v, want ErrInvalidSlowmode", err)
+	}
+
+	// Owner sets a long cooldown; it shows up on the channel.
+	if err := store.SetChannelSlowmode(ctx, ch.ID, owner.ID, 3600); err != nil {
+		t.Fatalf("owner set slowmode: %v", err)
+	}
+	if sc, _ := store.ListServerChannels(ctx, srv.ID); len(sc) == 0 || sc[0].SlowmodeSeconds != 3600 {
+		t.Fatalf("ListServerChannels should report slowmode: %+v", sc)
+	}
+
+	// Member: first message ok, immediate second blocked.
+	if _, err := store.Save(ctx, ch.ID, member.ID, member.Username, "first"); err != nil {
+		t.Fatalf("member first message: %v", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, member.ID, member.Username, "too soon"); !errors.Is(err, chat.ErrSlowMode) {
+		t.Fatalf("member rapid repost = %v, want ErrSlowMode", err)
+	}
+	// Admins are exempt — owner posts twice in a row.
+	if _, err := store.Save(ctx, ch.ID, owner.ID, owner.Username, "a"); err != nil {
+		t.Fatalf("owner post 1: %v", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, owner.ID, owner.Username, "b"); err != nil {
+		t.Fatalf("owner (admin) should be exempt from slowmode: %v", err)
+	}
+
+	// Cooldown expiry: a fresh channel with a 1s window, then wait it out.
+	ch2, _ := store.CreateServerChannel(ctx, srv.ID, "quick")
+	if err := store.SetChannelSlowmode(ctx, ch2.ID, owner.ID, 1); err != nil {
+		t.Fatalf("set 1s slowmode: %v", err)
+	}
+	if _, err := store.Save(ctx, ch2.ID, member.ID, member.Username, "one"); err != nil {
+		t.Fatalf("member first in ch2: %v", err)
+	}
+	if _, err := store.Save(ctx, ch2.ID, member.ID, member.Username, "fast"); !errors.Is(err, chat.ErrSlowMode) {
+		t.Fatalf("member rapid repost in ch2 = %v, want ErrSlowMode", err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	if _, err := store.Save(ctx, ch2.ID, member.ID, member.Username, "after cooldown"); err != nil {
+		t.Fatalf("member should post after the cooldown elapses: %v", err)
+	}
+
+	// Slowmode is a server-channel setting — not settable on a public channel.
+	pub, _ := store.CreateChannel(ctx, uniqueChannel())
+	if err := store.SetChannelSlowmode(ctx, pub.ID, owner.ID, 5); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("slowmode on public channel = %v, want ErrForbidden", err)
+	}
+}
+
 func hasServer(servers []chat.Server, id int64) bool {
 	for _, s := range servers {
 		if s.ID == id {

@@ -39,6 +39,11 @@ var (
 	ErrInvalidRole = errors.New("invalid role")
 	// ErrInvalidPolicy is returned when a channel posting policy is not valid.
 	ErrInvalidPolicy = errors.New("invalid posting policy")
+	// ErrSlowMode is returned when a non-admin posts again before the channel's
+	// slowmode cooldown has elapsed.
+	ErrSlowMode = errors.New("slow mode active")
+	// ErrInvalidSlowmode is returned when a slowmode value is out of range.
+	ErrInvalidSlowmode = errors.New("invalid slowmode (0..21600 seconds)")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
@@ -109,6 +114,8 @@ type Channel struct {
 	PostPolicy string `json:"postPolicy,omitempty"`
 	// Topic is a short channel description shown in the header (server channels).
 	Topic string `json:"topic,omitempty"`
+	// SlowmodeSeconds is the per-channel post cooldown for non-admins (0 = off).
+	SlowmodeSeconds int `json:"slowmodeSeconds,omitempty"`
 }
 
 type Store struct{ pool *pgxpool.Pool }
@@ -122,6 +129,12 @@ func (s *Store) Save(ctx context.Context, channelID, userID int64, username, bod
 		return Message{}, err
 	} else if !ok {
 		return Message{}, ErrForbidden
+	}
+	// Enforce slowmode (non-admins only) — server-side, can't be bypassed by a client.
+	if blocked, err := s.slowmodeBlocked(ctx, channelID, userID); err != nil {
+		return Message{}, err
+	} else if blocked {
+		return Message{}, ErrSlowMode
 	}
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
 	err := s.pool.QueryRow(ctx,
@@ -150,6 +163,68 @@ func (s *Store) CanPostInChannel(ctx context.Context, channelID, userID int64) (
 		return true, nil
 	}
 	return s.IsServerAdmin(ctx, *serverID, userID)
+}
+
+// slowmodeBlocked reports whether userID must wait before posting in channelID due
+// to slowmode. False when slowmode is off, the user is a server admin, or it's their
+// first message. The cooldown is measured server-side (now() - created_at) so a
+// client can't fake its clock to bypass it (Rule B).
+func (s *Store) slowmodeBlocked(ctx context.Context, channelID, userID int64) (bool, error) {
+	var slowmode int
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT slowmode_seconds, server_id FROM channels WHERE id = $1`, channelID).Scan(&slowmode, &serverID)
+	if err != nil {
+		return false, err
+	}
+	if slowmode <= 0 {
+		return false, nil
+	}
+	// Admins/owner are exempt (mirrors read-only).
+	if serverID != nil {
+		if admin, err := s.IsServerAdmin(ctx, *serverID, userID); err != nil {
+			return false, err
+		} else if admin {
+			return false, nil
+		}
+	}
+	var blocked bool
+	err = s.pool.QueryRow(ctx,
+		`SELECT (now() - created_at) < make_interval(secs => $3)
+		   FROM messages WHERE channel_id = $1 AND user_id = $2
+		   ORDER BY created_at DESC LIMIT 1`,
+		channelID, userID, slowmode).Scan(&blocked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // first message in this channel
+	}
+	if err != nil {
+		return false, err
+	}
+	return blocked, nil
+}
+
+// SetChannelSlowmode sets a server channel's post cooldown (0..21600s; 0 = off).
+// Server admins only; ErrInvalidSlowmode for out-of-range; ErrForbidden otherwise.
+func (s *Store) SetChannelSlowmode(ctx context.Context, channelID, actorID int64, seconds int) error {
+	if seconds < 0 || seconds > 21600 {
+		return ErrInvalidSlowmode
+	}
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT server_id FROM channels WHERE id = $1`, channelID).Scan(&serverID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && serverID == nil) {
+		return ErrForbidden // unknown channel or not a server channel
+	}
+	if err != nil {
+		return err
+	}
+	if ok, err := s.IsServerAdmin(ctx, *serverID, actorID); err != nil {
+		return err
+	} else if !ok {
+		return ErrForbidden
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE channels SET slowmode_seconds = $2 WHERE id = $1`, channelID, seconds)
+	return err
 }
 
 // SetChannelPostPolicy sets a server channel's posting policy ('everyone'|'admins').
@@ -712,7 +787,7 @@ func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name st
 // ListServerChannels returns the channels under serverID, oldest first.
 func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at, post_policy, topic FROM channels WHERE server_id = $1 ORDER BY id`,
+		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds FROM channels WHERE server_id = $1 ORDER BY id`,
 		serverID)
 	if err != nil {
 		return nil, err
@@ -721,7 +796,7 @@ func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Chann
 	out := make([]Channel, 0)
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic, &c.SlowmodeSeconds); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

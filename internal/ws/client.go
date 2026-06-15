@@ -215,6 +215,13 @@ func (c *Client) readPump(store *chat.Store) {
 			}
 			continue
 		}
+		if errors.Is(err, chat.ErrSlowMode) {
+			// Slowmode: tell the sender to wait, rather than silently dropping.
+			if data, e := json.Marshal(Event{Type: "error", Error: "slow mode is on — wait before posting again"}); e == nil {
+				c.sendSafe(data)
+			}
+			continue
+		}
 		if err != nil {
 			continue
 		}

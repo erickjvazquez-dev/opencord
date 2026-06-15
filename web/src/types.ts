@@ -11,6 +11,8 @@ export interface Channel {
   postPolicy?: string
   // Short channel description shown in the header; present for server channels.
   topic?: string
+  // Per-channel post cooldown for non-admins, in seconds (0/absent = off).
+  slowmodeSeconds?: number
 }
 
 // A direct-message channel as seen by one participant: the channel id plus the

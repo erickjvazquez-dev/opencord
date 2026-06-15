@@ -97,6 +97,9 @@ CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
 -- Per-channel posting policy (v0.3): 'everyone' (default) or 'admins' (read-only /
 -- announcement channel — only a server owner/admin may post).
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS post_policy TEXT NOT NULL DEFAULT 'everyone';
+-- Per-channel slowmode (v0.3): a non-admin must wait this many seconds between
+-- messages. 0 = off. Enforced server-side in Store.Save.
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS slowmode_seconds INT NOT NULL DEFAULT 0;
 -- Channel names are unique per scope, not globally: each server can have its own
 -- #general. Replace the table-wide UNIQUE(name) with two partial unique indexes.
 ALTER TABLE channels DROP CONSTRAINT IF EXISTS channels_name_key;

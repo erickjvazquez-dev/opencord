@@ -173,6 +173,22 @@ export async function setChannelTopic(
   }
 }
 
+export async function setChannelSlowmode(
+  token: string,
+  channelId: number,
+  slowmodeSeconds: number,
+): Promise<void> {
+  const res = await fetch(`/api/channels/${channelId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ slowmodeSeconds }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not set slowmode')
+  }
+}
+
 export async function searchMessages(
   token: string,
   channelId: number,

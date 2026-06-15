@@ -64,14 +64,15 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					return
 				}
 				var in struct {
-					PostPolicy *string `json:"postPolicy"`
-					Topic      *string `json:"topic"`
+					PostPolicy      *string `json:"postPolicy"`
+					Topic           *string `json:"topic"`
+					SlowmodeSeconds *int    `json:"slowmodeSeconds"`
 				}
 				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
 					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 					return
 				}
-				if in.PostPolicy == nil && in.Topic == nil {
+				if in.PostPolicy == nil && in.Topic == nil && in.SlowmodeSeconds == nil {
 					http.Error(w, `{"error":"no fields to update"}`, http.StatusBadRequest)
 					return
 				}
@@ -98,6 +99,19 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 						return
 					case err != nil:
 						http.Error(w, `{"error":"could not set topic"}`, http.StatusInternalServerError)
+						return
+					}
+				}
+				if in.SlowmodeSeconds != nil {
+					switch err := store.SetChannelSlowmode(r.Context(), id, me.ID, *in.SlowmodeSeconds); {
+					case errors.Is(err, chat.ErrInvalidSlowmode):
+						http.Error(w, `{"error":"slowmode must be 0..21600 seconds"}`, http.StatusBadRequest)
+						return
+					case errors.Is(err, chat.ErrForbidden):
+						http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+						return
+					case err != nil:
+						http.Error(w, `{"error":"could not set slowmode"}`, http.StatusInternalServerError)
 						return
 					}
 				}

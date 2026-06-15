@@ -345,6 +345,17 @@ async function main() {
     'channel topic appears in the header after editing',
   )
 
+  // 7f2 — Slowmode: the admin sets a per-channel cooldown; a 🐌 badge appears.
+  step('admin sets slowmode → 🐌 badge appears in the header')
+  promptAnswer = '10'
+  await page.getByRole('button', { name: 'slowmode', exact: true }).click()
+  await page.locator('.slowmode-badge').waitFor({ timeout: 8000 })
+  await shot('07f2-slowmode.png')
+  check(
+    (await page.locator('.slowmode-badge').textContent())?.includes('10s') ?? false,
+    'channel shows the 🐌 slowmode badge after the admin sets it',
+  )
+
   // 7g — Pin: the admin pins the server-channel message; a pin badge appears (live WS).
   step('admin pins a message → pin badge appears')
   const srvMsg = page.locator('.message', { hasText: srvBody }).first()

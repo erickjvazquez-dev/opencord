@@ -638,3 +638,23 @@ degraded media, won't demonstrate the no-fidelity-loss bar), and SFU egress is
 **usage-unbounded** ($0.05/GB fan-out → tens of $/mo under load). If ever run: cap
 it + wire its Railway usage into the statusline (Rule 16.4) so egress can't bill
 silently. The integration itself (slices 2–3) ships and is testable without it.
+
+## Slowmode — per-channel post cooldown (v0.3, 2026-06-15)
+
+Discord-style **slowmode**: an admin sets a per-channel cooldown (seconds); a
+non-admin must wait that long between messages. Abuse-protection (security north
+star) — **enforced server-side** (Rule B), never trusted from the client.
+
+- **Schema:** `channels.slowmode_seconds INT NOT NULL DEFAULT 0` (idempotent). 0 = off.
+- **Enforcement (in `Store.Save`, the one post path):** if `slowmode_seconds > 0`
+  and the poster is **not** a server admin, compare server-side (`now() - created_at`,
+  no client/app clock trust) against their last message in the channel → too soon =
+  `ErrSlowMode`. First message always allowed; admins/owner exempt (like read-only).
+- **Config:** admins set it via the existing `PATCH /api/channels/{id}`
+  (`slowmodeSeconds`, 0..21600 = 6h max, mirrors `postPolicy`/`topic`); non-admin → 403.
+- **WS:** a throttled send gets an `error` event ("slow mode…") to the sender only —
+  same pattern as a read-only channel, never a silent drop.
+- **UI:** an admin "slowmode" control + a 🐌 badge showing the interval; the composer
+  surfaces the throttle error.
+- **Verify:** store-integration (first msg ok · 2nd within window → ErrSlowMode ·
+  admin exempt · expiry allows again) + browser-QA badge assertion.

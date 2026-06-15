@@ -3,7 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
-## 2026-06-14 (iter 67) — SFU slice 2: the access-gated token endpoint (audio component, mesh→SFU groundwork)
+## 2026-06-15 (iter 68) — slowmode (rotated off audio → chat/security after ~8 audio ticks)
+
+Component advanced: **chat + security** (deliberate rotation — I'd done ~8 straight audio ticks, and the SFU
+*client* path needs a real local LiveKit to E2E, which deserves its own focused tick). Shipped slowmode: a
+per-channel post cooldown, admin-set, **enforced server-side** in the one `Store.Save` path so a client can't
+bypass it (Rule B). Two correctness calls worth recording:
+- **Measured the cooldown in SQL** (`now() - created_at < make_interval(...)`), not in Go — so it can't be
+  fooled by app/client clock skew, and there's one source of time truth (the DB that also stamps `created_at`).
+- **Mirrored the existing `postPolicy`/read-only pattern** end to end (sentinel error → WS error event →
+  admin-gated PATCH → header badge), so the feature slotted into proven grooves instead of inventing new ones —
+  fast and low-risk. The adversarial test (Rule 15) is the real proof: non-admin throttled, admin exempt,
+  cooldown expires, non-admin can't *set* it (403).
+
+**Rotation was the right call, but flag for honesty:** the audio SFU is still the component *furthest* from its
+north star (no SFU = no thousands-scale). Rotating built breadth (chat parity) but didn't close that gap. The
+loop should alternate, not abandon — **next tick goes back to SFU slice 3** (client path), and its first task is
+the deferred decision: stand up a throwaway local LiveKit (`livekit/livekit-server --dev` in docker, NOT the
+Railway demo) to (a) finally prove a real LiveKit accepts our minted token — closing iter-67's deferred gap —
+and (b) E2E the client transport. That LiveKit-E2E harness is the single highest-value next thing; it unblocks
+all remaining audio work.
 
 Component advanced: **audio** (the SFU scale path). Built `POST /api/voice/token` + `internal/voice` token
 minter + optional config. Two wins worth recording:

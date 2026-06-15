@@ -105,7 +105,9 @@ item from here as the structural milestones above land.
 - [x] Text channels (create, list, switch)
 - [ ] Voice channels · stage channels · forum channels
 - [ ] Categories · per-channel permissions · channel topic
-- [ ] Slowmode · NSFW gating · announcement channels + following
+- [~] **Slowmode** (per-channel post cooldown, admin-set, server-enforced, 🐌 badge —
+  E2E + adversarial test) · NSFW gating · announcement channels (done: read-only
+  policy) + following · channel topic (done)
 - [ ] Threads + archived threads · pinned messages
 
 ### Messaging

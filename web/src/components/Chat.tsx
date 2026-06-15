@@ -18,6 +18,7 @@ import {
   removeReaction,
   searchMessages,
   setChannelPolicy,
+  setChannelSlowmode,
   setChannelTopic,
   setMessagePinned,
   setServerMemberRole,
@@ -597,6 +598,31 @@ export function Chat({
     }
   }
 
+  // Admin sets the channel's per-message cooldown for non-admins (0 = off).
+  const editSlowmode = async () => {
+    if (!activeServerChannel || activeServerId == null) return
+    const sid = Number(activeServerId)
+    const cur = activeServerChannel.slowmodeSeconds ?? 0
+    const answer = window.prompt('Slowmode — seconds between messages (0 = off, max 21600):', String(cur))
+    if (answer === null) return // cancelled
+    const seconds = Math.floor(Number(answer))
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds > 21600) {
+      window.alert('Enter a number from 0 to 21600.')
+      return
+    }
+    try {
+      await setChannelSlowmode(token, activeServerChannel.id, seconds)
+      setServerChannels((c) => ({
+        ...c,
+        [sid]: (c[sid] ?? []).map((ch) =>
+          ch.id === activeServerChannel.id ? { ...ch, slowmodeSeconds: seconds } : ch,
+        ),
+      }))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not set slowmode')
+    }
+  }
+
   return (
     <div className={sidebarOpen ? 'app sidebar-open' : 'app'}>
       {sidebarOpen && (
@@ -712,10 +738,23 @@ export function Chat({
                 {activeServerChannel.topic}
               </span>
             )}
+            {(activeServerChannel?.slowmodeSeconds ?? 0) > 0 && (
+              <span
+                className="slowmode-badge"
+                title={`slowmode — ${activeServerChannel?.slowmodeSeconds}s between messages`}
+              >
+                🐌 {activeServerChannel?.slowmodeSeconds}s
+              </span>
+            )}
           </div>
           {activeServerChannel && canModerate && (
             <button className="link readonly-toggle" onClick={() => void toggleReadOnly()}>
               {activeIsReadOnly ? 'allow everyone' : 'make read-only'}
+            </button>
+          )}
+          {activeServerChannel && canModerate && (
+            <button className="link slowmode-edit" onClick={() => void editSlowmode()}>
+              slowmode
             </button>
           )}
           {activeServerChannel && canModerate && (
