@@ -89,6 +89,34 @@ async function main() {
     "B's reply is not grouped under A",
   )
 
+  // 1c — Reply feature across two clients (LIVE broadcast): B replies to A's message;
+  // A must see the new message carry a quoted preview of the original. This proves the
+  // WS `message` broadcast carries the denormalized reply fields (replyToAuthor /
+  // replyToBody) — not just single-client history (which the browser QA already covers).
+  const bSeesA = b.locator('.message', { hasText: body }).first()
+  step("B replies to A's message → A sees the quoted preview live")
+  await bSeesA.hover()
+  await bSeesA.getByRole('button', { name: 'reply' }).click()
+  check(
+    (await b.locator('.reply-bar strong').textContent())?.trim() === userA,
+    'B\'s "Replying to" bar names A (the original author)',
+  )
+  const replyBody = 'replying to A live ' + sfx
+  await b.getByPlaceholder(/Message #/).fill(replyBody)
+  await b.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(replyBody).waitFor({ timeout: 8000 })
+  const aSeesReply = a.locator('.message', { hasText: replyBody }).first()
+  await aSeesReply.locator('.reply-context').waitFor({ timeout: 8000 })
+  await a.screenshot({ path: join(SHOTS, 'rt-01c-reply-live.png') })
+  check(
+    (await aSeesReply.locator('.reply-context .reply-author').textContent())?.trim() === userA,
+    'A sees the reply quote the original author (live broadcast carries replyToAuthor)',
+  )
+  check(
+    (await aSeesReply.locator('.reply-context .reply-snippet').textContent())?.includes(body),
+    'A sees the reply quote the original message body (live broadcast carries replyToBody)',
+  )
+
   const aMsg = a.locator('.message', { hasText: body }).first()
   const bMsg = b.locator('.message', { hasText: body }).first()
 

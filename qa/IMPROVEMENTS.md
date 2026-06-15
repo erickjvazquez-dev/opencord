@@ -3,6 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 74) — two-client LIVE reply propagation QA (Track 0)
+
+Closed the coverage gap I logged last tick: replies were proven single-client (browser.mjs
+3g) and at the store layer (TestReplyIntegration), but the **live two-client WS broadcast
+path** for the denormalized reply preview was unproven. Added `realtime.mjs` 1c: B hovers A's
+message → reply → "Replying to A" bar → send → **A sees the quoted preview appear live**, and
+the assertions check A's render carries `replyToAuthor` (the original author) + `replyToBody`
+(the original snippet) — i.e. the WS `message` Event ships the reply fields, not just history.
+AI-vision on `rt-01c-reply-live.png` confirmed it renders cleanly; a **bonus** confirmation
+also surfaced — because realtime.mjs runs in the same DB after browser.mjs (which deletes a
+message), A's history showed a reply to that deleted message rendering `↰ author [deleted]`
+live, end-to-end proof of the soft-deleted-target snippet path.
+
+**Process note:** a QA-only change (qa/ isn't in the Docker image) is committed + pushed to
+origin but **NOT deployed** — the product artifact is byte-identical, so a `railway up` would
+be pure churn (Rule 10/16). The loop's "ship = deploy" step applies to product changes only.
+
+**Next (rotate off chat):** the live `message-deleted` broadcast doesn't update reply previews
+of OTHER messages that quote the deleted one (they only refresh to "[deleted]" on history
+reload) — minor consistency polish. Bigger value: rotate to **audio** (deafen / global PTT
+hotkey) or **security** (an adversarial WS-frame probe) next tick so no component stagnates.
+
 ## 2026-06-15 (iter 73) — message replies (chat) + de-flaked the voice flood guard
 
 Component advanced: **chat**, toward "instant + lossless realtime" Discord parity — replies were
