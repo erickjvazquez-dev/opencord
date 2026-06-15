@@ -140,9 +140,16 @@ tunnel, paid cloud only for 24/7 hosting.**
   bcrypt unchanged). Unlocks **invite/DM by email** (the lookup is already identifier-based:
   username + user id work today; email is the one-line `WHERE email=$1` branch once stored)
   and is the basis for password reset + optional SSO.
-- [ ] **Cloud Opencord (the only paid tier)** — managed 24/7 hosted accounts: same app, all
-  features, you pay for uptime/hosting not features. Data stays the user's; hosting-only, no
-  mining/telemetry. Local self-host remains 100% free forever.
+- [ ] **Cloud Opencord (the only paid tier) — charge for OPERATIONS, never features.** A
+  fully-local user pays nothing and loses no features; the paid tier sells "we host it, secure
+  it, back it up, keep it 24/7" — recurring ops + bandwidth, not locked software. The managed
+  bundle: always-on hosting (we patch/restart); **managed secure connectivity** (TURN + tunnel
+  across any NAT, TLS + DDoS protection — also where egress cost lives, so cost tracks revenue);
+  **encrypted backups + point-in-time restore**; **security ops** (auto-patching, abuse/spam
+  protection, monitoring, audit logs); managed TLS + custom domain. Teams/orgs: SSO/SAML/2FA/
+  SCIM, managed SFU at scale, hosted media+CDN, compliance/retention/SLA. Dividing line is fixed:
+  **local = every feature free + your own TURN/SFU/tunnel/backups on your box; cloud = we run +
+  secure + keep it online.** Data stays the user's either way; no mining/telemetry (Rule A).
 
 ---
 
