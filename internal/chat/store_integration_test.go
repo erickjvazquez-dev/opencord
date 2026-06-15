@@ -828,3 +828,82 @@ func hasDM(dms []chat.DMChannel, channelID, otherUserID int64) bool {
 	}
 	return false
 }
+
+// TestReplyIntegration covers message replies (references): a same-channel reply
+// carries the denormalized preview (returned + in history); a cross-channel or
+// nonexistent reference is DROPPED, not honored (Rule B/C — a client can't make a
+// message it can't see leak through a reply preview); a soft-deleted target renders
+// "[deleted]" in the preview.
+func TestReplyIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	a, _ := store.CreateChannel(ctx, uniqueChannel())
+	b, _ := store.CreateChannel(ctx, uniqueChannel())
+
+	target, err := store.Save(ctx, a.ID, u.ID, u.Username, "the original")
+	if err != nil {
+		t.Fatalf("save target: %v", err)
+	}
+
+	// 1. Same-channel reply → preview populated on the returned message.
+	reply, err := store.SaveReply(ctx, a.ID, u.ID, u.Username, "a reply", &target.ID)
+	if err != nil {
+		t.Fatalf("save reply: %v", err)
+	}
+	if reply.ReplyTo == nil || *reply.ReplyTo != target.ID ||
+		reply.ReplyToAuthor != u.Username || reply.ReplyToBody != "the original" {
+		t.Fatalf("same-channel reply preview wrong: %+v", reply)
+	}
+
+	// …and in history (Recent), via the LEFT JOIN.
+	hist, err := store.Recent(ctx, a.ID, u.ID, 50)
+	if err != nil {
+		t.Fatalf("recent: %v", err)
+	}
+	var got *chat.Message
+	for i := range hist {
+		if hist[i].ID == reply.ID {
+			got = &hist[i]
+		}
+	}
+	if got == nil || got.ReplyTo == nil || *got.ReplyTo != target.ID ||
+		got.ReplyToAuthor != u.Username || got.ReplyToBody != "the original" {
+		t.Fatalf("history reply preview wrong: %+v", got)
+	}
+
+	// 2. ADVERSARIAL: cross-channel reference (post in B, reference a message in A)
+	//    must be dropped — never leak A's message into B.
+	cross, err := store.SaveReply(ctx, b.ID, u.ID, u.Username, "cross", &target.ID)
+	if err != nil {
+		t.Fatalf("save cross-channel reply: %v", err)
+	}
+	if cross.ReplyTo != nil || cross.ReplyToAuthor != "" || cross.ReplyToBody != "" {
+		t.Fatalf("cross-channel reference should be dropped, got: %+v", cross)
+	}
+
+	// 3. ADVERSARIAL: nonexistent target id must be dropped, not error.
+	bogus := int64(99999999)
+	none, err := store.SaveReply(ctx, a.ID, u.ID, u.Username, "to nowhere", &bogus)
+	if err != nil {
+		t.Fatalf("save bogus reply: %v", err)
+	}
+	if none.ReplyTo != nil {
+		t.Fatalf("bogus reference should be dropped, got: %+v", none)
+	}
+
+	// 4. A soft-deleted target renders "[deleted]" in the preview.
+	if _, err := store.DeleteMessage(ctx, target.ID, u.ID); err != nil {
+		t.Fatalf("delete target: %v", err)
+	}
+	hist2, err := store.Recent(ctx, a.ID, u.ID, 50)
+	if err != nil {
+		t.Fatalf("recent after delete: %v", err)
+	}
+	for i := range hist2 {
+		if hist2[i].ID == reply.ID {
+			if hist2[i].ReplyTo == nil || hist2[i].ReplyToBody != "[deleted]" {
+				t.Fatalf("deleted-target preview should be [deleted], got: %+v", hist2[i])
+			}
+		}
+	}
+}

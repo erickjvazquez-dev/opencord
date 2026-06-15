@@ -3,6 +3,35 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (iter 73) — message replies (chat) + de-flaked the voice flood guard
+
+Component advanced: **chat**, toward "instant + lossless realtime" Discord parity — replies were
+the last missing message primitive (pin/edit/delete/react/search/slowmode already shipped), and the
+right rotation after ~5 voice + a11y ticks. A reply references an earlier message in the SAME
+channel; the server validates + denormalizes the preview (author + 80-rune snippet) onto the message
+so history AND the live WS broadcast render the quoted line with no extra round-trip. New
+`Store.SaveReply` (Save delegates with nil → zero blast radius on 27 existing callers).
+**Cross-channel / nonexistent refs are dropped server-side (Rule B/C)** — a client can't leak a
+message it can't see through a reply preview. Verified: `TestReplyIntegration` (same-channel
+populates · cross-channel dropped · bogus dropped · soft-deleted target → "[deleted]"), browser-QA
+flow 3g (hover → reply → "Replying to" bar → send → `.reply-context` renders + clears), and
+AI-vision on the two new screenshots (bar + quoted preview render cleanly, no clip/overlap).
+
+**QA-process fix (the meta-improvement — highest-value this tick):** `TestServeWSVoiceFloodGuard`
+was **flaky** — failing at a different frame each full-suite run (399 / 136 / 262; "close sent" /
+"connection reset by peer"), green in isolation. Root cause: it treated ANY write error during the
+500-frame flood as fatal, but the server legitimately closing/throttling a flooding client (whose
+own fanned-back echoes outpace its drain) is the guard WORKING, not a bug. Fix: tolerate a write
+error in the flood phase (the server defending itself only strengthens the "bounded" assertion);
+keep it fatal for the 25-frame legit burst. Stable 15/15 after. **Lesson: a load test that asserts a
+connection stays OPEN while it floods is racy — assert the OUTCOME (relay bounded), not the transport
+staying up.** This is exactly the Step-6.5 mandate: a flaky test silently erodes the gate; fix the
+QA, don't tolerate it.
+
+**Next QA growth:** two-client live reply propagation in `realtime.mjs` (A posts → B replies → A
+sees the quoted preview live); reply-to-a-reply (nested) rendering; reply preview refreshing to
+"[deleted]" after the target is deleted (today it only refreshes on a history reload).
+
 ## 2026-06-15 (iter 72) — accessibility: axe-core in the QA + WCAG-AA contrast fixes (rotated to UI)
 
 Component advanced: **UI**, toward "accessible" — the least-addressed word in its north star, and after ~10

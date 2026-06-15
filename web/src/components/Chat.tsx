@@ -108,6 +108,8 @@ export function Chat({
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  // Reply target: non-null shows the "Replying to …" bar and tags the next send.
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [typing, setTyping] = useState<string[]>([])
   // Emojis the viewer has reacted with, as "msgId:emoji" keys. The live `reaction`
   // broadcast is count-only (mine=false), so we own this locally; seeded from history.
@@ -173,6 +175,7 @@ export function Chat({
     if (channelId == null) return
     setMessages([])
     setEditingId(null)
+    setReplyingTo(null)
     setTyping([])
     setMyReactions(new Set())
     setPickerFor(null)
@@ -263,8 +266,9 @@ export function Chat({
   const submitDraft = () => {
     const body = draft.trim()
     if (!body || wsRef.current?.readyState !== WebSocket.OPEN) return
-    wsRef.current.send(JSON.stringify({ body }))
+    wsRef.current.send(JSON.stringify({ body, replyTo: replyingTo?.id }))
     setDraft('')
+    setReplyingTo(null)
   }
 
   const send = (e: FormEvent) => {
@@ -1064,6 +1068,7 @@ export function Chat({
                   )}
                   {!m.deleted && editingId !== m.id && (
                     <span className="msg-actions">
+                      <button onClick={() => setReplyingTo(m)}>reply</button>
                       {m.userId === user.id && (
                         <button onClick={() => startEdit(m)}>edit</button>
                       )}
@@ -1077,6 +1082,15 @@ export function Chat({
                         react
                       </button>
                     </span>
+                  )}
+                  {m.replyTo && !m.deleted && (
+                    <div className="reply-context" aria-label={`replying to ${m.replyToAuthor}`}>
+                      <span className="reply-arrow" aria-hidden>
+                        ↰
+                      </span>
+                      <span className="reply-author">{m.replyToAuthor}</span>
+                      <span className="reply-snippet">{m.replyToBody}</span>
+                    </div>
                   )}
                   {editingId === m.id ? (
                     <div className="edit-row">
@@ -1141,6 +1155,21 @@ export function Chat({
         {typing.length > 0 && (
           <div className="typing">
             {typing.join(', ')} {typing.length === 1 ? 'is' : 'are'} typing…
+          </div>
+        )}
+        {replyingTo && (
+          <div className="reply-bar">
+            <span className="reply-bar-text">
+              Replying to <strong>{replyingTo.username}</strong>
+            </span>
+            <button
+              type="button"
+              className="reply-cancel"
+              aria-label="cancel reply"
+              onClick={() => setReplyingTo(null)}
+            >
+              ✕
+            </button>
           </div>
         )}
         <form className="composer" onSubmit={send}>

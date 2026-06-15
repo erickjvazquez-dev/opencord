@@ -235,6 +235,40 @@ async function main() {
     'reaction count shows 1',
   )
 
+  // 3g — Reply: hover a message → reply → the composer shows a "Replying to" bar →
+  // send → the new message renders a quoted preview of the original (chat parity).
+  step('hover message → reply → send → quoted reply preview renders')
+  await page.waitForTimeout(3000) // let the rate-limit bucket refill before this send
+  await msg.hover()
+  await msg.getByRole('button', { name: 'reply' }).click()
+  const replyBar = page.locator('.reply-bar')
+  await replyBar.waitFor({ timeout: 8000 })
+  await shot('03g-reply-bar.png')
+  check(await replyBar.getByText('Replying to').isVisible(), 'composer shows the "Replying to" bar')
+  check(
+    (await replyBar.locator('strong').textContent())?.trim() === user,
+    'reply bar names the original author',
+  )
+  const replyBody = 'a reply to the first message'
+  await composer.click()
+  await composer.fill(replyBody)
+  await composer.press('Enter')
+  const replyMsg = page.locator('.message', { hasText: replyBody }).last()
+  await replyMsg.locator('.reply-context').waitFor({ timeout: 8000 })
+  await shot('03g-reply-sent.png')
+  check(
+    (await replyMsg.locator('.reply-context .reply-author').textContent())?.trim() === user,
+    'reply preview shows the original author',
+  )
+  check(
+    (await replyMsg.locator('.reply-context .reply-snippet').textContent())?.includes(body),
+    'reply preview shows the original message snippet',
+  )
+  check(
+    (await page.locator('.reply-bar').count()) === 0,
+    'the "Replying to" bar clears after sending the reply',
+  )
+
   // 4 — Edit the message (its reaction must survive the edit).
   step('hover message → edit → change → save')
   await msg.hover()

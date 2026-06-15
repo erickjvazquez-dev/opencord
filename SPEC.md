@@ -702,3 +702,29 @@ run. The scan found one rule (color-contrast, 7 nodes); all fixed:
 
 Result: auth + populated chat = **0 serious/critical axe violations**, now regression-
 guarded. (Full keyboard-nav / screen-reader passes are future work.)
+
+## Message replies (references) — chat parity (v0.3, 2026-06-15)
+
+Chat north star is "instant + lossless realtime" + Discord parity. Replies are one of
+the most-used Discord chat primitives and were the clear missing message primitive
+(pin/edit/delete/react/search already shipped). A reply references an earlier message
+in the **same channel** and renders a compact quoted preview above the new message.
+
+- **Schema:** `messages.reply_to BIGINT REFERENCES messages(id)` (nullable; soft-delete
+  keeps the target row so the reference stays valid and renders "[deleted]").
+- **Server (`chat.Store`):** new `SaveReply(...replyTo *int64)`; `Save` delegates with
+  `nil` (keeps all existing callers). **Rule B/C:** the reference is validated to exist
+  AND live in the *same channel* — a bogus or cross-channel `reply_to` is **dropped**
+  (message posts without a reply), never honored, so a client can't make a message it
+  can't see leak through a reply preview. The reply preview (author + 80-rune snippet,
+  or "[deleted]") is denormalized onto the `Message` (`replyTo/replyToAuthor/
+  replyToBody`) so history + live broadcast render with no extra round-trip. `Recent`
+  LEFT-JOINs the referenced row to populate the preview.
+- **WS:** inbound frame gains optional `replyTo`; `readPump` passes it to `SaveReply`.
+- **Web:** a `reply` action per message → a "Replying to <author> ✕" bar above the
+  composer → the send frame carries `replyTo`; each message with a reference renders a
+  clickable `↰ author: snippet` line above its body. Reply state clears on send and on
+  channel switch.
+- **Verify:** store-integration (same-channel ref populates preview · cross-channel ref
+  dropped · nonexistent ref dropped · deleted target → "[deleted]") + browser-QA flow
+  (click reply → bar shows → send → preview renders) + two-browser live check (Rule 14).

@@ -155,10 +155,11 @@ func (c *Client) readPump(store *chat.Store) {
 			return
 		}
 		var in struct {
-			Type   string          `json:"type"`
-			Body   string          `json:"body"`
-			Target int64           `json:"target"`
-			Signal json.RawMessage `json:"signal"`
+			Type    string          `json:"type"`
+			Body    string          `json:"body"`
+			ReplyTo *int64          `json:"replyTo"`
+			Target  int64           `json:"target"`
+			Signal  json.RawMessage `json:"signal"`
 		}
 		if json.Unmarshal(raw, &in) != nil {
 			continue
@@ -207,7 +208,7 @@ func (c *Client) readPump(store *chat.Store) {
 		if body == "" || len(body) > maxMessageSize {
 			continue
 		}
-		msg, err := store.Save(context.Background(), c.channelID, c.user.ID, c.user.Username, body)
+		msg, err := store.SaveReply(context.Background(), c.channelID, c.user.ID, c.user.Username, body, in.ReplyTo)
 		if errors.Is(err, chat.ErrForbidden) {
 			// Read-only channel: tell the sender instead of silently dropping.
 			if data, e := json.Marshal(Event{Type: "error", Error: "you can't post in this channel"}); e == nil {

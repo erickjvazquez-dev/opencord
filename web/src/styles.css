@@ -489,6 +489,60 @@ button:disabled {
   margin-bottom: 2px;
 }
 
+/* Quoted preview of the replied-to message, shown above a reply's body. */
+.reply-context {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  min-width: 0;
+}
+.reply-arrow {
+  color: var(--text-muted);
+  flex: none;
+}
+.reply-context .reply-author {
+  font-weight: 600;
+  color: var(--link);
+  flex: none;
+}
+.reply-context .reply-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Replying to <author>" chip above the composer; ✕ cancels the reply. */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.reply-bar strong {
+  color: var(--text);
+}
+.reply-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.reply-cancel:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 /* Floating hover toolbar, anchored to the message's top-right so it works on
    grouped rows too (which have no header to live in). */
 .msg-actions {

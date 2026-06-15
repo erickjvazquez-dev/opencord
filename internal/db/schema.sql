@@ -43,6 +43,10 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 -- Pinned (v0.3): a message can be pinned in its channel (server-channel admins;
 -- any member elsewhere). Surfaced on the message so clients can badge it.
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
+-- Replies (v0.3): a message may reference an earlier message in the SAME channel.
+-- Nullable; soft-deleted targets keep their row so the reference stays valid and the
+-- client renders "[deleted]". Cross-channel/bogus refs are dropped server-side.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to BIGINT REFERENCES messages(id);
 
 -- Reactions (Discord parity): one row per (message, user, emoji).
 CREATE TABLE IF NOT EXISTS reactions (

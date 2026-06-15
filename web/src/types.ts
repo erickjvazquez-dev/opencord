@@ -60,6 +60,11 @@ export interface Message {
   deleted?: boolean
   pinned?: boolean
   reactions?: Reaction[]
+  // Reply reference: the id of the message this one replies to, plus a denormalized
+  // author + body snippet for the quoted preview (all unset when not a reply).
+  replyTo?: number
+  replyToAuthor?: string
+  replyToBody?: string
 }
 
 export interface ServerEvent {

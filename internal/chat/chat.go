@@ -94,6 +94,13 @@ type Message struct {
 	Deleted   bool              `json:"deleted,omitempty"`
 	Pinned    bool              `json:"pinned,omitempty"`
 	Reactions []ReactionSummary `json:"reactions,omitempty"`
+	// Reply reference (Discord-style). ReplyTo is the referenced message id; the
+	// author + body snippet are denormalized so history and live broadcasts render
+	// the quoted preview without an extra round-trip. All three are unset when the
+	// message isn't a reply.
+	ReplyTo       *int64 `json:"replyTo,omitempty"`
+	ReplyToAuthor string `json:"replyToAuthor,omitempty"`
+	ReplyToBody   string `json:"replyToBody,omitempty"`
 }
 
 // ReactionSummary aggregates one emoji on a message. Mine is true when the
@@ -123,7 +130,17 @@ type Store struct{ pool *pgxpool.Pool }
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 // Save inserts a message into the given channel and returns it fully populated.
+// It's the no-reply path; SaveReply carries the optional reply reference.
 func (s *Store) Save(ctx context.Context, channelID, userID int64, username, body string) (Message, error) {
+	return s.SaveReply(ctx, channelID, userID, username, body, nil)
+}
+
+// SaveReply inserts a message that optionally references an earlier message
+// (replyTo) and returns it fully populated. Rule B/C: the reference is validated
+// to exist AND to live in the SAME channel — a bogus or cross-channel replyTo is
+// dropped (the message posts without a reply) rather than honored, so a client can
+// never make a message it can't see leak through a reply preview.
+func (s *Store) SaveReply(ctx context.Context, channelID, userID int64, username, body string, replyTo *int64) (Message, error) {
 	// Enforce a read-only ('admins') channel — defense in depth, every caller is gated.
 	if ok, err := s.CanPostInChannel(ctx, channelID, userID); err != nil {
 		return Message{}, err
@@ -137,12 +154,48 @@ func (s *Store) Save(ctx context.Context, channelID, userID int64, username, bod
 		return Message{}, ErrSlowMode
 	}
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
+	// Validate + denormalize the reply reference. A reference that doesn't resolve
+	// to a message in THIS channel is dropped (replyTo := nil) so the INSERT stores
+	// no link and the preview stays empty.
+	if replyTo != nil {
+		var refChannel int64
+		var refAuthor, refBody string
+		var refDeleted *time.Time
+		err := s.pool.QueryRow(ctx,
+			`SELECT m.channel_id, u.username, m.body, m.deleted_at
+			   FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = $1`, *replyTo).
+			Scan(&refChannel, &refAuthor, &refBody, &refDeleted)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows) || (err == nil && refChannel != channelID):
+			replyTo = nil // bogus or cross-channel — drop the reference
+		case err != nil:
+			return Message{}, err
+		default:
+			m.ReplyTo = replyTo
+			m.ReplyToAuthor = refAuthor
+			m.ReplyToBody = replySnippet(refBody, refDeleted)
+		}
+	}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO messages (channel_id, user_id, body) VALUES ($1, $2, $3)
+		`INSERT INTO messages (channel_id, user_id, body, reply_to) VALUES ($1, $2, $3, $4)
 		   RETURNING id, created_at`,
-		channelID, userID, body,
+		channelID, userID, body, replyTo,
 	).Scan(&m.ID, &m.CreatedAt)
 	return m, err
+}
+
+// replySnippet renders the short preview of a replied-to message: "[deleted]" if the
+// target was soft-deleted, else its body truncated to ~80 runes (rune-safe so a
+// multibyte char is never split).
+func replySnippet(body string, deletedAt *time.Time) string {
+	if deletedAt != nil {
+		return "[deleted]"
+	}
+	r := []rune(body)
+	if len(r) > 80 {
+		return string(r[:80]) + "…"
+	}
+	return body
 }
 
 // CanPostInChannel reports whether userID may post in channelID. True unless the
@@ -861,8 +914,11 @@ func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Se
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at, m.pinned
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at, m.pinned,
+		        m.reply_to, ru.username, r.body, r.deleted_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
+		   LEFT JOIN messages r ON r.id = m.reply_to
+		   LEFT JOIN users ru ON ru.id = r.user_id
 		  WHERE m.channel_id = $1
 		  ORDER BY m.id DESC LIMIT $2`, channelID, limit)
 	if err != nil {
@@ -874,13 +930,29 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 	for rows.Next() {
 		var m Message
 		var deletedAt, editedAt *time.Time
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt, &editedAt, &m.Pinned); err != nil {
+		var replyTo *int64
+		var replyAuthor, replyBody *string
+		var replyDeleted *time.Time
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt, &editedAt, &m.Pinned,
+			&replyTo, &replyAuthor, &replyBody, &replyDeleted); err != nil {
 			return nil, err
 		}
 		m.EditedAt = editedAt
 		if deletedAt != nil {
 			m.Deleted = true
 			m.Body = "[deleted]"
+		}
+		// reply_to points at a non-deleted row only at post time; the target may be
+		// soft-deleted later, in which case replyAuthor is still present and the
+		// snippet renders "[deleted]".
+		if replyTo != nil && replyAuthor != nil {
+			m.ReplyTo = replyTo
+			m.ReplyToAuthor = *replyAuthor
+			rb := ""
+			if replyBody != nil {
+				rb = *replyBody
+			}
+			m.ReplyToBody = replySnippet(rb, replyDeleted)
 		}
 		msgs = append(msgs, m)
 	}
