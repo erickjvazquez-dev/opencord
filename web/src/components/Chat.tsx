@@ -520,7 +520,13 @@ export function Chat({
     if (voiceRef.current || channelId == null || wsRef.current?.readyState !== WebSocket.OPEN) return
     // Use the SFU when the server offers one (scales to thousands); else mesh.
     const t = await voiceToken(token, channelId).catch(
-      (): { sfu: boolean; url?: string; room?: string; token?: string } => ({ sfu: false }),
+      (): {
+        sfu: boolean
+        url?: string
+        room?: string
+        token?: string
+        iceServers?: RTCIceServer[]
+      } => ({ sfu: false }),
     )
     const session: VoiceTransport =
       t.sfu && t.url && t.token && t.room
@@ -536,6 +542,7 @@ export function Chat({
             setVoicePeers,
             setSpeakingSelf,
             setLocalScreen,
+            t.iceServers,
           )
     voiceRef.current = session
     try {

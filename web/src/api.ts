@@ -232,7 +232,13 @@ export async function setChannelTopic(
 export async function voiceToken(
   token: string,
   channelId: number,
-): Promise<{ sfu: boolean; url?: string; room?: string; token?: string }> {
+): Promise<{
+  sfu: boolean
+  url?: string
+  room?: string
+  token?: string
+  iceServers?: RTCIceServer[]
+}> {
   const res = await fetch(`/api/voice/token?channel=${channelId}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },

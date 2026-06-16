@@ -32,6 +32,36 @@ type Config struct {
 	// no external object store). Default `data/uploads` (gitignored). A self-hoster
 	// mounts a volume here for persistence; container filesystems are ephemeral.
 	UploadDir string
+	// Mesh-WebRTC ICE. STUNURL defaults to a public STUN (current behavior); a
+	// self-hoster can override it with their own. TURN* are optional — set them to
+	// run a relay (e.g. coturn) so hostile/symmetric NATs can connect. All optional
+	// (Rule A: the one-command stack needs none).
+	STUNURL      string
+	TURNURL      string
+	TURNUsername string
+	TURNPassword string
+}
+
+// IceServer is one WebRTC ICE server, shaped for the browser's
+// RTCConfiguration.iceServers (`urls`, optional `username`/`credential`).
+type IceServer struct {
+	URLs       string `json:"urls"`
+	Username   string `json:"username,omitempty"`
+	Credential string `json:"credential,omitempty"`
+}
+
+// ICEServers returns the ICE servers for mesh WebRTC: the configured STUN (if any) plus
+// an optional TURN relay (if OPENCORD_TURN_URL is set). Empty list = host/LAN candidates
+// only. TURN credentials are returned only to authenticated callers (see /voice/token).
+func (c Config) ICEServers() []IceServer {
+	out := []IceServer{}
+	if c.STUNURL != "" {
+		out = append(out, IceServer{URLs: c.STUNURL})
+	}
+	if c.TURNURL != "" {
+		out = append(out, IceServer{URLs: c.TURNURL, Username: c.TURNUsername, Credential: c.TURNPassword})
+	}
+	return out
 }
 
 func Load() Config {
@@ -53,6 +83,10 @@ func Load() Config {
 		SFUKey:            env("OPENCORD_SFU_KEY", ""),
 		SFUSecret:         env("OPENCORD_SFU_SECRET", ""),
 		UploadDir:         env("OPENCORD_UPLOAD_DIR", "data/uploads"),
+		STUNURL:           env("OPENCORD_STUN_URL", "stun:stun.l.google.com:19302"),
+		TURNURL:           env("OPENCORD_TURN_URL", ""),
+		TURNUsername:      env("OPENCORD_TURN_USERNAME", ""),
+		TURNPassword:      env("OPENCORD_TURN_PASSWORD", ""),
 	}
 }
 

@@ -13,8 +13,43 @@ func clearEnv(t *testing.T) {
 	for _, k := range []string{
 		"OPENCORD_ADDR", "PORT", "DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN",
 		"OPENCORD_SFU_URL", "OPENCORD_SFU_KEY", "OPENCORD_SFU_SECRET",
+		"OPENCORD_STUN_URL", "OPENCORD_TURN_URL", "OPENCORD_TURN_USERNAME", "OPENCORD_TURN_PASSWORD",
 	} {
 		t.Setenv(k, "")
+	}
+}
+
+func TestICEServers(t *testing.T) {
+	clearEnv(t)
+
+	// Default: a public STUN, no TURN (current behavior; one-command stack, Rule A).
+	def := Load()
+	if def.STUNURL == "" {
+		t.Fatal("STUNURL should default to a public STUN")
+	}
+	ice := def.ICEServers()
+	if len(ice) != 1 || ice[0].URLs != def.STUNURL || ice[0].Username != "" {
+		t.Fatalf("default ICEServers = %+v, want one STUN entry, no creds", ice)
+	}
+
+	// With TURN configured: STUN + a TURN entry carrying username/credential.
+	t.Setenv("OPENCORD_TURN_URL", "turn:turn.example.com:3478")
+	t.Setenv("OPENCORD_TURN_USERNAME", "u1")
+	t.Setenv("OPENCORD_TURN_PASSWORD", "p1")
+	c := Load()
+	ice = c.ICEServers()
+	if len(ice) != 2 {
+		t.Fatalf("ICEServers with TURN = %+v, want 2 (STUN + TURN)", ice)
+	}
+	turn := ice[1]
+	if turn.URLs != "turn:turn.example.com:3478" || turn.Username != "u1" || turn.Credential != "p1" {
+		t.Fatalf("TURN entry = %+v, want url+username+credential", turn)
+	}
+
+	// STUN can be overridden (self-hoster's own); empty STUN + empty TURN = no servers.
+	none := Config{}
+	if got := none.ICEServers(); len(got) != 0 {
+		t.Fatalf("empty config ICEServers = %+v, want none (host/LAN only)", got)
 	}
 }
 

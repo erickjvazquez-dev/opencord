@@ -184,8 +184,11 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			// gets 403, never a token.
 			r.Post("/voice/token", func(w http.ResponseWriter, r *http.Request) {
 				me, _ := auth.UserFrom(r.Context())
+				// ICE servers (STUN + optional TURN) for the mesh path; returned to
+				// authed callers only so TURN creds don't leak (Rule C).
+				ice := cfg.ICEServers()
 				if cfg.SFUURL == "" {
-					writeJSON(w, http.StatusOK, map[string]any{"sfu": false})
+					writeJSON(w, http.StatusOK, map[string]any{"sfu": false, "iceServers": ice})
 					return
 				}
 				channelID, err := strconv.ParseInt(r.URL.Query().Get("channel"), 10, 64)
@@ -210,7 +213,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					return
 				}
 				writeJSON(w, http.StatusOK, map[string]any{
-					"sfu": true, "url": cfg.SFUURL, "room": room, "token": tok,
+					"sfu": true, "url": cfg.SFUURL, "room": room, "token": tok, "iceServers": ice,
 				})
 			})
 			// Delete one's own message (soft delete) → broadcast the removal to the channel.

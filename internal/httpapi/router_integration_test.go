@@ -207,6 +207,45 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterVoiceICEIntegration verifies POST /voice/token returns the configured ICE
+// servers (STUN + optional TURN with creds) for the mesh path, and is auth-gated so TURN
+// credentials never reach an anonymous caller.
+func TestRouterVoiceICEIntegration(t *testing.T) {
+	hs := newHarnessCfg(t, config.Config{
+		CORSOrigin:   "*",
+		STUNURL:      "stun:stun.example.com:3478",
+		TURNURL:      "turn:turn.example.com:3478",
+		TURNUsername: "u1",
+		TURNPassword: "p1",
+	})
+	_, tok := hs.user(t)
+
+	// Unauthenticated → 401 (TURN creds must not leak).
+	wantStatus(t, hs.req(t, "POST", "/api/voice/token?channel=1", "", ""), http.StatusUnauthorized, "unauth voice token")
+
+	// Authed mesh response carries STUN + TURN (the channel isn't checked in the
+	// no-SFU path, so any channel id is fine here).
+	w := hs.req(t, "POST", "/api/voice/token?channel=1", tok, "")
+	wantStatus(t, w, http.StatusOK, "voice token")
+	var resp struct {
+		SFU        bool               `json:"sfu"`
+		IceServers []config.IceServer `json:"iceServers"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.SFU {
+		t.Fatal("sfu should be false (no SFU configured)")
+	}
+	if len(resp.IceServers) != 2 {
+		t.Fatalf("iceServers = %+v, want STUN + TURN", resp.IceServers)
+	}
+	turn := resp.IceServers[1]
+	if turn.URLs != "turn:turn.example.com:3478" || turn.Username != "u1" || turn.Credential != "p1" {
+		t.Fatalf("TURN entry = %+v, want url+username+credential", turn)
+	}
+}
+
 // TestRouterUnreadIntegration covers GET /unreads + POST /channels/{id}/read: auth
 // required, access-gating on mark-read, and the unread→read→unread lifecycle over HTTP.
 func TestRouterUnreadIntegration(t *testing.T) {

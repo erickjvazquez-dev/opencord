@@ -219,7 +219,18 @@ export class VoiceSession {
     private onLocalSpeaking?: (speaking: boolean) => void,
     // Reports OUR own screen-share stream (for a local preview), or null on stop.
     private onLocalScreen?: (stream: MediaStream | null) => void,
+    // ICE servers from the server (configured STUN + optional TURN for hostile NATs).
+    // Falls back to the built-in public STUN if the voice-token call didn't provide any.
+    private iceServers?: RTCIceServer[],
   ) {}
+
+  // RTCConfiguration for every peer connection: prefer the server-provided ICE servers
+  // (configurable STUN + optional TURN relay); fall back to the built-in public STUN.
+  private rtcConfig(): RTCConfiguration {
+    return this.iceServers && this.iceServers.length > 0
+      ? { iceServers: this.iceServers }
+      : RTC_CONFIG
+  }
 
   // Acquire the mic and announce we're in the call. Rejects if the mic is denied
   // — the caller surfaces that to the user and discards the session. With no
@@ -611,7 +622,7 @@ export class VoiceSession {
       return existing
     }
 
-    const pc = new RTCPeerConnection(RTC_CONFIG)
+    const pc = new RTCPeerConnection(this.rtcConfig())
     const audioEl = new Audio()
     audioEl.autoplay = true
     audioEl.dataset.voiceAudio = String(id)

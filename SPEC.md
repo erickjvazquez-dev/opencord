@@ -1144,3 +1144,35 @@ messages don't count; mentions in an inaccessible channel never surface (access 
 
 **Follow-ups:** code-span exclusion (``@you`` in inline code shouldn't count — rare),
 @role mentions, a global mention inbox.
+
+## Configurable STUN + optional TURN for mesh voice (audio/reliability, iter 99)
+
+**Goal:** advance the audio north star toward "no-drops": let a self-hoster point mesh
+WebRTC at their own STUN and (for hostile/symmetric NATs) a TURN relay, instead of the
+hardcoded public Google STUN. All optional — Rule A: the one-command stack needs none.
+**Not adopting a service** (no stack-guardian): this is config plumbing for a TURN the
+self-hoster runs (e.g. coturn, free); the Cloud tier running managed TURN is future.
+
+**Config (env, all optional):** `OPENCORD_STUN_URL` (default `stun:stun.l.google.com:19302`
+— current behavior; override with your own, e.g. your coturn's STUN), `OPENCORD_TURN_URL`,
+`OPENCORD_TURN_USERNAME`, `OPENCORD_TURN_PASSWORD`. `Config.ICEServers()` builds the
+`[{urls},{urls,username,credential}]` list (STUN if set + TURN if set).
+
+**Serve:** the existing authed `POST /api/voice/token` round-trip now also returns
+`iceServers` (both mesh and SFU responses). Authed so TURN creds never reach anonymous
+callers (Rule C). The SFU path ignores them (LiveKit manages its own ICE); the mesh path
+uses them.
+
+**Client:** `VoiceSession` (mesh) takes the server's `iceServers` and uses them for every
+`RTCPeerConnection`, falling back to the built-in public-STUN default only if the
+voice-token call failed. The hostile-NAT relay path now exists end-to-end.
+
+**Verification (Rule 14, explicit):** config + endpoint plumbing is unit/integration
+tested (env set → `iceServers` includes the TURN entry; unset → STUN only). **Real NAT
+traversal requires a deployed TURN server (coturn) + a symmetric-NAT client**, which
+can't be exercised in-context — stated, not claimed. The mesh two-browser voice E2E still
+passes on loopback (host candidates).
+
+**Follow-ups:** ephemeral/time-limited TURN credentials (coturn REST/HMAC) instead of
+static long-term creds; a way to fully disable the default public STUN (offline LAN);
+TURN for the SFU deployment.
