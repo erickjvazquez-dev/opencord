@@ -740,6 +740,92 @@ func TestSearchOperatorsIntegration(t *testing.T) {
 	}
 }
 
+// TestSearchDateOperatorsIntegration covers the before:/after: date operators:
+// day-exclusive bounds, combining into a window, and that a malformed or hostile
+// date is treated as inert free text (never errors, never injects — Rule B/15).
+func TestSearchDateOperatorsIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+
+	// Save three messages, then backdate each to a distinct day so the date
+	// operators have something to slice (created_at defaults to now()).
+	mk := func(body, day string) {
+		m, err := store.Save(ctx, ch.ID, alice.ID, alice.Username, body)
+		if err != nil {
+			t.Fatalf("save %q: %v", body, err)
+		}
+		ts, err := time.ParseInLocation("2006-01-02", day, time.UTC)
+		if err != nil {
+			t.Fatalf("bad test day %q: %v", day, err)
+		}
+		// noon UTC so the row sits squarely inside its day, away from boundaries.
+		if _, err := pool.Exec(ctx, `UPDATE messages SET created_at = $1 WHERE id = $2`,
+			ts.Add(12*time.Hour), m.ID); err != nil {
+			t.Fatalf("backdate %q: %v", body, err)
+		}
+	}
+	mk("old message", "2020-01-01")
+	mk("mid message", "2022-06-15")
+	mk("new message", "2024-12-31")
+
+	search := func(q string) []string {
+		res, err := store.SearchMessages(ctx, ch.ID, q, 50)
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		out := make([]string, 0, len(res))
+		for _, m := range res {
+			out = append(out, m.Body)
+		}
+		return out
+	}
+	has := func(bodies []string, body string) bool {
+		for _, b := range bodies {
+			if b == body {
+				return true
+			}
+		}
+		return false
+	}
+
+	// before: keeps everything strictly before the named day.
+	if got := search("before:2023-01-01"); !has(got, "old message") || !has(got, "mid message") || has(got, "new message") {
+		t.Fatalf("before:2023-01-01 => %v", got)
+	}
+	// after: keeps everything strictly after the named day.
+	if got := search("after:2023-01-01"); has(got, "old message") || has(got, "mid message") || !has(got, "new message") {
+		t.Fatalf("after:2023-01-01 => %v", got)
+	}
+	// The named day itself is excluded by both bounds (day-exclusive semantics).
+	if got := search("before:2022-06-15"); !has(got, "old message") || has(got, "mid message") || has(got, "new message") {
+		t.Fatalf("before: boundary should exclude the named day, got %v", got)
+	}
+	if got := search("after:2022-06-15"); has(got, "old message") || has(got, "mid message") || !has(got, "new message") {
+		t.Fatalf("after: boundary should exclude the named day, got %v", got)
+	}
+	// before: + after: combine into a window.
+	if got := search("after:2021-01-01 before:2024-01-01"); !has(got, "mid message") || has(got, "old message") || has(got, "new message") {
+		t.Fatalf("windowed search => %v", got)
+	}
+	// before: + free text — date bound AND body match.
+	if got := search("before:2023-01-01 mid"); !has(got, "mid message") || has(got, "old message") {
+		t.Fatalf("before:+text should match only the in-window 'mid' message, got %v", got)
+	}
+	// A malformed date is inert: treated as free text (no body contains it → empty), no error.
+	if got := search("before:not-a-date"); len(got) != 0 {
+		t.Fatalf("malformed before: must be free text matching nothing here, got %v", got)
+	}
+	// An injection inside a date operator is inert (strict parse → free text, no rows).
+	if got := search("after:'; DROP TABLE messages;--"); len(got) != 0 {
+		t.Fatalf("injection in after: must match nothing, got %v", got)
+	}
+	// Sanity: the table survived the injection attempt — a plain search still works.
+	if got := search("message"); len(got) != 3 {
+		t.Fatalf("after the injection probe all 3 messages must still be searchable, got %v", got)
+	}
+}
+
 func TestServerRolesIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

@@ -285,8 +285,10 @@ item from here as the structural milestones above land.
   + **mention-count badges DONE** — red count badge for unread @mentions, see Notifications;
   bookmarks TODO)
 - [~] Message search — **operators DONE** (`from:<user>`, `has:link`, `has:image`,
-  `has:file` + free text; parameterized dynamic SQL, store+browser tested, injection-inert).
-  `in:#channel` / `before:`/`after:` · polls · timestamp grouping TODO
+  `has:file`, **`before:<YYYY-MM-DD>` / `after:<YYYY-MM-DD>` (day-exclusive date bounds,
+  combine into a window)** + free text; parameterized dynamic SQL, store+browser tested,
+  injection-inert — a malformed/hostile date falls through to inert free text).
+  `in:#channel` · polls · timestamp grouping TODO
 
 ### Voice / Video
 - [~] Voice channels — mesh WebRTC audio for small calls (2–4): join/leave, live

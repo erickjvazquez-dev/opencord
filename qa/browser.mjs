@@ -545,6 +545,27 @@ async function main() {
   )
   await page.getByRole('button', { name: 'clear' }).click()
 
+  // 7c3 — Date operators: a far-future before: matches the just-posted message;
+  // a far-future after: matches nothing (day-exclusive bounds). Fixed dates keep
+  // the assertion deterministic regardless of when QA runs.
+  step('search operators before:/after: filter by date')
+  await searchBox.fill('before:2099-01-01')
+  await searchBox.press('Enter')
+  await page.locator('.search-results').waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.search-results').getByText(srvBody).isVisible(),
+    'before:<far-future> finds my recent message',
+  )
+  await page.getByRole('button', { name: 'clear' }).click()
+  await searchBox.fill('after:2099-01-01')
+  await searchBox.press('Enter')
+  await page.locator('.search-results').waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.search-results').getByText(srvBody).count()) === 0,
+    'after:<far-future> matches nothing',
+  )
+  await page.getByRole('button', { name: 'clear' }).click()
+
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')
   await page

@@ -1468,3 +1468,33 @@ a non-member are all rejected (403), proven by an authz-matrix integration test;
 is transactional (messages-then-cascade) so a server is never left half-deleted, and the
 cascade is verified to remove members/channels/messages while leaving the global `#general`
 intact.
+
+## Message search — `before:` / `after:` date operators (v0.3 polish, 2026-06-16)
+
+Extends the existing Discord-style search-operator parser (`from:` / `has:link|image|file`)
+with date-range filters, closing the GOAL.md "Message search … `before:`/`after:` TODO".
+
+**Operators:** `before:<YYYY-MM-DD>` and `after:<YYYY-MM-DD>`, both **day-exclusive**
+(matching Discord): `before:2024-01-15` ⇒ `created_at < 2024-01-15 00:00 UTC` (the named day
+and everything after are excluded); `after:2024-01-15` ⇒ `created_at >= 2024-01-16 00:00 UTC`
+(the named day and everything before are excluded). They combine into a window
+(`after:A before:B`) and compose with `from:`/`has:`/free text.
+
+**Parsing (`parseSearchQuery` + new `parseSearchDate`):** the date is parsed strictly via
+`time.ParseInLocation("2006-01-02", …, UTC)`. A malformed or hostile value (bad format,
+impossible date, an injection string) fails the layout and the token **falls through to free
+text** — a bad `before:`/`after:` never errors the search and never reaches SQL as a date.
+
+**SQL (`SearchMessages`):** each bound adds one `m.created_at < $N` / `>= $N` condition with
+the parsed `time.Time` passed as a **bind parameter** (Rule B — no SQL injection; operator
+fragments are fixed SQL). The pre-existing `messages_created_at_idx` makes the range
+index-supported.
+
+**Web:** search-box placeholder + tooltip updated to advertise `before:`/`after:`.
+
+**Threat model (Rule B/15 — tested):** `TestSearchDateOperatorsIntegration` proves the
+day-exclusive bounds, windowing, `before:`+free-text composition, that a malformed date is
+inert free text, that an injection (`after:'; DROP TABLE messages;--`) matches nothing AND
+leaves the table intact (all 3 messages still searchable afterward). Browser QA (`07c3`)
+drives `before:2099-01-01` (finds the recent message) / `after:2099-01-01` (finds nothing)
+through the real search box.

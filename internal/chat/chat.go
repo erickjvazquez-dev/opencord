@@ -1934,16 +1934,32 @@ func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message,
 
 // searchFilters is a parsed search query: free text plus Discord-style operators.
 type searchFilters struct {
-	text     string // remaining free text (LIKE-matched)
-	from     string // from:<username> — author filter (case-insensitive exact)
-	hasLink  bool   // has:link  — body contains a URL
-	hasImage bool   // has:image — has an image attachment
-	hasFile  bool   // has:file  — has a non-image attachment
+	text     string     // remaining free text (LIKE-matched)
+	from     string     // from:<username> — author filter (case-insensitive exact)
+	hasLink  bool       // has:link  — body contains a URL
+	hasImage bool       // has:image — has an image attachment
+	hasFile  bool       // has:file  — has a non-image attachment
+	before   *time.Time // before:<YYYY-MM-DD> — created strictly before that day (UTC)
+	after    *time.Time // after:<YYYY-MM-DD>  — created strictly after that day (UTC)
 }
 
-// parseSearchQuery splits a query into free text and operators. `from:X` and
-// `has:link|image|file` become filters; any other token (incl. an unknown has:value)
-// stays as free text, so `from:alice deploy` = alice's messages containing "deploy".
+// parseSearchDate parses a `YYYY-MM-DD` search-operator date as UTC midnight.
+// A malformed value (bad format, impossible date) returns ok=false so the caller
+// keeps the token as plain free text — a hostile `before:`/`after:` never errors
+// the search (Rule B: bad input is inert, not fatal). time.Parse is strict, so an
+// injection like `'; DROP TABLE` fails the layout and falls through to free text.
+func parseSearchDate(s string) (time.Time, bool) {
+	d, err := time.ParseInLocation("2006-01-02", s, time.UTC)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return d, true
+}
+
+// parseSearchQuery splits a query into free text and operators. `from:X`,
+// `has:link|image|file`, and `before:`/`after:<date>` become filters; any other
+// token (incl. an unknown has:value or a malformed date) stays as free text, so
+// `from:alice deploy` = alice's messages containing "deploy".
 func parseSearchQuery(q string) searchFilters {
 	var f searchFilters
 	var text []string
@@ -1957,6 +1973,19 @@ func parseSearchQuery(q string) searchFilters {
 			f.hasImage = true
 		case lower == "has:file":
 			f.hasFile = true
+		case strings.HasPrefix(lower, "before:") && len(tok) > len("before:"):
+			if d, ok := parseSearchDate(tok[len("before:"):]); ok {
+				f.before = &d // created_at < midnight(d) — the named day is excluded
+			} else {
+				text = append(text, tok)
+			}
+		case strings.HasPrefix(lower, "after:") && len(tok) > len("after:"):
+			if d, ok := parseSearchDate(tok[len("after:"):]); ok {
+				end := d.AddDate(0, 0, 1) // created_at >= start of the next day
+				f.after = &end
+			} else {
+				text = append(text, tok)
+			}
 		default:
 			text = append(text, tok)
 		}
@@ -1968,8 +1997,9 @@ func parseSearchQuery(q string) searchFilters {
 // SearchMessages returns up to limit non-deleted messages in channelID matching query,
 // in chronological order. Query supports free text (LIKE-wildcard-escaped so '%' is
 // literal — can't turn into match-all) plus operators: from:<user>, has:link, has:image,
-// has:file. The SQL is built dynamically but every value is a bind parameter (no SQL
-// injection, Rule B); operator fragments are fixed SQL.
+// has:file, before:<YYYY-MM-DD>, after:<YYYY-MM-DD>. The SQL is built dynamically but
+// every value is a bind parameter (no SQL injection, Rule B); operator fragments are
+// fixed SQL.
 func (s *Store) SearchMessages(ctx context.Context, channelID int64, query string, limit int) ([]Message, error) {
 	f := parseSearchQuery(query)
 	conds := []string{"m.channel_id = $1", "m.deleted_at IS NULL"}
@@ -1993,6 +2023,12 @@ func (s *Store) SearchMessages(ctx context.Context, channelID int64, query strin
 	}
 	if f.hasFile {
 		conds = append(conds, "EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type NOT LIKE 'image/%')")
+	}
+	if f.before != nil {
+		conds = append(conds, "m.created_at < "+add(*f.before))
+	}
+	if f.after != nil {
+		conds = append(conds, "m.created_at >= "+add(*f.after))
 	}
 	sql := `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
