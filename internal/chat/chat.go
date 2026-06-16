@@ -1128,6 +1128,36 @@ func (s *Store) RemoveServerMember(ctx context.Context, serverID, actorID, targe
 	return nil
 }
 
+// LeaveServer removes userID's own membership of serverID — the voluntary counterpart
+// to a kick (self-removal, which RemoveServerMember explicitly forbids). The OWNER can't
+// leave (Discord rule: they must transfer ownership or delete the server first) →
+// ErrForbidden. A non-member (or unknown server) → ErrServerNotFound. The user keeps their
+// authored messages (history is preserved, like a kick). The caller evicts the leaver's
+// own live sockets from the server's channels (see Hub.EvictUserFromChannels), so they
+// stop receiving immediately.
+func (s *Store) LeaveServer(ctx context.Context, serverID, userID int64) error {
+	role, err := s.ServerRole(ctx, serverID, userID)
+	if err != nil {
+		return err
+	}
+	if role == "" {
+		return ErrServerNotFound // not a member (don't leak whether the server exists)
+	}
+	if role == "owner" {
+		return ErrForbidden // the owner can't leave — transfer or delete instead
+	}
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2 AND role <> 'owner'`,
+		serverID, userID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrServerNotFound // raced away between the role check and the delete
+	}
+	return nil
+}
+
 // maxBanReasonLen bounds a ban reason (Rule B). Discord allows up to 512.
 const maxBanReasonLen = 512
 

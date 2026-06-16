@@ -532,6 +532,36 @@ async function main() {
   )
   await a.screenshot({ path: join(SHOTS, 'rt-12-unbanned.png') })
 
+  // 9 — Leave server: B (now unbanned) rejoins via the still-valid invite, then
+  // voluntarily LEAVES from the members panel. A non-owner sees "leave server" (not the
+  // owner's "delete server"), and leaving drops the server from B's own sidebar.
+  step('B rejoins then leaves the server → it drops from B’s sidebar')
+  ans.b = inviteCode
+  await b.getByRole('button', { name: 'Join server' }).click()
+  await b.locator('.server-group', { hasText: 'team ' + sfx }).waitFor({ timeout: 10000 })
+  await b
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .getByRole('button', { name: 'members' })
+    .click()
+  await b.locator('.server-settings').waitFor({ timeout: 8000 })
+  check(
+    (await b.locator('.leave-server-btn').count()) > 0,
+    'a non-owner member sees the "leave server" button',
+  )
+  check(
+    (await b.locator('.delete-server-btn').count()) === 0,
+    'a non-owner member does NOT see the owner-only "delete server" button',
+  )
+  await b.locator('.leave-server-btn').click() // confirm auto-accepts
+  await b
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .waitFor({ state: 'detached', timeout: 8000 })
+  check(
+    (await b.locator('.server-group', { hasText: 'team ' + sfx }).count()) === 0,
+    'after leaving, the server is gone from B’s sidebar',
+  )
+  await b.screenshot({ path: join(SHOTS, 'rt-13-leave.png') })
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

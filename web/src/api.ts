@@ -97,6 +97,18 @@ export async function deleteServer(token: string, serverId: number): Promise<voi
   }
 }
 
+// Leave a server (any non-owner member; the owner can't — the server enforces it).
+export async function leaveServer(token: string, serverId: number): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/leave`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not leave server')
+  }
+}
+
 // Mint an invite. maxUses (optional, 1–1000) caps how many members the code admits;
 // omit it for an unlimited code (the default).
 export async function createInvite(

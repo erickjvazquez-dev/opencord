@@ -1229,6 +1229,11 @@ button:disabled {
   color: var(--danger);
   font-weight: 700;
 }
+/* Leave is a self-action (non-owner) — danger-tinted but not bold, so it reads as
+   less drastic than an owner deleting the whole server. */
+.leave-server-btn {
+  color: var(--danger);
+}
 
 /* Ban is the strongest action — danger-tinted + bold so it reads apart from kick. */
 .ban-btn {

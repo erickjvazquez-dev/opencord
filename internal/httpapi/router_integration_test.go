@@ -409,6 +409,58 @@ func TestRouterKickMemberIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterLeaveServerIntegration walks the leave endpoint (POST /servers/{id}/leave)
+// through the HTTP layer: unauth, the owner-can't-leave rule, a non-member 404, and the
+// member success path (after which they lose channel access).
+func TestRouterLeaveServerIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Leave Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := hs.store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	ch, err := hs.store.CreateServerChannel(ctx, srv.ID, "leave-chan")
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	path := fmt.Sprintf("/api/servers/%d/leave", srv.ID)
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, "", ""), http.StatusUnauthorized, "unauth leave")
+	})
+	t.Run("malformed id is 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", "/api/servers/abc/leave", memberTok, ""), http.StatusBadRequest, "bad server id")
+	})
+	t.Run("non-member leaving is 404", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, strangerTok, ""), http.StatusNotFound, "stranger leaves")
+	})
+	t.Run("owner can't leave → 403", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, ownerTok, ""), http.StatusForbidden, "owner leaves")
+		if ok, _ := hs.store.IsServerMember(ctx, srv.ID, owner.ID); !ok {
+			t.Fatal("owner should still be a member after the rejected leave")
+		}
+	})
+	t.Run("member leaves → 204 and loses access", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, memberTok, ""), http.StatusNoContent, "member leaves")
+		if ok, _ := hs.store.IsServerMember(ctx, srv.ID, member.ID); ok {
+			t.Fatal("member who left should no longer be a member")
+		}
+		if ok, _ := hs.store.CanAccessChannel(ctx, ch.ID, member.ID); ok {
+			t.Fatal("member who left should lose channel access")
+		}
+		// Leaving again is a 404.
+		wantStatus(t, hs.req(t, "POST", path, memberTok, ""), http.StatusNotFound, "re-leave non-member")
+	})
+}
+
 // TestRouterServerSettingsIntegration walks the server rename (PATCH /servers/{id}) and
 // delete (DELETE /servers/{id}) endpoints through the HTTP layer: unauth, the authz
 // matrix (rename = admin+, delete = owner-only), body validation, malformed ids, and the

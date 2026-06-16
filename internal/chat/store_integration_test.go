@@ -1069,6 +1069,73 @@ func TestRemoveServerMemberIntegration(t *testing.T) {
 	}
 }
 
+// TestLeaveServerIntegration proves voluntary self-removal: any non-owner member may
+// leave (losing membership + channel access), the owner may NOT (must delete/transfer),
+// and a non-member / unknown server is a 404-class error.
+func TestLeaveServerIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	admin := regUser(t, pool)
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Leave Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member %d: %v", u.ID, err)
+		}
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	ch, err := store.CreateServerChannel(ctx, srv.ID, "leave-chan")
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+
+	// --- adversarial / edge cases ---
+	if err := store.LeaveServer(ctx, srv.ID, owner.ID); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("owner leaving should be forbidden, got %v", err)
+	}
+	if err := store.LeaveServer(ctx, srv.ID, stranger.ID); !errors.Is(err, chat.ErrServerNotFound) {
+		t.Fatalf("non-member leaving should be not-found, got %v", err)
+	}
+	if err := store.LeaveServer(ctx, srv.ID+99999, member.ID); !errors.Is(err, chat.ErrServerNotFound) {
+		t.Fatalf("leaving an unknown server should be not-found, got %v", err)
+	}
+	// Guards: nobody left after the rejected calls.
+	if ok, _ := store.IsServerMember(ctx, srv.ID, owner.ID); !ok {
+		t.Fatal("owner should still be a member after the rejected leave")
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, member.ID); !ok {
+		t.Fatal("member should still be a member after the rejected stranger/unknown leaves")
+	}
+
+	// --- happy paths: a plain member and an admin can both leave ---
+	if err := store.LeaveServer(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("member leaving: %v", err)
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, member.ID); ok {
+		t.Fatal("a member who left should no longer be a member")
+	}
+	if ok, _ := store.CanAccessChannel(ctx, ch.ID, member.ID); ok {
+		t.Fatal("a member who left should lose access to the server's channels")
+	}
+	if err := store.LeaveServer(ctx, srv.ID, admin.ID); err != nil {
+		t.Fatalf("admin leaving: %v", err)
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, admin.ID); ok {
+		t.Fatal("an admin who left should no longer be a member")
+	}
+	// Leaving again (now a non-member) is a 404-class error.
+	if err := store.LeaveServer(ctx, srv.ID, member.ID); !errors.Is(err, chat.ErrServerNotFound) {
+		t.Fatalf("re-leaving as a non-member should be not-found, got %v", err)
+	}
+}
+
 // TestRenameServerIntegration proves the rename authz matrix: admin+ may rename, a
 // plain member / non-member may not, and an unknown server 404s — and that a successful
 // rename actually lands in the stored row.

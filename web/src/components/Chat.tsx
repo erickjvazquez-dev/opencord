@@ -6,6 +6,7 @@ import {
   createServer,
   renameServer,
   deleteServer,
+  leaveServer,
   createServerChannel,
   createChannelCategory,
   deleteChannelCategory,
@@ -1072,6 +1073,30 @@ export function Chat({
       window.alert(err instanceof Error ? err.message : 'could not delete server')
     }
   }
+  // Leave a server (non-owner members). Confirms, then drops it from the sidebar and
+  // falls back to #general if we were viewing it — same cleanup as a delete/kick.
+  const leaveServerPanel = async (serverId: number, name: string) => {
+    if (!window.confirm(`Leave "${name}"? You'll need a new invite to rejoin.`)) return
+    try {
+      await leaveServer(token, serverId)
+      const wasViewing = (serverChannels[serverId] ?? []).some((c) => c.id === channelId)
+      setServers((cur) => cur.filter((s) => s.id !== serverId))
+      setServerChannels((cur) => {
+        const nextMap = { ...cur }
+        delete nextMap[serverId]
+        return nextMap
+      })
+      setMembersOf(null)
+      setBans(null)
+      setServerInvites(null)
+      if (wasViewing) {
+        const general = channels.find((c) => c.name === 'general') ?? channels[0]
+        if (general) setChannelId(general.id)
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not leave server')
+    }
+  }
   const editMyStatus = async () => {
     const next = window.prompt('Set your status (leave blank to clear):', myStatus)
     if (next === null) return // cancelled
@@ -1897,24 +1922,27 @@ export function Chat({
                   ✕ close
                 </button>
               </div>
-              {/* Server settings (owner/admin). Dedicated classes (NOT .member-row /
+              {/* Server settings (any member). Dedicated classes (NOT .member-row /
                   .invites-head / .bans-head) so this never collides with the QA +
-                  behavioural selectors those carry. Rename is admin+, delete owner-only. */}
-              {(myRoleInPanel === 'owner' || myRoleInPanel === 'admin') && (
+                  behavioural selectors those carry. Rename is admin+, delete owner-only,
+                  leave is for any non-owner member. */}
+              {myRoleInPanel && (
                 <div className="server-settings">
                   <span className="server-settings-head">⚙ Server settings</span>
-                  <button
-                    className="link rename-server-btn"
-                    onClick={() =>
-                      void renameServerPanel(
-                        membersOf.serverId,
-                        servers.find((s) => s.id === membersOf.serverId)?.name ?? '',
-                      )
-                    }
-                  >
-                    rename
-                  </button>
-                  {myRoleInPanel === 'owner' && (
+                  {(myRoleInPanel === 'owner' || myRoleInPanel === 'admin') && (
+                    <button
+                      className="link rename-server-btn"
+                      onClick={() =>
+                        void renameServerPanel(
+                          membersOf.serverId,
+                          servers.find((s) => s.id === membersOf.serverId)?.name ?? '',
+                        )
+                      }
+                    >
+                      rename
+                    </button>
+                  )}
+                  {myRoleInPanel === 'owner' ? (
                     <button
                       className="link delete-server-btn"
                       onClick={() =>
@@ -1925,6 +1953,18 @@ export function Chat({
                       }
                     >
                       delete server
+                    </button>
+                  ) : (
+                    <button
+                      className="link leave-server-btn"
+                      onClick={() =>
+                        void leaveServerPanel(
+                          membersOf.serverId,
+                          servers.find((s) => s.id === membersOf.serverId)?.name ?? '',
+                        )
+                      }
+                    >
+                      leave server
                     </button>
                   )}
                 </div>

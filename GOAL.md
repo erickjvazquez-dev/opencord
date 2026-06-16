@@ -213,8 +213,12 @@ item from here as the structural milestones above land.
   owner-only, destructive — one tx removes the server's messages then cascades its members/
   channels/invites/categories/bans, global `#general` untouched, members live-evicted via
   `server-removed`. Authz matrix + cascade adversarially tested at store+HTTP, browser E2E:
-  create → rename → delete. ⚙ Server settings section in the members panel.) · server
-  description / icon / vanity URL / transfer-ownership / leave-server TODO
+  create → rename → delete. ⚙ Server settings section in the members panel.) · **leave-server
+  DONE** (any non-owner member voluntarily leaves via `POST /servers/{id}/leave`; the owner
+  can't — must delete/transfer; leaver's live sockets evicted; authz + access-loss tested at
+  store+HTTP, realtime browser E2E: B rejoins → leaves → server drops from B's sidebar; the
+  panel shows "leave server" to non-owners, "delete server" to the owner) · server
+  description / icon / vanity URL / transfer-ownership TODO
 - [~] **Channel categories DONE** (collapsible groups; create + nest a channel + optional
   categoryId on channel create, Rule-B cross-server guard) · ordering/drag TODO
 - [~] Invites — code-join + **7-day expiry DONE** (enforced server-side at redeem;

@@ -806,6 +806,34 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			w.WriteHeader(http.StatusNoContent)
 		}
 	})
+	// Leave a server (voluntary self-removal — the counterpart to join). Any non-owner
+	// member may leave; the owner can't (they must delete/transfer first). The leaver's
+	// own live sockets on the server's channels are evicted so they stop receiving.
+	r.Post("/servers/{id}/leave", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		// Gather the channel ids BEFORE leaving (still readable; access is lost after).
+		chans, _ := store.ListServerChannels(r.Context(), id)
+		switch err := store.LeaveServer(r.Context(), id, me.ID); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"the owner cannot leave — delete or transfer the server instead"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrServerNotFound):
+			http.Error(w, `{"error":"you are not a member of this server"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not leave server"}`, http.StatusInternalServerError)
+		default:
+			ids := make([]int64, 0, len(chans))
+			for _, c := range chans {
+				ids = append(ids, c.ID)
+			}
+			hub.EvictUserFromChannels(me.ID, ids)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	// Ban a member: {userId, reason?} in the body. Owner/admin only; same authz as kick
 	// (can't ban the owner/yourself; an admin can't ban a fellow admin — store enforces).
 	// Removes them AND blocks rejoining until unbanned; evicts their live sockets.
