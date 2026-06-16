@@ -24,6 +24,9 @@ func TestHandleRegisterRejectsBadInput(t *testing.T) {
 		{"username too short", `{"username":"ab","password":"password123"}`},
 		{"username bad chars", `{"username":"has space","password":"password123"}`},
 		{"password too short", `{"username":"validname","password":"12345"}`},
+		// Over bcrypt's 72-byte limit must be a clean 400, not a 500 (bcrypt would
+		// otherwise error inside Register → generic "could not create account").
+		{"password too long", `{"username":"validname","password":"` + strings.Repeat("a", 73) + `"}`},
 		// Body larger than the 64 KiB MaxBytesReader cap must be rejected, not buffered.
 		{"oversized body", `{"username":"` + strings.Repeat("a", 70000) + `","password":"password123"}`},
 	}

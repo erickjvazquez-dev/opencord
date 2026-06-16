@@ -9,6 +9,14 @@ import (
 
 var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_]{3,32}$`)
 
+// minPasswordLen / maxPasswordLen bound the password. The max is bcrypt's hard 72-byte
+// input limit (golang.org/x/crypto/bcrypt rejects longer inputs) — enforcing it here
+// turns an over-long password into a clean 400 instead of a confusing 500 from deeper in.
+const (
+	minPasswordLen = 6
+	maxPasswordLen = 72
+)
+
 type credentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -24,8 +32,10 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !usernameRe.MatchString(c.Username) || len(c.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "username must be 3-32 chars [a-zA-Z0-9_]; password must be >= 6 chars")
+	if !usernameRe.MatchString(c.Username) ||
+		len(c.Password) < minPasswordLen || len(c.Password) > maxPasswordLen {
+		writeErr(w, http.StatusBadRequest,
+			"username must be 3-32 chars [a-zA-Z0-9_]; password must be 6-72 bytes")
 		return
 	}
 	u, err := s.Register(r.Context(), c.Username, c.Password)
