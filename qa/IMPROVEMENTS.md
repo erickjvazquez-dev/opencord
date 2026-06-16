@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 93) — Custom status; chose the boring-clean feature over the risky infra
+
+Shipped **custom status** (status line by the name). **Component advanced: Profiles →
+parity.** The deliberate call this tick was *what NOT to do*: my last two reflections
+pushed toward the hub per-user-event channel, but its clean consumers each carry a real
+trap — live presence needs co-member scoping (a privacy leak if broadcast instance-wide)
+and live kick-notice has a writePump send-vs-close race. Rather than ship a half-right
+risky infra change autonomously, I picked a **complete, low-risk, fully-verifiable**
+parity feature and shipped it end-to-end. Knowing when to defer the hard infra (it needs
+a proper spec + careful concurrency design, not a rushed tick) is itself the right move.
+
+**Highest-value lesson — reuse the project's own safety rails instead of re-deriving
+risk.** Adding `status` meant another `ALTER TABLE users`, the exact operation that
+deadlocked in iter-89. Instead of inventing a workaround, I leaned on the existing
+mitigation (Migrate's lock_timeout+retry) and *re-ran its regression test under -race 3x*
+to confirm the new ALTER is covered. The bar for "is this DDL safe?" is now "does
+TestMigrateUnderConcurrentDML still pass with it?" — a concrete, repeatable gate, not a
+judgment call each time.
+
+- **QA grown this tick:** single-client browser flow sets a status and asserts it renders
+  in the sidebar + header; store + router integration tests (trim/cap-128/clear, auth,
+  member-list reflection). **Coverage gap to watch (carried + still open):** no QA yet
+  for an *offline*/dimmed member render (all QA users are connected) and no test that a
+  hostile `<script>` status is rendered inert (relying on React-escaping by construction,
+  not asserted) — a vision/DOM check would lock it in.
+- **Recurring infra debt (now flagged 3 ticks running):** the one-socket-per-channel
+  model still has no per-user/instance-wide event push. Custom status, presence, and
+  member-joined are all poll-refreshed (≤15s), not live. This is the next *real* infra
+  investment and deserves a dedicated, spec-first tick — not another feature bolted onto
+  the poll.
+
 ## 2026-06-15 (tick 92) — Per-member online presence; the hub-as-read-model pattern
 
 Shipped **per-member online presence** (green dot in the member list), closing the

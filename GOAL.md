@@ -241,8 +241,10 @@ item from here as the structural milestones above land.
 ### Users / Profiles
 - [x] Avatars (initials)
 - [~] Uploaded avatars — DONE (image upload, access-gated serve, renders everywhere
-  via the Avatar component, header upload entry). Banners · custom status + activity
-  ("playing X") still TODO
+  via the Avatar component, header upload entry). **Custom status DONE** — a short
+  status line by the name (member list + panel + header; set via `PUT /me/status`,
+  Rule-C/own-only, trimmed+capped 128, React-escaped; store+router+browser tested,
+  AI-vision verified). Banners · status emoji · activity ("playing X") still TODO
 - [ ] About me / pronouns / connections · per-server nicknames
 - [~] Presence: **online/offline DONE** (green dot in the member list, hub-backed; -race
   tested + AI-vision verified) · idle / DnD / invisible TODO
