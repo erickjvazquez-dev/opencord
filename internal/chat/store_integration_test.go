@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -532,6 +533,85 @@ func TestServerInvitesIntegration(t *testing.T) {
 	// The stranger must NOT have been admitted by the expired invite.
 	if ok, _ := store.IsServerMember(ctx, srv.ID, stranger.ID); ok {
 		t.Fatal("an expired invite must not admit the user")
+	}
+}
+
+// TestInviteMaxUsesConcurrencyIntegration proves the atomic max-uses guard under real
+// contention: when many users redeem a capped code simultaneously, EXACTLY max_uses joins
+// succeed and the rest get ErrInviteExhausted — no overshoot, no double-count. A sequential
+// test can't catch the off-by-one race the guarded `UPDATE ... WHERE uses < max_uses` +
+// transaction exist to prevent (Rule 15). All goroutines are released at once to maximize
+// the window. Run with -race to also assert no data races.
+func TestInviteMaxUsesConcurrencyIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Concurrency Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	const limit = 5
+	const racers = 25
+	maxUses := limit
+	code, err := store.CreateInviteWithMaxUses(ctx, srv.ID, owner.ID, &maxUses)
+	if err != nil {
+		t.Fatalf("create capped invite: %v", err)
+	}
+
+	// Register the racers up front (sequentially) so the concurrent section is ONLY the redeem.
+	users := make([]auth.User, racers)
+	for i := range users {
+		users[i] = regUser(t, pool)
+	}
+
+	var okCount, exhaustedCount, otherCount int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for _, u := range users {
+		wg.Add(1)
+		go func(uid int64) {
+			defer wg.Done()
+			<-start // release all at once to maximize contention on the last slot
+			switch _, err := store.RedeemInvite(ctx, code, uid); {
+			case err == nil:
+				atomic.AddInt64(&okCount, 1)
+			case errors.Is(err, chat.ErrInviteExhausted):
+				atomic.AddInt64(&exhaustedCount, 1)
+			default:
+				atomic.AddInt64(&otherCount, 1)
+				t.Errorf("unexpected redeem error: %v", err)
+			}
+		}(u.ID)
+	}
+	close(start)
+	wg.Wait()
+
+	if otherCount != 0 {
+		t.Fatalf("got %d unexpected redeem errors", otherCount)
+	}
+	if okCount != limit {
+		t.Fatalf("exactly %d redeems should succeed, got %d (exhausted=%d)", limit, okCount, exhaustedCount)
+	}
+	if exhaustedCount != racers-limit {
+		t.Fatalf("expected %d exhausted, got %d", racers-limit, exhaustedCount)
+	}
+	// The stored counter must equal the cap exactly — the guard never overshoots.
+	var uses, maxStored int
+	if err := pool.QueryRow(ctx,
+		`SELECT uses, max_uses FROM server_invites WHERE code = $1`, code).Scan(&uses, &maxStored); err != nil {
+		t.Fatalf("read uses: %v", err)
+	}
+	if uses != limit || maxStored != limit {
+		t.Fatalf("stored uses=%d max=%d, want %d/%d", uses, maxStored, limit, limit)
+	}
+	// And exactly `limit` distinct members were admitted (owner excluded).
+	var members int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM server_members WHERE server_id = $1 AND user_id <> $2`, srv.ID, owner.ID).Scan(&members); err != nil {
+		t.Fatalf("count members: %v", err)
+	}
+	if members != limit {
+		t.Fatalf("expected %d admitted members, got %d", limit, members)
 	}
 }
 
