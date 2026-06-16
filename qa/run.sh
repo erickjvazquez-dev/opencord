@@ -51,6 +51,14 @@ for _ in $(seq 1 60); do curl -sf http://localhost:5173 >/dev/null 2>&1 && break
 curl -sf http://localhost:8080/healthz >/dev/null 2>&1 || {
   echo "[qa] server did not come up on :8080 — see /tmp/oc-qa-server.log"; exit 1; }
 
+# Parse-check every QA script BEFORE the expensive boot — a one-char syntax slip in a
+# .mjs otherwise isn't caught until ~3 min in (Postgres + Go build + Vite + Playwright
+# all run first), and only on the crashing script. node --check is milliseconds.
+echo "[qa] syntax-checking QA scripts…"
+for f in "$ROOT"/qa/*.mjs; do
+  node --check "$f" || { echo "[qa] SYNTAX ERROR in $f — aborting before boot"; exit 1; }
+done
+
 echo "[qa] installing Playwright (first run only)…"
 ( cd qa && npm install --silent && npx --yes playwright install chromium >/dev/null 2>&1 )
 

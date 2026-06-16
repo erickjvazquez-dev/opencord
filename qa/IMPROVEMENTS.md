@@ -1942,3 +1942,34 @@ Fixes (both, layered):
   DML it races, not just whether the column appears.
 - **Next QA growth:** two-client avatar — A sets an avatar, B sees it on A's messages
   after a reload; avatar in the member-list sidebar renders the image.
+
+---
+
+## 2026-06-16 — tick 102: ban members (server moderation parity)
+
+**Shipped:** ban/unban — the stronger form of kick (removes the member AND blocks
+rejoining via `server_bans` + an `ErrBanned`→403 guard in `RedeemInvite`, until an
+owner/admin unbans). REST `POST/DELETE/GET /servers/{id}/bans`, members-panel ban
+button, admin "Banned (N)" section with unban. Adversarial integration test
+(authz matrix + rejoin-blocked then unban-restores, 3× green) + two-user browser
+E2E (upgraded the realtime.mjs terminal kick step into a ban step — a strict
+superset: every removal assertion holds, plus Banned-section + unban + live drop)
++ AI-vision of the ban/unban renders. Live-verified on Railway.
+
+**Highest-value lesson — a QA-script syntax error cost a full ~3-min stack boot.**
+The first `qa/run.sh` re-run died because the new ban step redeclared `bRow`
+(already a `const` earlier in `realtime.mjs`). `qa/run.sh` boots Postgres + builds
+the Go server + starts Vite + installs Playwright *before* it ever `import`s the
+.mjs — so a one-character syntax slip isn't caught until ~3 minutes in, and only on
+the crashing script (the others had already burned the boot). A `node --check` on
+each `qa/*.mjs` takes milliseconds and catches this class instantly.
+
+**Improvement (shipped this tick, not just noted):** `qa/run.sh` now `node --check`s
+every `qa/*.mjs` up front and aborts before booting the stack if any fails to parse.
+Fast-fail before the expensive boot. (Loop-process rule going forward: `node --check`
+every edited `qa/*.mjs` before `bash qa/run.sh`.)
+
+**Next QA growth:** the dedicated two-user *kick* UI flow in realtime.mjs is now a
+ban flow; kick's authz is still covered by `TestRouterKickMemberIntegration` and the
+shared button-render check, but a lightweight standalone kick-UI assertion could be
+re-added if kick and ban ever diverge in the UI.
