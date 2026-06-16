@@ -156,6 +156,10 @@ func handleUploadMessage(uploadDir string, store *chat.Store, hub *ws.Hub) http.
 			cleanup()
 			http.Error(w, `{"error":"slow mode active"}`, http.StatusTooManyRequests)
 			return
+		case errors.Is(err, chat.ErrTimedOut):
+			cleanup()
+			http.Error(w, `{"error":"you're timed out and can't post right now"}`, http.StatusTooManyRequests)
+			return
 		case err != nil:
 			cleanup()
 			http.Error(w, `{"error":"could not send message"}`, http.StatusInternalServerError)

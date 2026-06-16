@@ -675,6 +675,63 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 		writeJSON(w, http.StatusOK, bans)
 	})
+	// Timeout (temporary mute) a member: {userId, durationSeconds} in the body. Owner/admin
+	// only; same authz as kick/ban. The duration is clamped server-side. Returns {until}.
+	r.Post("/servers/{id}/timeouts", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			UserID          int64 `json:"userId"`
+			DurationSeconds int64 `json:"durationSeconds"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if in.DurationSeconds <= 0 {
+			http.Error(w, `{"error":"durationSeconds must be positive"}`, http.StatusBadRequest)
+			return
+		}
+		until := time.Now().Add(time.Duration(in.DurationSeconds) * time.Second)
+		switch eff, err := store.TimeoutServerMember(r.Context(), id, me.ID, in.UserID, until); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not time out member"}`, http.StatusInternalServerError)
+		default:
+			writeJSON(w, http.StatusOK, map[string]any{"until": eff})
+		}
+	})
+	// Clear a member's timeout (unmute early): {userId} via the path. Owner/admin only.
+	r.Delete("/servers/{id}/timeouts/{userId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		targetID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.ClearTimeout(r.Context(), id, me.ID, targetID); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not clear timeout"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	// Redeem an invite code → join its server (the only way to join). 404 on a bad code.
 	r.Post("/invites/{code}", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())

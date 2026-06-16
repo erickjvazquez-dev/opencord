@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -495,6 +496,113 @@ func TestRouterBanMemberIntegration(t *testing.T) {
 		}
 		// Unbanning a not-banned user is 404.
 		wantStatus(t, hs.req(t, "DELETE", unbanPath, adminTok, ""), http.StatusNotFound, "unban non-banned")
+	})
+}
+
+// TestRouterTimeoutMemberIntegration walks the timeout/clear endpoints through the HTTP
+// layer (authz matrix mirrors ban) and proves the user-visible guarantee: a timed-out
+// member's post is rejected server-side (ErrTimedOut) until the timeout is cleared, and
+// the mute surfaces in the member list. Duration is clamped server-side (Rule B/15).
+func TestRouterTimeoutMemberIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	admin, adminTok := hs.user(t)
+	admin2, _ := hs.user(t)
+	member, _ := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Timeout Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, admin2, member} {
+		if err := hs.store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member: %v", err)
+		}
+	}
+	for _, a := range []auth.User{admin, admin2} {
+		if err := hs.store.SetServerRole(ctx, srv.ID, owner.ID, a.ID, "admin"); err != nil {
+			t.Fatalf("promote admin: %v", err)
+		}
+	}
+	ch, err := hs.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	toPath := fmt.Sprintf("/api/servers/%d/timeouts", srv.ID)
+	toBody := func(uid, secs int64) string {
+		return fmt.Sprintf(`{"userId":%d,"durationSeconds":%d}`, uid, secs)
+	}
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", toPath, "", toBody(member.ID, 600)), http.StatusUnauthorized, "unauth timeout")
+	})
+	t.Run("malformed server id is 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", "/api/servers/abc/timeouts", ownerTok, toBody(member.ID, 600)), http.StatusBadRequest, "bad server id")
+	})
+	t.Run("non-positive duration is 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", toPath, ownerTok, toBody(member.ID, 0)), http.StatusBadRequest, "zero duration")
+		wantStatus(t, hs.req(t, "POST", toPath, ownerTok, toBody(member.ID, -5)), http.StatusBadRequest, "negative duration")
+	})
+	t.Run("non-member/non-admin can't time out", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", toPath, strangerTok, toBody(member.ID, 600)), http.StatusForbidden, "stranger times out")
+	})
+	t.Run("can't time out the owner / a fellow admin / yourself", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", toPath, adminTok, toBody(owner.ID, 600)), http.StatusForbidden, "admin times out owner")
+		wantStatus(t, hs.req(t, "POST", toPath, adminTok, toBody(admin2.ID, 600)), http.StatusForbidden, "admin times out admin")
+		wantStatus(t, hs.req(t, "POST", toPath, adminTok, toBody(admin.ID, 600)), http.StatusForbidden, "self timeout")
+	})
+	t.Run("timing out a non-member is 404", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", toPath, ownerTok, toBody(owner.ID+99999, 600)), http.StatusNotFound, "timeout non-member")
+	})
+	t.Run("admin times out a member → muted server-side until cleared", func(t *testing.T) {
+		// Before the timeout the member can post.
+		if _, err := hs.store.SaveReply(ctx, ch.ID, member.ID, member.Username, "before", nil); err != nil {
+			t.Fatalf("member should be able to post before timeout: %v", err)
+		}
+		// Timeout → 200; the member's post is now rejected at the store guard.
+		wantStatus(t, hs.req(t, "POST", toPath, adminTok, toBody(member.ID, 3600)), http.StatusOK, "admin times out member")
+		if _, err := hs.store.SaveReply(ctx, ch.ID, member.ID, member.Username, "during", nil); !errors.Is(err, chat.ErrTimedOut) {
+			t.Fatalf("timed-out member's post should be ErrTimedOut, got %v", err)
+		}
+		// The mute surfaces in the member list.
+		members, err := hs.store.ListServerMembers(ctx, srv.ID)
+		if err != nil {
+			t.Fatalf("list members: %v", err)
+		}
+		var muted bool
+		for _, m := range members {
+			if m.UserID == member.ID && m.TimeoutUntil != nil {
+				muted = true
+			}
+		}
+		if !muted {
+			t.Fatal("the member list should report the muted member's timeoutUntil")
+		}
+		// Clear → 204; the member can post again.
+		clearPath := fmt.Sprintf("/api/servers/%d/timeouts/%d", srv.ID, member.ID)
+		wantStatus(t, hs.req(t, "DELETE", clearPath, adminTok, ""), http.StatusNoContent, "admin clears timeout")
+		if _, err := hs.store.SaveReply(ctx, ch.ID, member.ID, member.Username, "after", nil); err != nil {
+			t.Fatalf("member should be able to post after the timeout is cleared: %v", err)
+		}
+		// Clearing a non-member is 404.
+		wantStatus(t, hs.req(t, "DELETE", fmt.Sprintf("/api/servers/%d/timeouts/%d", srv.ID, owner.ID+99999), adminTok, ""), http.StatusNotFound, "clear non-member")
+	})
+	t.Run("duration is clamped to the server-side ceiling", func(t *testing.T) {
+		// Ask for ~100 years; the effective until must be within ~28 days.
+		resp := hs.req(t, "POST", toPath, ownerTok, toBody(member.ID, 100*365*24*3600))
+		wantStatus(t, resp, http.StatusOK, "huge duration accepted + clamped")
+		var out struct {
+			Until time.Time `json:"until"`
+		}
+		if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode until: %v (body %s)", err, resp.Body.String())
+		}
+		if out.Until.After(time.Now().Add(29 * 24 * time.Hour)) {
+			t.Fatalf("timeout should be clamped to ~28d, got %s", out.Until)
+		}
 	})
 }
 

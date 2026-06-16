@@ -421,6 +421,39 @@ async function main() {
     'opening the channel clears both the unread dot and the mention badge',
   )
 
+  // 7h — Timeout (moderation): A (owner) temporarily mutes B, then clears it. B stays a
+  // member (the ban below still has a target). The "muted member can't post" guarantee is
+  // proven server-side by the Go integration test; here we verify the timeout UI — the
+  // muted badge and the timeout↔unmute toggle. (B is still an admin from step 6; the
+  // owner can time out a non-owner regardless of role.)
+  step('A (owner) times out B → muted badge + unmute toggle, then clears it')
+  await a
+    .locator('.server-group', { hasText: 'team ' + sfx })
+    .getByRole('button', { name: 'members' })
+    .click()
+  const bTimeoutRow = a.locator('.member-row', { hasText: userB })
+  await bTimeoutRow.waitFor({ timeout: 8000 })
+  check(
+    (await bTimeoutRow.getByRole('button', { name: 'timeout' }).count()) > 0,
+    'owner sees a timeout button on B’s row',
+  )
+  ans.a = '10' // minutes (prompt auto-answered)
+  await bTimeoutRow.getByRole('button', { name: 'timeout' }).click()
+  await bTimeoutRow.locator('.role-muted').waitFor({ timeout: 8000 })
+  check(await bTimeoutRow.locator('.role-muted').isVisible(), 'B shows the ⏳ muted badge after timeout')
+  check(
+    (await bTimeoutRow.getByRole('button', { name: 'unmute' }).count()) > 0,
+    'the timeout button toggles to "unmute" while B is muted',
+  )
+  await a.screenshot({ path: join(SHOTS, 'rt-09b-timeout.png') })
+  // Clear the timeout (confirm auto-accepts) → the muted badge disappears.
+  await bTimeoutRow.getByRole('button', { name: 'unmute' }).click()
+  await bTimeoutRow.locator('.role-muted').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  check(
+    (await bTimeoutRow.locator('.role-muted').count()) === 0,
+    'the muted badge clears after unmute',
+  )
+
   // 8 — Ban (moderation): A (owner) bans B from the server. Ban is the stronger form
   // of kick — it removes B (so every kick assertion still holds) AND records a ban so
   // B can't rejoin until unbanned. (The rejoin-blocked security guarantee is proven

@@ -1973,3 +1973,34 @@ every edited `qa/*.mjs` before `bash qa/run.sh`.)
 ban flow; kick's authz is still covered by `TestRouterKickMemberIntegration` and the
 shared button-render check, but a lightweight standalone kick-UI assertion could be
 re-added if kick and ban ever diverge in the UI.
+
+---
+
+## 2026-06-16 — tick 103: member timeout (temporary mute)
+
+**Shipped:** timeout — completes the kick/ban/timeout moderation triad. An owner/admin
+mutes a member for a duration (`server_members.timeout_until`); a server-side post-guard
+in `SaveReply`/`SaveWithAttachments` (`ErrTimedOut`, enforced on BOTH the WS and HTTP
+send paths) blocks posting until it expires or is cleared. Duration clamped ≤28d.
+`POST/DELETE /servers/{id}/timeouts`, members-panel timeout/unmute button + ⏳ muted
+badge, composer disabled for the muted viewer. Adversarial integration test (mute
+enforced at the store guard then lifted on clear; duration clamp) + two-user browser
+E2E (new timeout/unmute step in realtime.mjs) + AI-vision verified. Live on Railway.
+
+**Process win — the tick-102 `node --check` gate paid off immediately.** This tick's
+realtime.mjs edit parsed clean on the first try; the up-front parse-check ran in
+milliseconds and gave confidence before the ~3-min stack boot. The QA-harness
+improvement from last tick is already compounding (exactly the intent).
+
+**Verification lesson — test the post-guard at the layer that enforces it.** Messages
+post over the WS, not HTTP, so an HTTP-only integration test can't drive a real send.
+The right move was to assert the guard at the STORE boundary (`store.SaveReply` →
+`ErrTimedOut`) where both the WS and HTTP paths converge — proving the mute regardless
+of transport, then proving it lifts after clear. Cheaper and more faithful than trying
+to script a WS send + error round-trip in the integration harness.
+
+**Next QA growth / P1 polish:** the members-panel row now carries demote/kick/ban/
+timeout(+unmute) — 4 action links plus 2 badges. It reads fine but is getting busy; a
+Discord-style kebab/context menu is the future polish. Also: a browser assertion that a
+muted member's composer actually disables (needs the ~10s member-list poll, so it wasn't
+worth the wall-clock this tick — the backend guard + the placeholder logic cover it).

@@ -39,6 +39,8 @@ var (
 	ErrInviteExpired = errors.New("invite has expired")
 	// ErrBanned is returned when a banned user tries to (re)join a server.
 	ErrBanned = errors.New("banned from this server")
+	// ErrTimedOut is returned when a timed-out member tries to post.
+	ErrTimedOut = errors.New("timed out")
 	// ErrInvalidRole is returned when a role is not one that can be assigned.
 	ErrInvalidRole = errors.New("invalid role")
 	// ErrInvalidPolicy is returned when a channel posting policy is not valid.
@@ -87,6 +89,8 @@ type ServerMember struct {
 	Online bool `json:"online"`
 	// Status is the member's custom status line ("" = none).
 	Status string `json:"status,omitempty"`
+	// TimeoutUntil is set while the member is timed out (muted); nil/past = not muted.
+	TimeoutUntil *time.Time `json:"timeoutUntil,omitempty"`
 }
 
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
@@ -185,6 +189,12 @@ func (s *Store) SaveReply(ctx context.Context, channelID, userID int64, username
 	} else if blocked {
 		return Message{}, ErrSlowMode
 	}
+	// Enforce an active timeout (temporary mute) — server-side, can't be bypassed.
+	if blocked, err := s.timeoutBlocked(ctx, channelID, userID); err != nil {
+		return Message{}, err
+	} else if blocked {
+		return Message{}, ErrTimedOut
+	}
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
 	if err := s.resolveReply(ctx, s.pool, channelID, &m, &replyTo); err != nil {
 		return Message{}, err
@@ -254,6 +264,11 @@ func (s *Store) SaveWithAttachments(ctx context.Context, channelID, userID int64
 		return Message{}, err
 	} else if blocked {
 		return Message{}, ErrSlowMode
+	}
+	if blocked, err := s.timeoutBlocked(ctx, channelID, userID); err != nil {
+		return Message{}, err
+	} else if blocked {
+		return Message{}, ErrTimedOut
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -447,6 +462,22 @@ func (s *Store) slowmodeBlocked(ctx context.Context, channelID, userID int64) (b
 		return false, err
 	}
 	return blocked, nil
+}
+
+// timeoutBlocked reports whether userID is currently timed out (muted) in the server
+// that channelID belongs to. False for non-server channels (global/DM have no
+// timeouts) and when the member's timeout_until is NULL or in the past. The cutoff is
+// evaluated server-side (now()) so a client can't fake its clock to bypass it (Rule B).
+func (s *Store) timeoutBlocked(ctx context.Context, channelID, userID int64) (bool, error) {
+	var blocked bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (
+		   SELECT 1 FROM server_members sm
+		     JOIN channels c ON c.server_id = sm.server_id
+		    WHERE c.id = $1 AND sm.user_id = $2
+		      AND sm.timeout_until IS NOT NULL AND sm.timeout_until > now())`,
+		channelID, userID).Scan(&blocked)
+	return blocked, err
 }
 
 // SetChannelSlowmode sets a server channel's post cooldown (0..21600s; 0 = off).
@@ -1213,10 +1244,85 @@ func (s *Store) ListServerBans(ctx context.Context, serverID int64) ([]ServerBan
 	return out, rows.Err()
 }
 
+// maxTimeoutDuration bounds how long a member can be timed out (Discord's max).
+const maxTimeoutDuration = 28 * 24 * time.Hour
+
+// TimeoutServerMember mutes targetID in serverID until `until`. The authz mirrors
+// ban/kick exactly (owner/admin only; can't timeout yourself, the owner, and an admin
+// can't timeout a fellow admin); the target must be a member (ErrUserNotFound otherwise).
+// `until` is clamped server-side to (now, now+maxTimeoutDuration] so a client can't
+// request a negative or absurdly long mute. Returns the effective until.
+func (s *Store) TimeoutServerMember(ctx context.Context, serverID, actorID, targetID int64, until time.Time) (time.Time, error) {
+	if targetID == actorID {
+		return time.Time{}, ErrForbidden // can't timeout yourself
+	}
+	actorRole, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return time.Time{}, ErrForbidden
+	}
+	targetRole, err := s.ServerRole(ctx, serverID, targetID)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if targetRole == "" {
+		return time.Time{}, ErrUserNotFound
+	}
+	if targetRole == "owner" {
+		return time.Time{}, ErrForbidden // nobody can timeout the owner
+	}
+	if actorRole == "admin" && targetRole == "admin" {
+		return time.Time{}, ErrForbidden // admins can't timeout fellow admins
+	}
+	now := time.Now()
+	if !until.After(now) {
+		return time.Time{}, ErrForbidden // a timeout must be in the future
+	}
+	if max := now.Add(maxTimeoutDuration); until.After(max) {
+		until = max // clamp to the Discord-style ceiling
+	}
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE server_members SET timeout_until = $3
+		   WHERE server_id = $1 AND user_id = $2 AND role <> 'owner'`,
+		serverID, targetID, until)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if ct.RowsAffected() == 0 {
+		return time.Time{}, ErrUserNotFound // raced away or was the owner (defense-in-depth)
+	}
+	return until, nil
+}
+
+// ClearTimeout lifts targetID's timeout in serverID (sets it NULL). Owner/admin only;
+// ErrUserNotFound if the target isn't a member.
+func (s *Store) ClearTimeout(ctx context.Context, serverID, actorID, targetID int64) error {
+	ok, err := s.IsServerAdmin(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
+	}
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE server_members SET timeout_until = NULL WHERE server_id = $1 AND user_id = $2`,
+		serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotFound // not a member
+	}
+	return nil
+}
+
 // ListServerMembers returns a server's members with roles, owner/admin first.
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, '')
+		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, ''),
+		        CASE WHEN m.timeout_until > now() THEN m.timeout_until END
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
 		  ORDER BY (m.role = 'owner') DESC, (m.role = 'admin') DESC, u.username`, serverID)
@@ -1227,7 +1333,7 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.TimeoutUntil); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

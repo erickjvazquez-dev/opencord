@@ -205,6 +205,41 @@ export async function fetchServerBans(token: string, serverId: number): Promise<
   return res.json()
 }
 
+// Timeout (temporarily mute) a member for durationSeconds (owner/admin only). The
+// server clamps the duration; a muted member can't post until it expires or is cleared.
+export async function timeoutServerMember(
+  token: string,
+  serverId: number,
+  userId: number,
+  durationSeconds: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/timeouts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ userId, durationSeconds }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not time out member')
+  }
+}
+
+// Clear a member's timeout early (owner/admin only).
+export async function clearMemberTimeout(
+  token: string,
+  serverId: number,
+  userId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/timeouts/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not clear timeout')
+  }
+}
+
 export async function fetchServerChannels(token: string, serverId: number): Promise<Channel[]> {
   const res = await fetch(`/api/servers/${serverId}/channels`, {
     headers: { Authorization: `Bearer ${token}` },

@@ -240,6 +240,13 @@ func (c *Client) readPump(store *chat.Store) {
 			}
 			continue
 		}
+		if errors.Is(err, chat.ErrTimedOut) {
+			// Timed out (muted): tell the sender instead of silently dropping.
+			if data, e := json.Marshal(Event{Type: "error", Error: "you're timed out and can't post right now"}); e == nil {
+				c.sendSafe(data)
+			}
+			continue
+		}
 		if err != nil {
 			continue
 		}

@@ -41,6 +41,8 @@ export interface ServerMember {
   role: string
   online?: boolean
   status?: string
+  // Set (ISO timestamp) while the member is timed out (muted); absent = not muted.
+  timeoutUntil?: string
 }
 
 // A banned user as shown to an admin in the bans list (server moderation).

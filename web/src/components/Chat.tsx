@@ -29,6 +29,8 @@ import {
   banServerMember,
   unbanServerMember,
   fetchServerBans,
+  timeoutServerMember,
+  clearMemberTimeout,
   setMyStatus,
   fetchUnreads,
   markChannelRead,
@@ -859,6 +861,35 @@ export function Chat({
       window.alert(err instanceof Error ? err.message : 'could not unban member')
     }
   }
+  // Timeout: temporarily mute a member (prompt for minutes). The server clamps it.
+  const timeoutMember = async (serverId: number, userId: number, username: string) => {
+    const mins = window.prompt(`Time out ${username} for how many minutes?`, '10')
+    if (mins === null) return // cancelled
+    const minutes = Number(mins)
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      window.alert('Enter a positive number of minutes.')
+      return
+    }
+    try {
+      await timeoutServerMember(token, serverId, userId, Math.round(minutes * 60))
+      const members = await fetchServerMembers(token, serverId)
+      setMembersOf({ serverId, members })
+      if (String(serverId) === activeServerId) setMemberList(members)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not time out member')
+    }
+  }
+  const clearTimeout_ = async (serverId: number, userId: number, username: string) => {
+    if (!window.confirm(`Clear ${username}'s timeout?`)) return
+    try {
+      await clearMemberTimeout(token, serverId, userId)
+      const members = await fetchServerMembers(token, serverId)
+      setMembersOf({ serverId, members })
+      if (String(serverId) === activeServerId) setMemberList(members)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not clear timeout')
+    }
+  }
   const editMyStatus = async () => {
     const next = window.prompt('Set your status (leave blank to clear):', myStatus)
     if (next === null) return // cancelled
@@ -977,7 +1008,11 @@ export function Chat({
     : undefined
   const canModerate = myActiveRole === 'owner' || myActiveRole === 'admin'
   const activeIsReadOnly = activeServerChannel?.postPolicy === 'admins'
-  const canPost = !activeIsReadOnly || canModerate
+  // Am I currently timed out (muted) in the active server channel? Derived from the
+  // polled member list; the server enforces it regardless, this just reflects it in UI.
+  const myTimeoutUntil = memberList.find((m) => m.userId === user.id)?.timeoutUntil
+  const iAmTimedOut = !!myTimeoutUntil && new Date(myTimeoutUntil).getTime() > Date.now()
+  const canPost = (!activeIsReadOnly || canModerate) && !iAmTimedOut
   // Pinning matches the server's rule: admins in a server channel, any member elsewhere.
   const canPin = !activeServerChannel || canModerate
 
@@ -1604,6 +1639,14 @@ export function Chat({
                     )}
                   </span>
                   <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
+                  {mb.timeoutUntil && new Date(mb.timeoutUntil).getTime() > Date.now() && (
+                    <span
+                      className="role-badge role-muted"
+                      title={`muted until ${new Date(mb.timeoutUntil).toLocaleString()}`}
+                    >
+                      ⏳ muted
+                    </span>
+                  )}
                   {iAmServerOwner && mb.role !== 'owner' && (
                     <button
                       className="link role-toggle"
@@ -1640,6 +1683,26 @@ export function Chat({
                         >
                           ban
                         </button>
+                        {/* Timeout: temporary mute. Toggles to "unmute" while active. */}
+                        {mb.timeoutUntil && new Date(mb.timeoutUntil).getTime() > Date.now() ? (
+                          <button
+                            className="link timeout-btn"
+                            onClick={() =>
+                              void clearTimeout_(membersOf.serverId, mb.userId, mb.username)
+                            }
+                          >
+                            unmute
+                          </button>
+                        ) : (
+                          <button
+                            className="link timeout-btn"
+                            onClick={() =>
+                              void timeoutMember(membersOf.serverId, mb.userId, mb.username)
+                            }
+                          >
+                            timeout
+                          </button>
+                        )}
                       </>
                     )}
                 </div>
@@ -1933,11 +1996,13 @@ export function Chat({
             placeholder={
               !connected
                 ? 'connecting…'
-                : !canPost
-                  ? 'read-only — only admins can post'
-                  : activeDM
-                    ? `Message @${activeDM.user.username}`
-                    : `Message #${activeChannelName ?? ''}`
+                : iAmTimedOut
+                  ? `you're timed out until ${new Date(myTimeoutUntil as string).toLocaleTimeString()}`
+                  : !canPost
+                    ? 'read-only — only admins can post'
+                    : activeDM
+                      ? `Message @${activeDM.user.username}`
+                      : `Message #${activeChannelName ?? ''}`
             }
             value={draft}
             onChange={(e) => {

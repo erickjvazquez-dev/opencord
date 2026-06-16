@@ -1272,3 +1272,46 @@ panel listing banned users with an **unban** button each. `api.ts`:
 (403); can't ban the owner or yourself (403); an admin can't ban a fellow admin (403);
 a banned user redeeming a still-valid invite → 403 (`ErrBanned`); after unban they may
 rejoin. Reason is bounded + escaped. Authz mirrors the kick matrix exactly.
+
+---
+
+## Member timeout (v0.4 — moderation parity, 2026-06-16)
+
+**Goal:** completes the kick/ban/**timeout** moderation triad. An owner/admin can
+**timeout** (temporarily mute) a member for a duration; while the timeout is active the
+member can read but **cannot post** in the server's channels (server-enforced, like
+slowmode). It auto-expires; an owner/admin can clear it early. Discord's "timeout".
+
+**Schema:** `ALTER TABLE server_members ADD COLUMN IF NOT EXISTS timeout_until TIMESTAMPTZ`
+(NULL/past = not timed out; future = muted until then).
+
+**Store (`internal/chat`):**
+- `TimeoutServerMember(serverID, actorID, targetID, until)` — SAME authz as ban/kick
+  (owner/admin; can't timeout yourself, the owner, and an admin can't timeout a fellow
+  admin; target must be a member). `until` is clamped to `(now, now+maxTimeoutDuration]`
+  (28 days, Discord's max). Returns the effective `until`.
+- `ClearTimeout(serverID, actorID, targetID)` — owner/admin sets `timeout_until = NULL`.
+- `timeoutBlocked(channelID, userID)` — resolves the channel's server and reports whether
+  that member's `timeout_until` is in the future. Enforced server-side in `SaveReply` +
+  `SaveWithAttachments` (after the read-only + slowmode guards) → `ErrTimedOut`; a client
+  can't bypass it. `ListServerMembers` now returns `timeout_until` so the UI can badge a
+  muted member and disable the composer for a timed-out viewer.
+
+**REST (`internal/httpapi`):** `POST /servers/{id}/timeouts` `{userId, durationSeconds}`
+and `DELETE /servers/{id}/timeouts/{userId}` (both admin-gated, same matrix as ban). The
+WS send path (`client.go`) and the HTTP attachment send path map `ErrTimedOut` → a
+"you're timed out" error/`429` instead of silently dropping.
+
+**Web:** a **timeout** button in the members panel (prompts for minutes) beside kick/ban;
+a ⏳ **muted** badge + a **clear** button on a timed-out member's row; the composer is
+disabled with a "you're timed out…" notice when the viewer is currently timed out in the
+active server channel (derived from the polled member list — the server still enforces it
+regardless of client state). `timeoutServerMember` / `clearMemberTimeout` in `api.ts`;
+`timeoutUntil?` on `ServerMember`.
+
+**Threat model (Rule B/15 — tested):** unauth → 401; stranger/plain-member can't timeout
+(403); can't timeout the owner or yourself (403); an admin can't timeout a fellow admin
+(403); a timed-out member's post is rejected server-side (`ErrTimedOut`) over BOTH the WS
+and the HTTP attachment path; after the timeout is cleared (or expires) they can post
+again. Duration is clamped server-side (a client can't request a 100-year mute or a
+negative one). Reactions/edits while timed out are a documented follow-up.

@@ -1110,6 +1110,15 @@ button:disabled {
   color: var(--online-text);
 }
 
+/* Timed-out (muted) member badge + action. */
+.role-badge.role-muted {
+  color: #c98a1b;
+  background: rgba(201, 138, 27, 0.16);
+}
+.timeout-btn {
+  color: #c98a1b;
+}
+
 /* Per-member online presence: a status dot on the avatar's corner (Discord-style). */
 .avatar-presence {
   position: relative;

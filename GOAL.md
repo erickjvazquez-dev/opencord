@@ -96,7 +96,7 @@ tunnel, paid cloud only for 24/7 hosting.**
 
 - [x] Rate limiting + abuse protection — per-connection WS token bucket (Rule 15)
 - [~] Roles & permissions — server roles (owner/admin/member); roles UI (members panel + owner promote/demote); admin-gated channel creation; **message moderation** (admins delete others' messages) with a delete-button UI shown to admins in server channels — all two-user E2E verified; **read-only / announcement channels** (per-channel posting policy: only admins post, WS-enforced) with an admin toggle, a 🔒 badge, and a disabled composer for non-admins — all E2E verified. (A full per-role permission matrix is future polish beyond MVP parity.)
-- [x] Invites — invite-code join (replaces the open join-by-id gap): members mint codes, redeeming admits you; non-member can't mint/guess (403/404), adversarially verified. (Membership mgmt: roles done; **kick + ban done** — owner/admin, with live WS eviction; ban also blocks rejoining until unban; timeout TODO)
+- [x] Invites — invite-code join (replaces the open join-by-id gap): members mint codes, redeeming admits you; non-member can't mint/guess (403/404), adversarially verified. (Membership mgmt: roles done; **kick + ban + timeout done** — owner/admin, with live WS eviction; ban blocks rejoining until unban; timeout temporarily mutes a member server-side)
 - [x] Search — in-channel message search (case-insensitive, access-gated, LIKE-wildcards escaped per Rule B), header search box + results panel (channel-spanning search later)
 - [x] Message grouping (collapse consecutive same-author messages within 5 min) — flagged then closed by browser AI-vision QA 2026-06-13
 - [x] Mobile-responsive layout — sidebar collapses into an off-canvas drawer behind a header menu toggle (≤640px); chat goes full-width; backdrop + close-on-select (E2E + vision verified)
@@ -290,7 +290,14 @@ item from here as the structural milestones above land.
   `POST`/`DELETE`/`GET /servers/{id}/bans`; members-panel **ban** button + admin
   **Banned (N)** section with **unban** + reason. Adversarially integration-tested
   (rejoin-blocked then unban-restores) + two-user browser E2E + AI-vision verified.
-  · timeout · bulk delete · AutoMod (keyword/spam) · reporting TODO
+  **Timeout DONE** — temporarily mute a member: `server_members.timeout_until` +
+  a server-side post-guard in `SaveReply`/`SaveWithAttachments` (`ErrTimedOut`,
+  enforced on BOTH the WS and HTTP send paths) so a muted member can't post until it
+  expires or is cleared; same authz matrix as ban/kick; duration clamped to ≤28d.
+  `POST`/`DELETE /servers/{id}/timeouts`; members-panel **timeout/unmute** button +
+  ⏳ muted badge; the muted viewer's composer is disabled with a notice. Adversarially
+  integration-tested (mute enforced then lifted, duration clamp) + two-user browser
+  E2E + AI-vision verified. · bulk delete · AutoMod (keyword/spam) · reporting TODO
 - [x] Message moderation (admins delete others' messages) — shipped (v0.3)
 
 ### Notifications

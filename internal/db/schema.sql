@@ -129,6 +129,10 @@ CREATE INDEX IF NOT EXISTS server_members_user_id_idx ON server_members (user_id
 -- Roles (v0.3): a member's role in a server — 'owner' | 'admin' | 'member'. The creator
 -- is 'owner'; admin+ may create channels. Per-channel overrides come later.
 ALTER TABLE server_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
+-- Timeout (v0.4): an owner/admin can temporarily mute a member — while timeout_until is
+-- in the future the member can read but can't post (server-enforced, like slowmode).
+-- NULL/past = not timed out. Discord's "timeout"; cleared early or auto-expires.
+ALTER TABLE server_members ADD COLUMN IF NOT EXISTS timeout_until TIMESTAMPTZ;
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS server_id BIGINT REFERENCES servers(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
 -- Per-channel posting policy (v0.3): 'everyone' (default) or 'admins' (read-only /
