@@ -363,11 +363,15 @@ item from here as the structural milestones above land.
 - [ ] Desktop + mobile clients (PWA first)
 
 ### QA / loop tooling
-- [ ] `qa/search-smoke.sh` — read-only post-deploy search smoke (register → bounded
-  `before:`/`after:` searches on `#general` → assert counts strictly shrink as the window
-  tightens). Verifies query/filter features on prod by **discrimination against existing
-  history**, not write-then-find (plain text posts go via WS, not REST — see
-  `qa/IMPROVEMENTS.md` 2026-06-16).
+- [x] `qa/search-smoke.sh` DONE — read-only post-deploy search smoke (register → bounded
+  `before:`/`after:`/free-text searches on `#general` → assert the full window strictly
+  exceeds a tightened/contradictory window and an unmatchable token returns 0). Verifies
+  query/filter features on prod by **discrimination against existing history**, not
+  write-then-find (plain text posts go via WS, not REST). Run via `make qa-search`
+  (defaults to `CCF_LIVE_URL`, `OPENCORD_BASE_URL=` to point elsewhere). On an empty
+  `#general` it reports INCONCLUSIVE (exit 0) rather than false-red. Proven to catch a
+  "match-all" regression (operators silently ignored → 5 of 7 assertions trip);
+  green on prod against 7 messages of history (iter 122).
 
 ---
 

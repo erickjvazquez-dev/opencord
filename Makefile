@@ -35,6 +35,9 @@ qa-browser: ## Browser QA — boot a dev stack, drive the real UI (Playwright), 
 qa-sfu: ## SFU proof — boot a local LiveKit + Opencord, prove tokens connect (needs docker)
 	bash qa/sfu-run.sh
 
+qa-search: ## Search smoke (read-only) — prove before:/after:/free-text discriminate on a live instance
+	bash qa/search-smoke.sh
+
 build: ## Compile the server binary into ./bin
 	go build -o bin/opencord ./cmd/server
 

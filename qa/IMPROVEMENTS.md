@@ -2417,3 +2417,40 @@ mobile-width (≤640px) no-overflow assertion in the SAME tick it's added — no
 A desktop-only layout check passes while the mobile layout silently overflows; the two are
 independent and both must be guarded when a persistent control is added. Component/dimension
 rotation: advanced the **responsive** QA dimension (Step 4b-ii) this tick.
+
+---
+
+## 2026-06-16 (tick 122) — Closed the last QA/loop-tooling backlog item: qa/search-smoke.sh
+
+After a heavy 3-feature+1-fix prior session, took a **lean Track-0 tick**: closed the one
+unchecked item in GOAL.md "### QA / loop tooling" — a read-only post-deploy smoke for the
+message-search operators (`before:`/`after:`/free-text). **Component: chat (search) → QA
+coverage.** No product code changed (zero Go/web diff), so nothing new is *served* — pushed
+to `origin`, deliberately **skipped `railway up`** (deploying a byte-identical server image
+is exactly the churn Rule 10 forbids; the smoke is a harness script, not served code).
+
+**The interesting design constraint:** plain-text messages are posted over the WS gateway,
+not REST, so a smoke can't cheaply "write then find" on prod. The smoke instead proves the
+operators genuinely FILTER by **discriminating against `#general`'s existing history**: the
+full window (`after:1970-01-01` = 7 on prod) must strictly exceed a future/contradictory
+window (→ 0), a tightening `after:` chain must be monotone non-increasing, and an unmatchable
+free-text token must return 0. If search ever regressed to ignore operators (match-all), every
+count would equal the baseline and the assertions break.
+
+**Proved the guard fires (Rule 15):** ran the exact assertion battery against a simulated
+match-all `count()` → **5 of 7 assertions trip**, exit non-zero. A green run on prod (7
+messages of history) confirms the happy path. Also handles an **empty `#general`** honestly:
+reports INCONCLUSIVE + exit 0 rather than false-red, since an empty channel can't discriminate
+and that's not a search bug.
+
+**Carry this (QA-process rules):**
+1. **Read-only prod smokes should discriminate against *existing* state, not mutate it.** When
+   the write path isn't reachable over the smoke's transport (WS-only here), assert *relative*
+   invariants (subset monotonicity, full>narrow, unmatchable→0) that hold for any data
+   distribution with ≥1 row — robust without seeding.
+2. **A smoke that can't discriminate (empty data) must say INCONCLUSIVE, not PASS.** A silent
+   pass on no-data is a false-green; exit 0 with a clear "not exercised" line instead.
+3. **A new guard isn't done until you've shown it fails on the regression it targets** —
+   simulate the broken behavior and confirm the assertions trip (did it here, 5/7).
+Component/dimension rotation: advanced **search/chat QA coverage** this tick (distinct from
+the prior presence + responsive ticks).
