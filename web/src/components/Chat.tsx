@@ -1149,7 +1149,9 @@ export function Chat({
       onClick={() => selectChannel(c.id)}
     >
       <span className="hash">#</span>
-      {c.name}
+      <span className="item-name" title={c.name}>
+        {c.name}
+      </span>
       {unreadIndicator(c.id)}
     </button>
   )
@@ -1410,7 +1412,9 @@ export function Chat({
               onClick={() => selectChannel(c.id)}
             >
               <span className="hash">#</span>
-              {c.name}
+              <span className="item-name" title={c.name}>
+                {c.name}
+              </span>
               {unreadIndicator(c.id)}
             </button>
           ))}
@@ -1428,7 +1432,9 @@ export function Chat({
               onClick={() => selectChannel(d.id)}
             >
               <Avatar token={token} userId={d.user.id} username={d.user.username} className="dm-avatar" />
-              {d.user.username}
+              <span className="item-name" title={d.user.username}>
+                {d.user.username}
+              </span>
               {unreadIndicator(d.id)}
             </button>
           ))}
@@ -1442,7 +1448,10 @@ export function Chat({
           {servers.map((s) => (
             <div key={s.id} className="server-group">
               <div className="server-name">
-                {s.name} <span className="server-id">#{s.id}</span>
+                <span className="server-name-text" title={s.name}>
+                  {s.name}
+                </span>{' '}
+                <span className="server-id">#{s.id}</span>
               </div>
               {/* Uncategorized channels render first (today's behaviour). */}
               {(serverChannels[s.id] ?? [])

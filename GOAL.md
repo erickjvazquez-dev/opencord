@@ -105,11 +105,12 @@ tunnel, paid cloud only for 24/7 hosting.**
   panel first when needed). Frontend-only; reply-jump (inline) + search-jump (close-panel
   path) E2E + AI-vision verified. (No-op when the target is older than the loaded window —
   fetch-older-on-jump is a follow-up.)
-- [ ] Sidebar long-name truncation — `.server-name` (and channel/DM rows) lack
-  `text-overflow: ellipsis` / `min-width: 0`, so a long server name overflows the fixed
-  220px sidebar (surfaced by AI-vision QA tick-113 with a 19-char server name; short names
-  hid it). Add ellipsis truncation + a `title` tooltip; extend browser QA to create a
-  long-named server and vision-check the row stays on one line.
+- [x] Sidebar long-name truncation DONE — server/channel/DM names ellipsis-truncate
+  (`.item-name`/`.server-name-text` get `min-width:0` + `overflow:hidden` + `text-overflow:
+  ellipsis`; badge/avatar/#id/unread stay `flex-shrink:0`) with the full name in a `title`
+  tooltip, so a long name never overflows the fixed 220px sidebar. Browser QA creates a
+  long-named server and asserts the name element clips + stays within the sidebar; AI-vision
+  verified (tick-114, closing the tick-113 finding).
 
 ## Later
 

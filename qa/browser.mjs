@@ -705,9 +705,24 @@ async function main() {
   // relabels live), then delete it (typed-name confirm) and watch it leave the sidebar.
   // Isolated on its own server so it never disturbs the "qa server" flow above.
   step('server settings: create → rename → delete a throwaway server')
-  promptAnswer = 'qa settings srv'
+  // Boundary-width fixture: a long name proves the sidebar truncates (ellipsis) instead
+  // of overflowing the 220px sidebar — short names never exercised this (GOAL polish item).
+  promptAnswer = 'qa settings srv long enough to overflow the sidebar'
   await page.getByRole('button', { name: '+ New server' }).click()
   await page.locator('.server-name', { hasText: 'qa settings srv' }).waitFor({ timeout: 8000 })
+  // The long name must ellipsis-truncate: the name element clips its content
+  // (scrollWidth > clientWidth) AND its rendered right edge stays within the sidebar,
+  // so it never overflows the fixed 220px column (GOAL polish item, tick-114).
+  const longNameRow = page.locator('.server-name-text', { hasText: 'qa settings srv' }).first()
+  const fit = await longNameRow.evaluate((el) => {
+    const sidebar = el.closest('.sidebar')
+    const elRight = el.getBoundingClientRect().right
+    const barRight = sidebar ? sidebar.getBoundingClientRect().right : Infinity
+    return { truncating: el.scrollWidth > el.clientWidth, withinSidebar: elRight <= barRight + 1 }
+  })
+  check(fit.truncating, 'a long server name truncates with an ellipsis (content is clipped)')
+  check(fit.withinSidebar, 'the truncated name stays within the sidebar (no horizontal overflow)')
+  await shot('07j-long-name.png')
   // Open its members panel — the Server settings section lives at the top (owner-only).
   await page
     .locator('.server-group', { hasText: 'qa settings srv' })

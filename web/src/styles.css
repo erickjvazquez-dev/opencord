@@ -184,6 +184,22 @@ button:disabled {
   padding: 8px 10px;
   border-radius: var(--radius);
   font-size: 15px;
+  min-width: 0; /* let the name child shrink + ellipsis instead of overflowing the sidebar */
+}
+/* The channel/DM/server name truncates with an ellipsis so a long name never
+   overflows the fixed-width sidebar (the badge/avatar/unread dot stay put). The
+   full name is in the `title` tooltip. */
+.item-name,
+.server-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.channel-item .hash,
+.mention-badge,
+.unread-dot {
+  flex-shrink: 0;
 }
 
 .channel-item:hover {
@@ -266,12 +282,14 @@ button:disabled {
   font-weight: 700;
   font-size: 13px;
   color: var(--text);
+  min-width: 0; /* allow the name text to ellipsis-truncate instead of overflowing */
 }
 
 .server-id {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-muted);
+  flex-shrink: 0; /* the #id badge stays visible; the name truncates instead */
 }
 
 .channel-item.server-channel {
