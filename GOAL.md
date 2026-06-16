@@ -163,9 +163,12 @@ tunnel, paid cloud only for 24/7 hosting.**
 ## Platform & hosting (business model — see North Star)
 
 - [~] **Voice/screen reliability across networks** — WS auto-reconnect SHIPPED (chat +
-  screen-share signaling survive socket drops; real offline→online E2E). TODO: optional
-  **self-hostable TURN** (`OPENCORD_TURN_*` env → RTC iceServers, degrades to STUN; free,
-  Rule A) for hostile NATs / higher-bitrate screen video.
+  screen-share signaling survive socket drops; real offline→online E2E). **Configurable
+  STUN + optional self-hostable TURN SHIPPED** (`OPENCORD_STUN_URL` / `OPENCORD_TURN_*`
+  env → `iceServers` served via the authed voice/token round-trip → mesh
+  RTCPeerConnections; degrades to STUN; free, Rule A). Config+endpoint tested, mesh E2E
+  intact; **real symmetric-NAT traversal needs a deployed coturn** (not exercised
+  in-context). TODO: ephemeral/HMAC TURN creds; TURN for higher-bitrate screen video + SFU.
 - [ ] **Built-in secure tunneling (free, local)** — let friends on other computers reach a
   self-hosted server without manual port-forwarding: an optional, free, self-hostable
   relay/tunnel (e.g. bundled reverse-tunnel) — "creating local servers for you and your

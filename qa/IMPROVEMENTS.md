@@ -3,6 +3,41 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 99) — Rotated to the most-neglected component (audio); shipped TURN config
+
+After a chat/security/QA run (ticks 91–98), deliberately rotated to **audio** — the
+owner's FIRST north star ("thousands/HD/no-drops/free") and the component with zero ticks
+this session. **Advanced toward "no-drops":** configurable STUN + optional self-host TURN
+for mesh WebRTC (the `voice.ts` comment literally said "TURN ... is a later slice" — this
+was it). Replaced the hardcoded Google STUN (a soft Rule-A bake-in) with server-served,
+env-driven iceServers.
+
+**Highest-value lesson — be explicit about the verification boundary, and design the
+feature so the testable part is meaningful.** TURN's whole point is symmetric-NAT
+traversal, which can't be exercised in-context (needs a deployed coturn + a hostile NAT).
+Rather than hand-wave, I split verification: (a) the *plumbing* is fully tested — config
+builds the right iceServers, the endpoint serves them auth-gated, the mesh E2E still
+connects (proving the new config path didn't break the happy path); (b) the *traversal*
+is stated as needing real infra (Rule 14), not claimed. The design choice that makes (a)
+meaningful: server-*served* iceServers (not client-hardcoded) means "the server decides
+ICE" is a real, testable seam — a future managed-TURN cloud tier plugs in here with no
+client change.
+
+**Rule-16 check applied correctly:** this is config plumbing for a TURN the *self-hoster*
+runs, not us adopting a TURN service — so no stack-guardian gate. The distinction
+("enabling a self-hosted option" vs "adding a running service to our stack") is the right
+test for when Rule 16 fires.
+
+- **Component-rotation note:** with audio advanced, the recent coverage is now broad —
+  chat (instant/lossless: unread+mentions), security (input bounds), infra (per-user push),
+  UI (header/presence/status), audio (TURN). **Furthest-from-north-star now:** audio still
+  (mesh→SFU→cascaded for true thousands-scale is the long pole) and **built-in secure
+  tunneling** (Platform section, untouched — the other half of the "friends join without
+  port-forwarding" promise). Good candidates for upcoming ticks.
+- **QA coverage:** the TURN path's real behavior (relay allocation) has no automated test
+  by necessity; a manual/staging checklist with a real coturn would be the only way to
+  exercise it — noted as out-of-scope for the in-context loop.
+
 ## 2026-06-15 (tick 98) — Acted on last tick's own suggestion: proactively de-flaked the gate
 
 A verification + loop-health tick. Ran the full browser QA (browser/realtime/voice all
