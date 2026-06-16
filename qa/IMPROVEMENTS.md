@@ -2284,3 +2284,35 @@ this: before writing a UI test, check the harness's actors hold the role the pat
 
 **Deploy note:** real app change → committed, pushed origin, `railway up`; live rollout to
 be confirmed by fetching the served bundle for the new `.leave-server-btn` class.
+
+---
+
+## 2026-06-16 — tick 116: transfer ownership completes the server-management lifecycle
+
+**Shipped:** `TransferServerOwnership` (`POST /servers/{id}/transfer`) — the owner hands the
+server to another member in one tx (target → owner, old owner → admin, `servers.owner_id`
+updated). Owner-only; can't transfer to self/non-member. A "make owner" button on each
+non-owner member row (owner-only). With this, the server-management cluster is
+MVP-complete: create · join (invite) · rename · delete · leave · kick · ban · timeout ·
+roles · transfer.
+
+**QA grown:** a transfer round-trip (A→B→A) in `realtime.mjs`, asserting the role badges
+swap in *both* directions, then the existing leave test runs (B ends as admin — still a
+non-owner — so it stays leave-able). AI-vision confirmed the post-transfer panel: B=OWNER,
+A=ADMIN, and A's Server settings controls correctly switched from "delete server" to
+"rename/leave server" now that A is no longer the owner.
+
+**Highest-value learning (reflection): a round-trip test both proves both directions AND
+restores state for the next test.** Transfer is owner-only and one-way per call, so a naive
+one-shot test (A→B) would leave B as owner and break the *subsequent* leave test (B could no
+longer leave). Doing A→B→A in one flow verified the swap symmetrically *and* returned the
+fixture to a leave-able state — composing tests by restoring state beats standing up a fresh
+isolated server for each. Carry this: when a test mutates shared state a later test depends
+on, prefer an inverse operation that doubles as extra coverage over a throwaway fixture.
+
+**Also vision-verified incidentally:** role changes correctly re-gate the UI live — the
+demoted owner's panel swapped delete→leave without a reload, confirming the role-driven
+control rendering from ticks 113/115 holds under a role change.
+
+**Deploy note:** real app change → committed, pushed origin, `railway up`; live rollout to
+be confirmed by fetching the served bundle for `.transfer-owner-btn`.
