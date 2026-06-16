@@ -2226,3 +2226,33 @@ the behaviour?" (cf. tick-110's "did I test the property the design exists for?"
 
 **Deploy note:** real app change → committed, pushed origin, `railway up` deployed, live
 rollout confirmed by fetching the served bundle (not just `/healthz`).
+
+---
+
+## 2026-06-16 — tick 114: closed the tick-113 finding (sidebar truncation) + a QA-assertion lesson
+
+**Shipped:** sidebar long-name truncation. Server/channel/DM names now ellipsis-truncate
+(`.item-name`/`.server-name-text` get `min-width:0` + `overflow:hidden` + `text-overflow:
+ellipsis`; the `#id` badge, avatar, hash, and unread dot stay `flex-shrink:0`), with the
+full name in a `title` tooltip — a long name can no longer overflow the fixed 220px sidebar.
+This directly closes the polish gap tick-113's AI-vision surfaced.
+
+**QA grown:** the browser server-settings flow now creates a *boundary-width* server name
+("qa settings srv long enough to overflow the sidebar") and asserts the name element clips
+(`scrollWidth > clientWidth`) and stays within the sidebar's right edge — exactly the
+fixture-stresses-width lesson from tick-113, now encoded.
+
+**Highest-value learning (the reflection): a failing UI assertion is not proof the code is
+broken — reconcile it against the screenshot first.** My FIRST assertion checked the whole
+`.server-list` container's `scrollWidth > clientWidth`. It FAILED — but the AI-vision pass
+on the same screenshot showed the name truncating perfectly with a clean sidebar. The fix
+was correct; the *assertion* was wrong: a container's horizontal overflow is confounded by
+every sibling in it (the +channel/+category/invite action row), so it can't isolate "did
+the name overflow?". Switching to an element-level check (does THIS name element clip, and
+is its right edge inside the sidebar?) made it precise and green. Lesson: assert the
+specific element's property, never a broad container metric many things contribute to — and
+when an assertion and the rendered pixels disagree, trust the pixels and fix the test (Rule
+14 is why the vision pass runs *alongside* the automated checks, not instead of them).
+
+**Deploy note:** frontend-only change → committed, pushed origin, `railway up`, live rollout
+to be confirmed by fetching the served bundle.
