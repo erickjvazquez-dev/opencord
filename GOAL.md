@@ -368,10 +368,12 @@ item from here as the structural milestones above land.
   exceeds a tightened/contradictory window and an unmatchable token returns 0). Verifies
   query/filter features on prod by **discrimination against existing history**, not
   write-then-find (plain text posts go via WS, not REST). Run via `make qa-search`
-  (defaults to `CCF_LIVE_URL`, `OPENCORD_BASE_URL=` to point elsewhere). On an empty
-  `#general` it reports INCONCLUSIVE (exit 0) rather than false-red. Proven to catch a
-  "match-all" regression (operators silently ignored → 5 of 7 assertions trip);
-  green on prod against 7 messages of history (iter 122).
+  (defaults to `CCF_LIVE_URL`, `OPENCORD_BASE_URL=` to point elsewhere); **also wired
+  into `qa/run.sh` as a gated step (`search=$RC4`)** so it runs against the local stack
+  on every browser-QA run (iter 123). On an empty `#general` it reports INCONCLUSIVE
+  (exit 0) rather than false-red. Proven to catch a "match-all" regression (operators
+  silently ignored → 5 of 7 assertions trip); green on prod (7 msgs) and on the local
+  gate (14 msgs).
 
 ---
 

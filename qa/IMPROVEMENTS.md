@@ -2454,3 +2454,30 @@ and that's not a search bug.
    simulate the broken behavior and confirm the assertions trip (did it here, 5/7).
 Component/dimension rotation: advanced **search/chat QA coverage** this tick (distinct from
 the prior presence + responsive ticks).
+
+---
+
+## 2026-06-16 (tick 123) — Browser-QA tick: all-green + vision pass; wired search-smoke into the local gate
+
+Ran the full browser QA (`bash qa/run.sh`) — **browser=0 realtime=0 voice=0**, every assertion
+green including the two-client voice + screen-share flows. AI-vision pass over the screenshots
+(search, presence/DnD member list, mobile header at 390px): all clean, **no P0/P1** — search
+result card, the DnD red dot + 🚀 status, and the wrapped mobile header all render polished and
+Discord-like. The last session's mobile-header overflow fix holds.
+
+**QA-process improvement this tick:** wired `qa/search-smoke.sh` into `qa/run.sh` as a 4th gated
+step (`search=$RC4`) against the local API, so search-operator discrimination is now verified on
+**every** browser-QA run, not just manually against prod. Verified by re-running the full suite:
+the smoke found 14 messages of #general history (posted by the QA bots) and passed all
+discrimination assertions → `browser=0 realtime=0 voice=0 search=0`. On a fresh/empty channel it
+self-reports INCONCLUSIVE (exit 0), so it can never false-red the gate.
+
+**Highest-value lesson — verify the parse logic before filing a "bug" from a surprising number.**
+The local smoke showed `after:<today>` = 0 even though all 14 messages were posted *today* (real
+clock 2026-06-16 21:1x UTC). My first instinct was "after: date-boundary bug." Reading
+`parseSearchQuery` showed `after:` does `d.AddDate(0,0,1)` — `after:2026-06-16` means *strictly
+after the whole day* (≥ 2026-06-17), the **documented day-exclusive** semantic. So excluding
+today's messages is CORRECT, not a bug. A surprising QA number is a prompt to read the code, not
+a bug to file — the smoke's robust assertions (which don't depend on `after:today`) stayed green
+throughout. Component/dimension rotation: advanced **interaction depth / result-region** QA
+(wired a real discrimination check into the gate + AI-vision over result cards).

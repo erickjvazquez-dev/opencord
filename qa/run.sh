@@ -71,6 +71,13 @@ QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/realtime.mjs"; RC2=$?
 echo "[qa] running voice QA (two clients, mesh WebRTC)…"
 QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/voice.mjs"; RC3=$?
 
-echo "[qa] browser=$RC1 realtime=$RC2 voice=$RC3"
-[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$RC3" -eq 0 ]
+# Search-operator discrimination smoke (read-only) against the local API directly.
+# By now browser/realtime QA have posted to #general, so it has history to
+# discriminate against; on an empty channel the smoke reports INCONCLUSIVE (exit 0),
+# so it never false-reds the gate.
+echo "[qa] running search-operator smoke (read-only, local API :8080)…"
+OPENCORD_BASE_URL=http://localhost:8080 bash "$ROOT/qa/search-smoke.sh"; RC4=$?
+
+echo "[qa] browser=$RC1 realtime=$RC2 voice=$RC3 search=$RC4"
+[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$RC3" -eq 0 ] && [ "$RC4" -eq 0 ]
 exit $?
