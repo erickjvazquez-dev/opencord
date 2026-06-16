@@ -198,7 +198,8 @@ item from here as the structural milestones above land.
 
 ### Servers / Guilds
 - [ ] Create/join servers (guilds) + server settings
-- [ ] Channel categories + ordering
+- [~] **Channel categories DONE** (collapsible groups; create + nest a channel + optional
+  categoryId on channel create, Rule-B cross-server guard) · ordering/drag TODO
 - [~] Invites — code-join + **7-day expiry DONE** (enforced server-side at redeem;
   expired → 404, adversarially tested; legacy invites stay permanent). max-uses ·
   invite links · temporary membership · revoke UI TODO
@@ -215,7 +216,15 @@ item from here as the structural milestones above land.
 ### Channels
 - [x] Text channels (create, list, switch)
 - [ ] Voice channels · stage channels · forum channels
-- [ ] Categories · per-channel permissions · channel topic
+- [~] **Categories DONE** — a server groups channels under named, collapsible category
+  headers (Discord-style); `channel_categories` table + nullable `channels.category_id`
+  (ON DELETE SET NULL → deleting a category leaves channels uncategorized). Admin-gated
+  create (`POST /servers/{id}/categories`), member list, optional `categoryId` on channel
+  create (cross-server category attach rejected, Rule B). Sidebar renders uncategorized
+  channels first, then collapsible groups with a per-category "+" to add a channel.
+  Adversarial integration test + browser E2E (create → nest → collapse/expand) +
+  AI-vision verified. (Reorder/drag + move-existing-channel + per-channel permissions +
+  channel topic[done] still TODO)
 - [~] **Slowmode** (per-channel post cooldown, admin-set, server-enforced, 🐌 badge —
   E2E + adversarial test) · NSFW gating · announcement channels (done: read-only
   policy) + following · channel topic (done)

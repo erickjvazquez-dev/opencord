@@ -384,6 +384,42 @@ async function main() {
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
+  // 7-cat — Channel categories: the owner creates a category, adds a channel inside it,
+  // and the category renders as a collapsible group that nests its channel.
+  step('create a category → add a channel in it → collapse/expand the group')
+  promptAnswer = 'Text Channels'
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: '+ category' })
+    .click()
+  const catGroup = page.locator('.channel-category', { hasText: 'Text Channels' })
+  await catGroup.waitFor({ timeout: 8000 })
+  check(await catGroup.isVisible(), 'the new category appears as a collapsible group')
+  const catChan = 'cat' + String(Date.now()).slice(-6)
+  promptAnswer = catChan
+  await catGroup.locator('.category-add').click()
+  const catChanBtn = catGroup.locator('.channel-item', { hasText: catChan })
+  await catChanBtn.waitFor({ timeout: 8000 })
+  check(await catChanBtn.isVisible(), 'a channel created in the category nests under it')
+  await shot('07-cat.png')
+  // Collapse → the nested channel hides; expand → it returns.
+  await catGroup.locator('.category-toggle').click()
+  await catChanBtn.waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  check(
+    (await catGroup.locator('.channel-item', { hasText: catChan }).count()) === 0,
+    'collapsing the category hides its channels',
+  )
+  await catGroup.locator('.category-toggle').click()
+  await catGroup.locator('.channel-item', { hasText: catChan }).waitFor({ timeout: 8000 })
+  check(
+    await catGroup.locator('.channel-item', { hasText: catChan }).isVisible(),
+    'expanding the category shows its channels again',
+  )
+  // Restore the active channel to the one holding our posted message — later steps
+  // (search) run against the active channel, which we switched away from above.
+  await page.getByRole('button', { name: new RegExp(srvChan) }).click()
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).waitFor({ timeout: 8000 })
+
   // 7a-fix — Header must stay clean in a server channel. The member-list sidebar
   // (~220px, shown >900px) narrows this column, so the header controls have far
   // less room than in #general. Regression for the iter-90 AI-vision finding:

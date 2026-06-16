@@ -13,6 +13,16 @@ export interface Channel {
   topic?: string
   // Per-channel post cooldown for non-admins, in seconds (0/absent = off).
   slowmodeSeconds?: number
+  // Groups the channel under a server category; absent = uncategorized.
+  categoryId?: number
+}
+
+// A named, collapsible grouping of a server's channels (Discord-style category).
+export interface ChannelCategory {
+  id: number
+  serverId: number
+  name: string
+  createdAt: string
 }
 
 // A direct-message channel as seen by one participant: the channel id plus the

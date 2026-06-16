@@ -5,6 +5,8 @@ import {
   createInvite,
   createServer,
   createServerChannel,
+  createChannelCategory,
+  fetchChannelCategories,
   deleteMessage,
   editMessage,
   fetchChannels,
@@ -37,6 +39,7 @@ import {
 } from '../api'
 import type {
   Channel,
+  ChannelCategory,
   DMChannel,
   Message,
   Reaction,
@@ -132,6 +135,10 @@ export function Chat({
   const [servers, setServers] = useState<Server[]>([])
   // serverId → its channels (members-only; fetched per server).
   const [serverChannels, setServerChannels] = useState<Record<number, Channel[]>>({})
+  // Per-server channel categories (Discord-style collapsible groups), keyed by server id.
+  const [serverCategories, setServerCategories] = useState<Record<number, ChannelCategory[]>>({})
+  // Category ids the viewer has collapsed in the sidebar (client-only UI state).
+  const [collapsedCats, setCollapsedCats] = useState<Set<number>>(new Set())
   const [channelId, setChannelId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [online, setOnline] = useState(0)
@@ -215,17 +222,23 @@ export function Chat({
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
 
-  // Load the user's servers and each server's channels into the serverChannels map.
+  // Load the user's servers and each server's channels + categories into their maps.
   const refreshServers = async () => {
     try {
       const srvs = await fetchServers(token)
       setServers(srvs)
       const entries = await Promise.all(
         srvs.map(
-          async (s) => [s.id, await fetchServerChannels(token, s.id).catch(() => [])] as const,
+          async (s) =>
+            [
+              s.id,
+              await fetchServerChannels(token, s.id).catch(() => []),
+              await fetchChannelCategories(token, s.id).catch(() => []),
+            ] as const,
         ),
       )
-      setServerChannels(Object.fromEntries(entries))
+      setServerChannels(Object.fromEntries(entries.map(([id, chans]) => [id, chans])))
+      setServerCategories(Object.fromEntries(entries.map(([id, , cats]) => [id, cats])))
     } catch {
       /* leave servers as-is on failure */
     }
@@ -907,17 +920,48 @@ export function Chat({
     }
   }
 
-  const addServerChannel = async (serverId: number) => {
+  // Create a channel, optionally inside a category (categoryId).
+  const addServerChannel = async (serverId: number, categoryId?: number) => {
     const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
     if (!name) return
     try {
-      const c = await createServerChannel(token, serverId, name)
+      const c = await createServerChannel(token, serverId, name, categoryId)
       setServerChannels((cur) => ({ ...cur, [serverId]: [...(cur[serverId] ?? []), c] }))
       setChannelId(c.id)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not create channel')
     }
   }
+  // Create a channel category (admin); it shows as a collapsible group in the sidebar.
+  const addCategory = async (serverId: number) => {
+    const name = window.prompt('New category name (e.g. "Text Channels"):')?.trim()
+    if (!name) return
+    try {
+      const cat = await createChannelCategory(token, serverId, name)
+      setServerCategories((cur) => ({ ...cur, [serverId]: [...(cur[serverId] ?? []), cat] }))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not create category')
+    }
+  }
+  const toggleCategory = (categoryId: number) =>
+    setCollapsedCats((cur) => {
+      const next = new Set(cur)
+      if (next.has(categoryId)) next.delete(categoryId)
+      else next.add(categoryId)
+      return next
+    })
+  // One server-channel button (reused for uncategorized channels + each category group).
+  const channelButton = (c: Channel) => (
+    <button
+      key={c.id}
+      className={`channel-item server-channel${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}`}
+      onClick={() => selectChannel(c.id)}
+    >
+      <span className="hash">#</span>
+      {c.name}
+      {unreadIndicator(c.id)}
+    </button>
+  )
 
   const startEdit = (m: Message) => {
     setEditingId(m.id)
@@ -1209,20 +1253,43 @@ export function Chat({
               <div className="server-name">
                 {s.name} <span className="server-id">#{s.id}</span>
               </div>
-              {(serverChannels[s.id] ?? []).map((c) => (
-                <button
-                  key={c.id}
-                  className={`channel-item server-channel${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}`}
-                  onClick={() => selectChannel(c.id)}
-                >
-                  <span className="hash">#</span>
-                  {c.name}
-                  {unreadIndicator(c.id)}
-                </button>
-              ))}
+              {/* Uncategorized channels render first (today's behaviour). */}
+              {(serverChannels[s.id] ?? [])
+                .filter((c) => c.categoryId == null)
+                .map(channelButton)}
+              {/* Then each category as a collapsible group with its channels nested. */}
+              {(serverCategories[s.id] ?? []).map((cat) => {
+                const collapsed = collapsedCats.has(cat.id)
+                const chans = (serverChannels[s.id] ?? []).filter((c) => c.categoryId === cat.id)
+                return (
+                  <div key={cat.id} className="channel-category">
+                    <div className="category-head">
+                      <button
+                        className="category-toggle"
+                        onClick={() => toggleCategory(cat.id)}
+                        title={collapsed ? 'expand' : 'collapse'}
+                      >
+                        <span className="category-caret">{collapsed ? '▸' : '▾'}</span>
+                        {cat.name}
+                      </button>
+                      <button
+                        className="category-add"
+                        title="add a channel in this category"
+                        onClick={() => void addServerChannel(s.id, cat.id)}
+                      >
+                        +
+                      </button>
+                    </div>
+                    {!collapsed && chans.map(channelButton)}
+                  </div>
+                )
+              })}
               <div className="server-group-actions">
                 <button className="server-add-channel" onClick={() => void addServerChannel(s.id)}>
                   + channel
+                </button>
+                <button className="server-add-channel" onClick={() => void addCategory(s.id)}>
+                  + category
                 </button>
                 <button className="server-add-channel" onClick={() => void inviteToServer(s.id)}>
                   invite

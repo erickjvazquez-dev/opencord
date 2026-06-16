@@ -1,5 +1,6 @@
 import type {
   Channel,
+  ChannelCategory,
   ChannelUnread,
   DMChannel,
   Message,
@@ -252,15 +253,44 @@ export async function createServerChannel(
   token: string,
   serverId: number,
   name: string,
+  categoryId?: number,
 ): Promise<Channel> {
   const res = await fetch(`/api/servers/${serverId}/channels`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(categoryId == null ? { name } : { name, categoryId }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
+  return data as Channel
+}
+
+// List a server's channel categories (members).
+export async function fetchChannelCategories(
+  token: string,
+  serverId: number,
+): Promise<ChannelCategory[]> {
+  const res = await fetch(`/api/servers/${serverId}/categories`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('could not load categories')
+  return res.json()
+}
+
+// Create a channel category (admin-gated).
+export async function createChannelCategory(
+  token: string,
+  serverId: number,
+  name: string,
+): Promise<ChannelCategory> {
+  const res = await fetch(`/api/servers/${serverId}/categories`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ name }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')
-  return data as Channel
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create category')
+  return data as ChannelCategory
 }
 
 export async function setChannelPolicy(

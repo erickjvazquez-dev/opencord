@@ -477,7 +477,8 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			return
 		}
 		var in struct {
-			Name string `json:"name"`
+			Name       string `json:"name"`
+			CategoryID *int64 `json:"categoryId"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
@@ -487,13 +488,67 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			http.Error(w, `{"error":"channel name must be 2-32 chars of [a-z0-9_-]"}`, http.StatusBadRequest)
 			return
 		}
-		c, err := store.CreateServerChannel(r.Context(), id, in.Name)
-		if errors.Is(err, chat.ErrChannelExists) {
+		c, err := store.CreateServerChannelInCategory(r.Context(), id, in.Name, in.CategoryID)
+		switch {
+		case errors.Is(err, chat.ErrChannelExists):
 			http.Error(w, `{"error":"channel name already taken in this server"}`, http.StatusConflict)
 			return
-		}
-		if err != nil {
+		case errors.Is(err, chat.ErrCategoryNotFound):
+			http.Error(w, `{"error":"category not found in this server"}`, http.StatusBadRequest)
+			return
+		case err != nil:
 			http.Error(w, `{"error":"could not create channel"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, c)
+	})
+	// List a server's channel categories (members). Categories are display-only groupings.
+	r.Get("/servers/{id}/categories", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		cats, err := store.ListChannelCategories(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not load categories"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, cats)
+	})
+	// Create a channel category (admin-gated, like creating a channel). Name is a label
+	// (spaces/caps allowed), trimmed and bounded.
+	r.Post("/servers/{id}/categories", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		var in struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		name := strings.TrimSpace(in.Name)
+		if name == "" || len([]rune(name)) > 32 {
+			http.Error(w, `{"error":"category name must be 1-32 characters"}`, http.StatusBadRequest)
+			return
+		}
+		c, err := store.CreateChannelCategory(r.Context(), id, name)
+		if err != nil {
+			http.Error(w, `{"error":"could not create category"}`, http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, http.StatusCreated, c)

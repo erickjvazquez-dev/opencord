@@ -606,6 +606,109 @@ func TestRouterTimeoutMemberIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterChannelCategoriesIntegration walks the category endpoints + the
+// create-channel-in-category path: authz (create is admin, list is member), name
+// validation, that a created channel carries its categoryId, and the Rule-B guard that a
+// channel can't be attached to ANOTHER server's category (ErrCategoryNotFound → 400).
+func TestRouterChannelCategoriesIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Category Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := hs.store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	// A second server owned by someone else, to test the cross-server category guard.
+	other, otherTok := hs.user(t)
+	srv2, err := hs.store.CreateServer(ctx, other.ID, "Other Guild")
+	if err != nil {
+		t.Fatalf("create server2: %v", err)
+	}
+	otherCat, err := hs.store.CreateChannelCategory(ctx, srv2.ID, "Other Cat")
+	if err != nil {
+		t.Fatalf("create other category: %v", err)
+	}
+	_ = otherTok
+
+	catsPath := fmt.Sprintf("/api/servers/%d/categories", srv.ID)
+	chansPath := fmt.Sprintf("/api/servers/%d/channels", srv.ID)
+
+	t.Run("create category authz", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", catsPath, "", `{"name":"Text"}`), http.StatusUnauthorized, "unauth create")
+		wantStatus(t, hs.req(t, "POST", catsPath, strangerTok, `{"name":"Text"}`), http.StatusForbidden, "stranger create")
+		wantStatus(t, hs.req(t, "POST", catsPath, memberTok, `{"name":"Text"}`), http.StatusForbidden, "member create")
+	})
+	t.Run("category name validation", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", catsPath, ownerTok, `{"name":"   "}`), http.StatusBadRequest, "blank name")
+		tooLong := fmt.Sprintf(`{"name":%q}`, strings.Repeat("x", 33))
+		wantStatus(t, hs.req(t, "POST", catsPath, ownerTok, tooLong), http.StatusBadRequest, "too-long name")
+	})
+	t.Run("list categories: member ok, stranger 403", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "GET", catsPath, strangerTok, ""), http.StatusForbidden, "stranger lists")
+		wantStatus(t, hs.req(t, "GET", catsPath, memberTok, ""), http.StatusOK, "member lists")
+	})
+	t.Run("admin creates a category → channel in it carries the categoryId", func(t *testing.T) {
+		// Create the category (display label with a space + caps is allowed).
+		catResp := hs.req(t, "POST", catsPath, ownerTok, `{"name":"Text Channels"}`)
+		wantStatus(t, catResp, http.StatusCreated, "owner creates category")
+		var cat struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(catResp.Body.Bytes(), &cat); err != nil {
+			t.Fatalf("decode category: %v", err)
+		}
+		if cat.ID == 0 || cat.Name != "Text Channels" {
+			t.Fatalf("unexpected category: %+v", cat)
+		}
+		// Create a channel inside it; the response carries categoryId.
+		chResp := hs.req(t, "POST", chansPath, ownerTok, fmt.Sprintf(`{"name":"general","categoryId":%d}`, cat.ID))
+		wantStatus(t, chResp, http.StatusCreated, "create channel in category")
+		var ch struct {
+			ID         int64  `json:"id"`
+			CategoryID *int64 `json:"categoryId"`
+		}
+		if err := json.Unmarshal(chResp.Body.Bytes(), &ch); err != nil {
+			t.Fatalf("decode channel: %v", err)
+		}
+		if ch.CategoryID == nil || *ch.CategoryID != cat.ID {
+			t.Fatalf("channel should carry categoryId %d, got %+v", cat.ID, ch.CategoryID)
+		}
+		// And ListServerChannels reflects it.
+		chans, err := hs.store.ListServerChannels(ctx, srv.ID)
+		if err != nil {
+			t.Fatalf("list channels: %v", err)
+		}
+		var found bool
+		for _, c := range chans {
+			if c.ID == ch.ID && c.CategoryID != nil && *c.CategoryID == cat.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("ListServerChannels should report the channel's category_id")
+		}
+	})
+	t.Run("can't attach a channel to another server's category (Rule B)", func(t *testing.T) {
+		body := fmt.Sprintf(`{"name":"sneaky","categoryId":%d}`, otherCat.ID)
+		wantStatus(t, hs.req(t, "POST", chansPath, ownerTok, body), http.StatusBadRequest, "cross-server category")
+		// The channel must not have been created.
+		chans, _ := hs.store.ListServerChannels(ctx, srv.ID)
+		for _, c := range chans {
+			if c.Name == "sneaky" {
+				t.Fatal("a channel with a cross-server category must not be created")
+			}
+		}
+	})
+}
+
 // TestRouterMessageEndpointsIntegration covers the edit + reaction REST endpoints,
 // which carry their own authorization (edit is author-only; reactions are gated by
 // channel access) and map store errors to HTTP status. The message under test lives

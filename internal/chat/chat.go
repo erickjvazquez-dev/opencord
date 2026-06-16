@@ -24,6 +24,8 @@ import (
 var (
 	// ErrChannelExists is returned when a channel name is already taken.
 	ErrChannelExists = errors.New("channel name already taken")
+	// ErrCategoryNotFound is returned when a category id doesn't exist in the server.
+	ErrCategoryNotFound = errors.New("category not found")
 	// ErrUserNotFound is returned when a DM target username does not exist.
 	ErrUserNotFound = errors.New("user not found")
 	// ErrCannotDMSelf is returned when a user tries to open a DM with themselves.
@@ -159,6 +161,8 @@ type Channel struct {
 	Topic string `json:"topic,omitempty"`
 	// SlowmodeSeconds is the per-channel post cooldown for non-admins (0 = off).
 	SlowmodeSeconds int `json:"slowmodeSeconds,omitempty"`
+	// CategoryID groups the channel under a server category; nil = uncategorized.
+	CategoryID *int64 `json:"categoryId,omitempty"`
 }
 
 type Store struct{ pool *pgxpool.Pool }
@@ -1385,12 +1389,31 @@ func (s *Store) AddServerMember(ctx context.Context, serverID, userID int64) err
 	return err
 }
 
-// CreateServerChannel creates a members-only channel under a server.
+// CreateServerChannel creates a members-only channel under a server (uncategorized).
 func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name string) (Channel, error) {
-	c := Channel{Name: name, PostPolicy: "everyone"}
+	return s.CreateServerChannelInCategory(ctx, serverID, name, nil)
+}
+
+// CreateServerChannelInCategory creates a members-only channel under a server, optionally
+// inside a category. A non-nil categoryID is validated to belong to serverID (Rule B — a
+// client can't attach a channel to another server's category); a bad/cross-server id
+// returns ErrCategoryNotFound and nothing is written.
+func (s *Store) CreateServerChannelInCategory(ctx context.Context, serverID int64, name string, categoryID *int64) (Channel, error) {
+	if categoryID != nil {
+		var ok bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM channel_categories WHERE id = $1 AND server_id = $2)`,
+			*categoryID, serverID).Scan(&ok); err != nil {
+			return Channel{}, err
+		}
+		if !ok {
+			return Channel{}, ErrCategoryNotFound
+		}
+	}
+	c := Channel{Name: name, PostPolicy: "everyone", CategoryID: categoryID}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO channels (name, server_id) VALUES ($1, $2) RETURNING id, created_at`,
-		name, serverID).Scan(&c.ID, &c.CreatedAt)
+		`INSERT INTO channels (name, server_id, category_id) VALUES ($1, $2, $3) RETURNING id, created_at`,
+		name, serverID, categoryID).Scan(&c.ID, &c.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique within the server
@@ -1401,10 +1424,52 @@ func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name st
 	return c, nil
 }
 
+// ChannelCategory is a named, collapsible grouping of a server's channels.
+type ChannelCategory struct {
+	ID        int64     `json:"id"`
+	ServerID  int64     `json:"serverId"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// maxCategoryNameLen bounds a category's display name (Rule B). Categories allow spaces
+// and caps (they're labels, not slugs), so they don't use ValidChannelName.
+const maxCategoryNameLen = 32
+
+// CreateChannelCategory creates a category under serverID. The caller verifies admin and
+// passes an already-trimmed, non-empty, length-bounded name (the handler validates it).
+func (s *Store) CreateChannelCategory(ctx context.Context, serverID int64, name string) (ChannelCategory, error) {
+	c := ChannelCategory{ServerID: serverID, Name: name}
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO channel_categories (server_id, name) VALUES ($1, $2) RETURNING id, created_at`,
+		serverID, name).Scan(&c.ID, &c.CreatedAt)
+	return c, err
+}
+
+// ListChannelCategories returns serverID's categories, oldest first.
+func (s *Store) ListChannelCategories(ctx context.Context, serverID int64) ([]ChannelCategory, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, server_id, name, created_at FROM channel_categories WHERE server_id = $1 ORDER BY id`,
+		serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ChannelCategory, 0)
+	for rows.Next() {
+		var c ChannelCategory
+		if err := rows.Scan(&c.ID, &c.ServerID, &c.Name, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // ListServerChannels returns the channels under serverID, oldest first.
 func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds FROM channels WHERE server_id = $1 ORDER BY id`,
+		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds, category_id FROM channels WHERE server_id = $1 ORDER BY id`,
 		serverID)
 	if err != nil {
 		return nil, err
@@ -1413,7 +1478,7 @@ func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Chann
 	out := make([]Channel, 0)
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic, &c.SlowmodeSeconds); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic, &c.SlowmodeSeconds, &c.CategoryID); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

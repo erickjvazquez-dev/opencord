@@ -1315,3 +1315,46 @@ regardless of client state). `timeoutServerMember` / `clearMemberTimeout` in `ap
 and the HTTP attachment path; after the timeout is cleared (or expires) they can post
 again. Duration is clamped server-side (a client can't request a 100-year mute or a
 negative one). Reactions/edits while timed out are a documented follow-up.
+
+---
+
+## Channel categories (v0.4 — server structure parity, 2026-06-16)
+
+**Goal:** Discord-style **categories** — a server groups its channels under named,
+collapsible category headers in the sidebar. A channel optionally belongs to a category;
+`category_id NULL` = uncategorized (renders at the top, today's behaviour). MVP scope:
+create category + create a channel under a category + collapsible sidebar groups. Out of
+scope (follow-ups): drag-reorder, moving an existing channel between categories,
+per-category permission overrides.
+
+**Schema:** new `channel_categories (id, server_id→servers ON DELETE CASCADE, name,
+created_at)` + `ALTER TABLE channels ADD COLUMN category_id BIGINT REFERENCES
+channel_categories(id) ON DELETE SET NULL` — deleting a category leaves its channels
+uncategorized (never deletes channels). Indexed by server_id.
+
+**Store (`internal/chat`):**
+- `ChannelCategory` struct + `CreateChannelCategory(serverID, name)` /
+  `ListChannelCategories(serverID)`. Name trimmed + bounded (1..32 runes; unlike channel
+  names, categories allow spaces/caps — they're display labels).
+- `CreateServerChannel` now delegates to `CreateServerChannelInCategory(serverID, name,
+  categoryID *int64)` (old callers unchanged, pass nil). When categoryID is non-nil it is
+  validated to belong to serverID (Rule B — a client can't attach a channel to another
+  server's category); a bad/cross-server id is rejected (`ErrCategoryNotFound`).
+- `Channel.CategoryID *int64`; `ListServerChannels` now selects `category_id`.
+
+**REST (`internal/httpapi`):** `POST /servers/{id}/categories` `{name}` (admin-gated) +
+`GET /servers/{id}/categories` (member-gated). `POST /servers/{id}/channels` accepts an
+optional `categoryId`.
+
+**Web:** `serverCategories: Record<serverId, ChannelCategory[]>` loaded alongside
+`serverChannels`. The sidebar renders uncategorized channels first, then each category as
+a collapsible header (▾/▸, per-category client collapse state) with its channels nested.
+A `+ category` action (admin) creates a category; each category header (admin) has a `+`
+to create a channel inside it. `fetchChannelCategories` / `createChannelCategory` in
+`api.ts`; `createServerChannel` takes an optional categoryId; `ChannelCategory` type +
+`Channel.categoryId`.
+
+**Threat model (Rule B/15 — tested):** category create/list authz mirrors channel
+create/list (admin to create, member to list; stranger → 403). A channel can't be
+attached to a category from another server (`ErrCategoryNotFound`). Category name is
+bounded; empty/whitespace rejected.

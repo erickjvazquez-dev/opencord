@@ -2004,3 +2004,33 @@ timeout(+unmute) — 4 action links plus 2 badges. It reads fine but is getting 
 Discord-style kebab/context menu is the future polish. Also: a browser assertion that a
 muted member's composer actually disables (needs the ~10s member-list poll, so it wasn't
 worth the wall-clock this tick — the backend guard + the placeholder logic cover it).
+
+---
+
+## 2026-06-16 — tick 104: channel categories (collapsible groups)
+
+**Shipped:** Discord-style channel categories — `channel_categories` table + nullable
+`channels.category_id` (ON DELETE SET NULL), admin-gated create + member list endpoints,
+optional `categoryId` on channel create with a Rule-B cross-server guard
+(`ErrCategoryNotFound`). Sidebar renders uncategorized channels first, then collapsible
+category groups with a per-category "+". Adversarial integration test + browser E2E
+(create → nest → collapse/expand) + AI-vision verified. Live on Railway.
+
+**Highest-value lesson — a new QA step that changes shared UI state broke a LATER,
+unrelated test.** My category step created a channel and (via the create-channel handler)
+switched the active channel to it. The search test runs 15 lines later and searches the
+ACTIVE channel — which was now the new empty category channel, not the one holding the
+posted message → two search assertions failed with `browser=1`. The category assertions
+themselves all passed; the failure was pure test-ordering coupling through the shared
+"active channel" state. Fix: the new step restores the active channel before yielding.
+
+**Loop-process rule (apply when adding a browser-QA step):** a step that mutates shared
+app state (active channel, open panel, selected server, draft) must **leave that state as
+it found it** (or the very next step inherits a surprise). Treat browser.mjs steps like
+tests sharing a fixture: clean up the global UI state you changed. When a QA run goes red,
+check whether a *just-added* step changed state a *later* step depends on before assuming
+the feature itself is broken — here the feature was fine; the harness coupling wasn't.
+
+**Next QA growth / follow-ups:** category reorder/drag, move-an-existing-channel between
+categories, and "keep the active channel visible even under a collapsed category" (Discord
+behaviour) are deferred polish — each wants its own assertion when built.

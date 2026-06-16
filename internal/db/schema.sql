@@ -161,6 +161,18 @@ CREATE INDEX IF NOT EXISTS server_invites_server_id_idx ON server_invites (serve
 -- Invite expiry (v0.4): NULL = never (legacy invites); new invites get now()+7d.
 ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 
+-- Channel categories (v0.4): a server groups its channels under named, collapsible
+-- categories (Discord-style). A channel with category_id NULL is uncategorized. Deleting
+-- a category sets its channels' category_id to NULL (never deletes the channels).
+CREATE TABLE IF NOT EXISTS channel_categories (
+    id         BIGSERIAL PRIMARY KEY,
+    server_id  BIGINT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS channel_categories_server_id_idx ON channel_categories (server_id);
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS category_id BIGINT REFERENCES channel_categories(id) ON DELETE SET NULL;
+
 -- Server bans (v0.4): a banned user is removed from the server AND blocked from
 -- rejoining — RedeemInvite rejects them — until an owner/admin unbans them. Owner/admin
 -- action, mirroring kick's authz; the stronger form of kick (kick lets them rejoin).
