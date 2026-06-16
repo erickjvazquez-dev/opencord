@@ -352,6 +352,44 @@ func TestRouterStatusIntegration(t *testing.T) {
 	if s := statusOf(owner.ID); s != "" {
 		t.Fatalf("status should be cleared, got %q", s)
 	}
+
+	// --- adversarial / Rule 15: hostile bodies are rejected with 400 (never a 500 or a
+	// stored value), and the length bounds hold end-to-end through the handler. This is
+	// the handler-level class that produced the iter-97 over-long-password 500. ---
+	emojiOf := func(uid int64) string {
+		w := hs.req(t, "GET", membersPath, ownerTok, "")
+		wantStatus(t, w, http.StatusOK, "list members (emoji)")
+		var ms []chat.ServerMember
+		if err := json.Unmarshal(w.Body.Bytes(), &ms); err != nil {
+			t.Fatalf("decode members: %v", err)
+		}
+		for _, m := range ms {
+			if m.UserID == uid {
+				return m.StatusEmoji
+			}
+		}
+		t.Fatalf("owner not listed")
+		return ""
+	}
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", ownerTok, `{bad json`),
+		http.StatusBadRequest, "malformed status body -> 400")
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", ownerTok, `{"status":"`+strings.Repeat("x", 5000)+`"}`),
+		http.StatusBadRequest, "oversized status body (>4KiB) -> 400")
+	if s := statusOf(owner.ID); s != "" {
+		t.Fatalf("status must stay cleared after rejected hostile bodies, got %q", s)
+	}
+	// A long-but-under-the-byte-cap status is accepted and capped to 128 runes via HTTP.
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", ownerTok, `{"status":"`+strings.Repeat("x", 200)+`"}`),
+		http.StatusNoContent, "over-long status accepted")
+	if s := statusOf(owner.ID); len([]rune(s)) != 128 {
+		t.Fatalf("over-long status = %d runes via HTTP, want capped to 128", len([]rune(s)))
+	}
+	// statusEmoji is set + capped to 16 runes through the same endpoint.
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", ownerTok, `{"status":"hi","statusEmoji":"`+strings.Repeat("😀", 40)+`"}`),
+		http.StatusNoContent, "set + cap emoji")
+	if e := emojiOf(owner.ID); len([]rune(e)) != 16 {
+		t.Fatalf("over-long emoji = %d runes via HTTP, want capped to 16", len([]rune(e)))
+	}
 }
 
 // TestRouterKickMemberIntegration walks the kick endpoint (DELETE
@@ -1483,4 +1521,15 @@ func TestPresenceEndpointIntegration(t *testing.T) {
 	// Unauthenticated set is rejected.
 	wantStatus(t, hs.req(t, "PUT", "/api/me/presence", "", `{"presence":"dnd"}`),
 		http.StatusUnauthorized, "unauth set presence")
+
+	// Adversarial (Rule 15): malformed JSON and an oversized body (> the 4 KiB cap) are
+	// 400s, never 500; a rejected body leaves the caller's presence unchanged. The last
+	// accepted set above was the bogus->online normalization, so it must still read online.
+	wantStatus(t, hs.req(t, "PUT", "/api/me/presence", ownerTok, `{bad`),
+		http.StatusBadRequest, "malformed presence body -> 400")
+	wantStatus(t, hs.req(t, "PUT", "/api/me/presence", ownerTok, `{"presence":"`+strings.Repeat("x", 5000)+`"}`),
+		http.StatusBadRequest, "oversized presence body (>4KiB) -> 400")
+	if p, _ := presenceOf(owner.ID); p != "online" {
+		t.Fatalf("presence must be unchanged (online) after rejected hostile bodies, got %q", p)
+	}
 }

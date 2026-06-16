@@ -2481,3 +2481,32 @@ today's messages is CORRECT, not a bug. A surprising QA number is a prompt to re
 a bug to file — the smoke's robust assertions (which don't depend on `after:today`) stayed green
 throughout. Component/dimension rotation: advanced **interaction depth / result-region** QA
 (wired a real discrimination check into the gate + AI-vision over result cards).
+
+---
+
+## 2026-06-16 (tick 124) — Rule-15 HTTP-handler hardening tests for PUT /me/status + /me/presence
+
+Rotated off QA-tooling (2 prior ticks) to the **security** component. Adversarially probed the
+recently-added presence/status endpoints. **Finding: the handlers are already robust** — status
+capped to 128 runes (rune-safe slice), emoji to 16 runes, body bounded to 4 KiB
+(`MaxBytesReader`), `NormalizePresence` coerces any hostile value → `online`, all parameterized +
+JWT-derived. Confirmed live on prod: malformed JSON → 400, oversized (>4 KiB) body → 400, bogus
+presence → 204(online), no 500, nothing stored.
+
+**Gap closed: those Rule-15 bounds weren't encoded as regression tests** at the HTTP layer. The
+existing `TestRouterStatusIntegration` / `TestPresenceEndpointIntegration` covered unauth/set/
+clear/bogus but not the hostile-body paths — exactly the handler-level class that produced the
+**iter-97 over-long-password 500**. Added, through the real router: malformed body → 400,
+oversized (>4 KiB) body → 400, and the length caps end-to-end via HTTP (status → 128 runes, emoji
+→ 16 runes), each with a guard that the rejected body left nothing stored.
+
+**Proved the guard fires (Rule 15 step 3):** transiently widened the status `MaxBytesReader`
+4 KiB → 1 MiB → the oversized body decoded → 204 → the new assertion FAILED (`status = 204, want
+400`); reverted, green again. A bound without a test that fails when the bound is removed is an
+unguarded bound.
+
+**Carry this (process rule): when an adversarial probe finds a surface already hardened, the work
+isn't "nothing to do" — it's "encode the bound as a regression."** A correct-but-untested bound
+silently regresses (a future refactor bumps `1<<12` and no test notices). The deliverable of a
+clean security audit is the test that pins the bound, not just the green probe. Component
+rotation: advanced **security / hostile-input-proof** this tick.
