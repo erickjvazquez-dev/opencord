@@ -1421,3 +1421,66 @@ func TestVoiceTokenIntegration(t *testing.T) {
 		t.Fatalf("token room grant = %v, want %v", video["room"], wantRoom)
 	}
 }
+
+// TestPresenceEndpointIntegration drives the real PUT /me/presence + the member-list
+// presence annotation: the caller always sees their OWN chosen state (incl. invisible),
+// a disconnected other member reads as offline, an unknown value normalizes to online,
+// and an unauthenticated set is rejected.
+func TestPresenceEndpointIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := hs.user(t)
+	member, _ := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Presence Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := hs.store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	// presenceOf fetches the member list AS ownerTok and returns the named user's
+	// effective presence string (and online flag) as the owner sees it.
+	presenceOf := func(uid int64) (string, bool) {
+		w := hs.req(t, "GET", fmt.Sprintf("/api/servers/%d/members", srv.ID), ownerTok, "")
+		wantStatus(t, w, http.StatusOK, "GET members")
+		var ms []chat.ServerMember
+		if err := json.Unmarshal(w.Body.Bytes(), &ms); err != nil {
+			t.Fatalf("decode members: %v", err)
+		}
+		for _, m := range ms {
+			if m.UserID == uid {
+				return m.Presence, m.Online
+			}
+		}
+		t.Fatalf("member %d not in list", uid)
+		return "", false
+	}
+
+	// Default: the owner's own row reads "online".
+	if p, _ := presenceOf(owner.ID); p != "online" {
+		t.Fatalf("default presence = %q, want online", p)
+	}
+	// A disconnected other member reads as offline to the owner (no live socket here).
+	if p, on := presenceOf(member.ID); p != "offline" || on {
+		t.Fatalf("disconnected member = (%q, online=%v), want (offline, false)", p, on)
+	}
+	// The caller sees their own chosen idle/dnd/invisible state (self special-case).
+	for _, st := range []string{"dnd", "idle", "invisible"} {
+		wantStatus(t, hs.req(t, "PUT", "/api/me/presence", ownerTok, fmt.Sprintf(`{"presence":%q}`, st)),
+			http.StatusNoContent, "set presence "+st)
+		if p, _ := presenceOf(owner.ID); p != st {
+			t.Fatalf("after setting %q, own presence = %q, want %q", st, p, st)
+		}
+	}
+	// An unknown value normalizes to online (Rule B — inert, not an error).
+	wantStatus(t, hs.req(t, "PUT", "/api/me/presence", ownerTok, `{"presence":"bogus"}`),
+		http.StatusNoContent, "set bogus presence")
+	if p, _ := presenceOf(owner.ID); p != "online" {
+		t.Fatalf("bogus presence should normalize to online, got %q", p)
+	}
+	// Unauthenticated set is rejected.
+	wantStatus(t, hs.req(t, "PUT", "/api/me/presence", "", `{"presence":"dnd"}`),
+		http.StatusUnauthorized, "unauth set presence")
+}

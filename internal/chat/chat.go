@@ -95,6 +95,14 @@ type ServerMember struct {
 	Status string `json:"status,omitempty"`
 	// StatusEmoji is an optional short emoji shown before the status ("" = none).
 	StatusEmoji string `json:"statusEmoji,omitempty"`
+	// PresenceState is the member's raw user-chosen availability from storage
+	// (online|idle|dnd|invisible). Internal — the HTTP layer derives the visible
+	// Presence from it + the live-connection set, so it is not serialized.
+	PresenceState string `json:"-"`
+	// Presence is the EFFECTIVE presence the HTTP layer annotates for this viewer
+	// (online|idle|dnd|offline). Others see 'invisible'/disconnected as 'offline';
+	// the viewer sees their own true state. "" when unannotated.
+	Presence string `json:"presence,omitempty"`
 	// TimeoutUntil is set while the member is timed out (muted); nil/past = not muted.
 	TimeoutUntil *time.Time `json:"timeoutUntil,omitempty"`
 }
@@ -1492,6 +1500,7 @@ func (s *Store) DeleteServer(ctx context.Context, serverID, actorID int64) error
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, ''), COALESCE(u.status_emoji, ''),
+		        COALESCE(u.presence_state, 'online'),
 		        CASE WHEN m.timeout_until > now() THEN m.timeout_until END
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
@@ -1503,7 +1512,7 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.TimeoutUntil); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -1541,6 +1550,42 @@ func (s *Store) SetUserStatus(ctx context.Context, userID int64, status, emoji s
 	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE users SET status = $2, status_emoji = $3 WHERE id = $1`, userID, sVal, eVal)
+	return err
+}
+
+// NormalizePresence coerces a raw presence value to a known state, defaulting any
+// empty/unknown input to "online" (so a NULL column or a hostile body is inert).
+func NormalizePresence(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "idle":
+		return "idle"
+	case "dnd":
+		return "dnd"
+	case "invisible":
+		return "invisible"
+	default:
+		return "online"
+	}
+}
+
+// EffectivePresence maps a member's raw chosen state + live-connection flag to what
+// OTHER viewers should see: a disconnected member, or one who chose "invisible",
+// reads as "offline"; otherwise their chosen online|idle|dnd shows through. The
+// viewer's OWN row is handled separately (they always see their true state).
+func EffectivePresence(connected bool, raw string) (online bool, presence string) {
+	raw = NormalizePresence(raw)
+	if !connected || raw == "invisible" {
+		return false, "offline"
+	}
+	return true, raw
+}
+
+// SetUserPresence sets userID's chosen presence state (online|idle|dnd|invisible),
+// normalized so an unknown value falls back to "online". JWT-derived caller only
+// (Rule C) — there is no target-user parameter.
+func (s *Store) SetUserPresence(ctx context.Context, userID int64, state string) error {
+	state = NormalizePresence(state)
+	_, err := s.pool.Exec(ctx, `UPDATE users SET presence_state = $2 WHERE id = $1`, userID, state)
 	return err
 }
 

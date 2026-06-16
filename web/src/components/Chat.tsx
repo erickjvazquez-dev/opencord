@@ -41,6 +41,7 @@ import {
   timeoutServerMember,
   clearMemberTimeout,
   setMyStatus,
+  setMyPresence,
   fetchUnreads,
   markChannelRead,
 } from '../api'
@@ -210,6 +211,9 @@ export function Chat({
   const [myStatus, setMyStatus_] = useState('')
   // The caller's own status emoji (synced alongside myStatus).
   const [myStatusEmoji, setMyStatusEmoji_] = useState('')
+  // The caller's own chosen presence (online|idle|dnd|invisible), synced from their
+  // own member-list row (which reports the true self state).
+  const [myPresence, setMyPresence_] = useState('online')
   // Unread channels → unread @-mention count (0 = unread, no mention). Sidebar dots +
   // red mention badges. Synced on load + a ~10s poll.
   const [unread, setUnread] = useState<Map<number, number>>(new Map())
@@ -1145,6 +1149,23 @@ export function Chat({
     }
   }
 
+  // Change my presence (online|idle|dnd|invisible). Optimistically update the picker,
+  // then refresh the member list so the dot recolors immediately.
+  const changePresence = async (next: string) => {
+    const prev = myPresence
+    setMyPresence_(next)
+    try {
+      await setMyPresence(token, next)
+      if (activeServerId) {
+        const members = await fetchServerMembers(token, Number(activeServerId))
+        setMemberList(members)
+      }
+    } catch (err) {
+      setMyPresence_(prev)
+      window.alert(err instanceof Error ? err.message : 'could not set presence')
+    }
+  }
+
   // Create a channel, optionally inside a category (categoryId).
   const addServerChannel = async (serverId: number, categoryId?: number) => {
     const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
@@ -1339,6 +1360,8 @@ export function Chat({
     if (!mine) return
     if ((mine.status ?? '') !== myStatus) setMyStatus_(mine.status ?? '')
     if ((mine.statusEmoji ?? '') !== myStatusEmoji) setMyStatusEmoji_(mine.statusEmoji ?? '')
+    // Own row reports the true self presence (incl. invisible) — keep the picker synced.
+    if (mine.presence && mine.presence !== myPresence) setMyPresence_(mine.presence)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberList, membersOf, user.id])
 
@@ -1675,6 +1698,20 @@ export function Chat({
               />
               <span>{user.username}</span>
             </button>
+            <span className="presence-pill" title="Set your presence">
+              <span className={`presence-pip presence-${myPresence}`} />
+              <select
+                className="presence-select"
+                value={myPresence}
+                onChange={(e) => void changePresence(e.target.value)}
+                aria-label="set your presence"
+              >
+                <option value="online">Online</option>
+                <option value="idle">Idle</option>
+                <option value="dnd">Do Not Disturb</option>
+                <option value="invisible">Invisible</option>
+              </select>
+            </span>
             <button
               className="link status-edit"
               onClick={() => void editMyStatus()}
@@ -2008,8 +2045,8 @@ export function Chat({
                   <span className="avatar-presence">
                     <Avatar token={token} userId={mb.userId} username={mb.username} />
                     <span
-                      className={`presence-dot ${mb.online ? 'online' : 'offline'}`}
-                      title={mb.online ? 'online' : 'offline'}
+                      className={`presence-dot ${mb.presence ?? (mb.online ? 'online' : 'offline')}`}
+                      title={mb.presence ?? (mb.online ? 'online' : 'offline')}
                     />
                   </span>
                   <span className="member-id">
@@ -2540,8 +2577,8 @@ export function Chat({
                     <span className="avatar-presence">
                       <Avatar token={token} userId={mb.userId} username={mb.username} />
                       <span
-                        className={`presence-dot ${mb.online ? 'online' : 'offline'}`}
-                        title={mb.online ? 'online' : 'offline'}
+                        className={`presence-dot ${mb.presence ?? (mb.online ? 'online' : 'offline')}`}
+                        title={mb.presence ?? (mb.online ? 'online' : 'offline')}
                       />
                     </span>
                     <span className="member-id">

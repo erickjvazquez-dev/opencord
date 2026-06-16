@@ -70,6 +70,23 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				w.WriteHeader(http.StatusNoContent)
 			})
+			// Set the CALLER's own presence state (online|idle|dnd|invisible). An
+			// unknown value normalizes to "online" (Rule B). Rule C — JWT-derived id.
+			r.Put("/me/presence", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				var in struct {
+					Presence string `json:"presence"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				if err := store.SetUserPresence(r.Context(), me.ID, in.Presence); err != nil {
+					http.Error(w, `{"error":"could not set presence"}`, http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
 			r.Get("/channels", chat.HandleChannels(store))
 			r.Post("/channels", chat.HandleCreateChannel(store))
 			// Unread indicators: the caller's accessible channels with unread messages,
@@ -732,10 +749,18 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			return
 		}
 		// Annotate presence from the hub's live-connection set (the store doesn't
-		// know about sockets). A member is online if they hold ≥1 WS connection.
+		// know about sockets) combined with each member's chosen presence state.
+		// Others see a disconnected or "invisible" member as offline; the viewer
+		// always sees their OWN true chosen state (so the picker reflects it).
 		online := hub.OnlineUserIDs()
 		for i := range members {
-			members[i].Online = online[members[i].UserID]
+			connected := online[members[i].UserID]
+			if members[i].UserID == me.ID {
+				members[i].Online = connected
+				members[i].Presence = chat.NormalizePresence(members[i].PresenceState)
+				continue
+			}
+			members[i].Online, members[i].Presence = chat.EffectivePresence(connected, members[i].PresenceState)
 		}
 		writeJSON(w, http.StatusOK, members)
 	})

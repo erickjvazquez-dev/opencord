@@ -50,6 +50,9 @@ export interface ServerMember {
   username: string
   role: string
   online?: boolean
+  // Effective presence as the viewer sees it: online | idle | dnd | offline.
+  // (Others see invisible/disconnected as offline; you see your own true state.)
+  presence?: string
   status?: string
   // Optional short emoji shown before the status line; absent = none.
   statusEmoji?: string

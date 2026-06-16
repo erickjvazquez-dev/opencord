@@ -240,6 +240,20 @@ export async function setMyStatus(token: string, status: string, statusEmoji = '
   }
 }
 
+// Set the caller's own presence state (online | idle | dnd | invisible). The server
+// normalizes any unknown value to "online".
+export async function setMyPresence(token: string, presence: string): Promise<void> {
+  const res = await fetch('/api/me/presence', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ presence }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not set presence')
+  }
+}
+
 // Kick a member out of a server (owner/admin only; server enforces who may act).
 export async function kickServerMember(
   token: string,

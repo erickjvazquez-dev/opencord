@@ -313,8 +313,11 @@ item from here as the structural milestones above land.
   renders in header + both member panels; store+browser tested, AI-vision verified — `🚀`
   before the line). Banners · activity ("playing X") still TODO
 - [ ] About me / pronouns / connections · per-server nicknames
-- [~] Presence: **online/offline DONE** (green dot in the member list, hub-backed; -race
-  tested + AI-vision verified) · idle / DnD / invisible TODO
+- [~] Presence: **online/offline + idle/DnD/invisible DONE** — manual presence picker
+  (header `<select>`); `users.presence_state`, effective-presence rule (others see
+  invisible/disconnected as offline, you see your own true state — pure unit-tested),
+  `PUT /me/presence`; member-list dot colored green/amber/red/grey in both panels.
+  Store+http+browser tested, AI-vision verified (red DnD dot). Auto-idle-on-inactivity TODO
 
 ### Roles & Permissions
 - [ ] Roles (hierarchy, colors, icons, mentionable)

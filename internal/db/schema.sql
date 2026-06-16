@@ -29,6 +29,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_type TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT;
 -- Status emoji (v0.4): an optional short emoji shown before the status line. NULL = none.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status_emoji TEXT;
+-- Presence state (v0.4): user-chosen availability (online|idle|dnd|invisible).
+-- NULL reads as 'online'. 'invisible' appears offline to others (live conn still required).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS presence_state TEXT;
 
 CREATE TABLE IF NOT EXISTS messages (
     id         BIGSERIAL PRIMARY KEY,

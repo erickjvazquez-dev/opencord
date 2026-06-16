@@ -1524,3 +1524,34 @@ alone (no text).
 QA `07d2` sets `🚀` + a status line and asserts the emoji renders before the text in the
 member list AND the header. The value is bounded server-side and React-escaped on render, so a
 hostile "emoji" string can neither overflow storage nor inject markup.
+
+## Presence states — idle / dnd / invisible (v0.4 profiles, 2026-06-16)
+
+Extends presence from online/offline to the four Discord states — **online · idle · dnd ·
+invisible** — as a manual user-chosen availability (auto-idle-on-inactivity deferred).
+
+**Storage:** `users.presence_state TEXT` (idempotent ADD COLUMN; NULL reads as 'online').
+
+**Effective-presence rule (the core logic, pure + unit-tested):**
+`EffectivePresence(connected, raw)` — what OTHER viewers see: a disconnected member, or one
+who chose **invisible** (even while connected), reads as **offline**; otherwise their chosen
+online/idle/dnd shows through. `NormalizePresence` coerces any empty/unknown/hostile value to
+"online" (Rule B). The member-list HTTP annotation applies this per row, EXCEPT the viewer's
+own row, which always shows their true chosen state (so the picker reflects invisible/idle/dnd).
+
+**API:** `PUT /me/presence {presence}` → `SetUserPresence` (JWT caller only, Rule C; normalized,
+unknown → online). `ServerMember.presence` is the effective state the client renders; the raw
+`PresenceState` is internal (`json:"-"`). `ServerMember.online` is now also correct for
+invisible (false to others).
+
+**Web:** a header presence picker (native `<select>` + a colored pip: green/amber/red/grey);
+the member-list presence dot is colored by `mb.presence` (online green · idle amber · dnd red ·
+invisible/offline grey) in BOTH the right-sidebar member list and the members-management panel.
+Optimistic update + member-list refresh on change.
+
+**Threat model / tests (Rule B/C):** `TestNormalizePresence` + `TestEffectivePresence` (pure,
+no DB) cover the mapping incl. invisible-while-connected → offline and hostile input → online.
+`TestPresenceEndpointIntegration` drives the real `PUT /me/presence` + member annotation: the
+caller sees their own dnd/idle/invisible, a disconnected member reads offline, a bogus value
+normalizes to online, and an unauthenticated set is 401. Browser QA `07d2b` sets DnD via the
+picker and asserts the self dot turns red in the member list AND the header pip recolors.

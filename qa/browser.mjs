@@ -666,6 +666,23 @@ async function main() {
   await shot('07d2-status.png')
   statusEmojiAnswer = '' // reset so later prompt-driven steps are unaffected
 
+  // 7d2b — Presence picker: choosing "Do Not Disturb" recolors the self dot (red)
+  // in the member list and the header pip; reset back to online afterwards.
+  step('set presence to Do Not Disturb → self dot + header pip recolor')
+  await page.locator('.presence-select').selectOption('dnd')
+  await page.locator('.member-list .presence-dot.dnd').first().waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.member-list .presence-dot.dnd').first().isVisible(),
+    'self presence dot turns dnd (red) in the member list',
+  )
+  check(
+    await page.locator('.presence-pip.presence-dnd').isVisible(),
+    'header presence pip reflects dnd',
+  )
+  await shot('07d2b-presence.png')
+  await page.locator('.presence-select').selectOption('online') // reset for later steps
+  await page.locator('.member-list .presence-dot.online').first().waitFor({ timeout: 8000 })
+
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
   await page.getByRole('button', { name: 'make read-only' }).click()

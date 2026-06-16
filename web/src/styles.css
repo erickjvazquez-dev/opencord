@@ -1369,8 +1369,57 @@ button:disabled {
 .presence-dot.online {
   background: var(--online);
 }
-.presence-dot.offline {
+.presence-dot.idle {
+  background: #f0b232; /* Discord-style amber for idle/away */
+}
+.presence-dot.dnd {
+  background: var(--danger); /* red for do-not-disturb */
+}
+/* Invisible (only the viewer sees their own) + offline both read as a muted dot. */
+.presence-dot.offline,
+.presence-dot.invisible {
   background: var(--text-muted);
+}
+
+/* Header presence picker: a small color pip + a compact native select. */
+.presence-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.presence-pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.presence-pip.presence-online {
+  background: var(--online);
+}
+.presence-pip.presence-idle {
+  background: #f0b232;
+}
+.presence-pip.presence-dnd {
+  background: var(--danger);
+}
+.presence-pip.presence-invisible {
+  background: var(--text-muted);
+}
+.presence-select {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.presence-select:hover {
+  color: var(--text);
+}
+.presence-select option {
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 /* Dim offline members so online ones stand out (the dot still reads when dimmed). */
 .member-list-row.offline,
