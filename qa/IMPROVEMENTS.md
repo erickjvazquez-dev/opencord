@@ -2344,3 +2344,27 @@ bounds that must return different counts against current data) rather than a wri
 flow — it sidesteps the WS-only message path and can't be defeated by an empty fixture.
 *Actionable follow-up (GOAL):* a tiny `qa/search-smoke.sh` (register → 4 bounded searches on
 #general → assert counts strictly decrease as the window tightens) the loop can run post-deploy.
+
+---
+
+## 2026-06-16 — status emoji (Users/Profiles component)
+
+**Shipped:** optional **status emoji** before the custom status — `users.status_emoji`
+(capped 16 runes), same `PUT /me/status` payload, rendered React-escaped in the header +
+both member-list panels. Store test (set/clear/caps/emoji-only) + browser QA `07d2` (asserts
+🚀 renders before the text in member list AND header) + SPEC note. Pushed origin + `railway
+up`; live round-trip verified (member list returns the emoji; oversized → 16-rune cap on prod).
+
+**Highest-value QA-harness improvement (Step 4b-ii — advance the QA PROCESS): the browser-QA
+dialog handler can now disambiguate sequential `window.prompt`s by message content.** Before,
+a single `promptAnswer` string answered *every* prompt, so a flow with two prompts in a row
+(emoji → text) was untestable — both would get the same answer. The handler now routes by
+`d.message()` (`/emoji/i` → `statusEmojiAnswer`, else `promptAnswer`), which is backward-
+compatible (no existing prompt mentions "emoji", so they still get `promptAnswer`) and unlocks
+testing ANY future multi-prompt affordance. This is the reusable capability, not just a
+one-off assertion.
+
+**Carry this (QA-process rule):** when a UI flow issues multiple `window.prompt`s, the QA
+handler must answer each by matching `d.message()` — never assume one global answer covers a
+sequence. Component rotation: advanced **Users/Profiles** this tick (chat/search last tick,
+servers before that) — next, rotate to presence (idle/DnD) or a Messaging item.
