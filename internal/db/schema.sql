@@ -156,3 +156,16 @@ CREATE TABLE IF NOT EXISTS server_invites (
 CREATE INDEX IF NOT EXISTS server_invites_server_id_idx ON server_invites (server_id);
 -- Invite expiry (v0.4): NULL = never (legacy invites); new invites get now()+7d.
 ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+-- Server bans (v0.4): a banned user is removed from the server AND blocked from
+-- rejoining — RedeemInvite rejects them — until an owner/admin unbans them. Owner/admin
+-- action, mirroring kick's authz; the stronger form of kick (kick lets them rejoin).
+CREATE TABLE IF NOT EXISTS server_bans (
+    server_id  BIGINT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    banned_by  BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason     TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (server_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS server_bans_server_id_idx ON server_bans (server_id);

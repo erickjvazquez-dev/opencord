@@ -4,6 +4,7 @@ import type {
   DMChannel,
   Message,
   Server,
+  ServerBan,
   ServerMember,
   User,
 } from './types'
@@ -155,6 +156,53 @@ export async function kickServerMember(
     const data = await res.json().catch(() => ({}))
     throw new Error((data as { error?: string }).error || 'could not kick member')
   }
+}
+
+// Ban a member from a server (owner/admin only). Removes them AND blocks rejoining
+// until unbanned; the server enforces who may act and who may be banned.
+export async function banServerMember(
+  token: string,
+  serverId: number,
+  userId: number,
+  reason: string,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/bans`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ userId, reason }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not ban member')
+  }
+}
+
+// Lift a member's ban (owner/admin only) so they may rejoin via an invite.
+export async function unbanServerMember(
+  token: string,
+  serverId: number,
+  userId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/bans/${userId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not unban member')
+  }
+}
+
+// List a server's banned users (admin-gated; a non-admin gets 403).
+export async function fetchServerBans(token: string, serverId: number): Promise<ServerBan[]> {
+  const res = await fetch(`/api/servers/${serverId}/bans`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not load bans')
+  }
+  return res.json()
 }
 
 export async function fetchServerChannels(token: string, serverId: number): Promise<Channel[]> {

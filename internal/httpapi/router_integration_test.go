@@ -408,6 +408,96 @@ func TestRouterKickMemberIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterBanMemberIntegration walks the ban/unban endpoints through the HTTP layer:
+// unauth, the authz matrix (mirrors kick), malformed ids, the success path, and the
+// security guarantee that a banned user can't redeem a *valid* invite until unbanned
+// (Rule B/15).
+func TestRouterBanMemberIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	admin, adminTok := hs.user(t)
+	admin2, _ := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Ban Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, admin2, member} {
+		if err := hs.store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member: %v", err)
+		}
+	}
+	for _, a := range []auth.User{admin, admin2} {
+		if err := hs.store.SetServerRole(ctx, srv.ID, owner.ID, a.ID, "admin"); err != nil {
+			t.Fatalf("promote admin: %v", err)
+		}
+	}
+	bansPath := fmt.Sprintf("/api/servers/%d/bans", srv.ID)
+	banBody := func(uid int64) string { return fmt.Sprintf(`{"userId":%d,"reason":"spam"}`, uid) }
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", bansPath, "", banBody(member.ID)), http.StatusUnauthorized, "unauth ban")
+	})
+	t.Run("malformed server id is 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", "/api/servers/abc/bans", ownerTok, banBody(member.ID)), http.StatusBadRequest, "bad server id")
+	})
+	t.Run("non-member/non-admin can't ban", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", bansPath, strangerTok, banBody(member.ID)), http.StatusForbidden, "stranger bans")
+		wantStatus(t, hs.req(t, "POST", bansPath, memberTok, banBody(admin.ID)), http.StatusForbidden, "member bans")
+	})
+	t.Run("can't ban the owner", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", bansPath, adminTok, banBody(owner.ID)), http.StatusForbidden, "admin bans owner")
+	})
+	t.Run("admin can't ban a fellow admin", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", bansPath, adminTok, banBody(admin2.ID)), http.StatusForbidden, "admin bans admin")
+	})
+	t.Run("can't ban yourself", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", bansPath, adminTok, banBody(admin.ID)), http.StatusForbidden, "self ban")
+	})
+	t.Run("banning a non-member is 404", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", bansPath, ownerTok, banBody(owner.ID+99999)), http.StatusNotFound, "ban non-member")
+	})
+	t.Run("non-admin can't list bans", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "GET", bansPath, strangerTok, ""), http.StatusForbidden, "stranger lists bans")
+	})
+	t.Run("admin bans a member → 204, loses access, can't rejoin a valid invite, then unban restores", func(t *testing.T) {
+		// Mint a valid invite the member could otherwise rejoin with.
+		code, err := hs.store.CreateInvite(ctx, srv.ID, owner.ID)
+		if err != nil {
+			t.Fatalf("invite: %v", err)
+		}
+		// Ban → 204, membership gone, ban recorded.
+		wantStatus(t, hs.req(t, "POST", bansPath, adminTok, banBody(member.ID)), http.StatusNoContent, "admin bans member")
+		if ok, _ := hs.store.IsServerMember(ctx, srv.ID, member.ID); ok {
+			t.Fatal("banned member should no longer be a server member")
+		}
+		if ok, _ := hs.store.IsServerBanned(ctx, srv.ID, member.ID); !ok {
+			t.Fatal("banned member should be recorded in server_bans")
+		}
+		// A banned user can't redeem a still-valid invite — 403.
+		wantStatus(t, hs.req(t, "POST", fmt.Sprintf("/api/invites/%s", code), memberTok, ""), http.StatusForbidden, "banned redeems valid invite")
+		// The ban shows up in the admin bans list.
+		listResp := hs.req(t, "GET", bansPath, adminTok, "")
+		wantStatus(t, listResp, http.StatusOK, "admin lists bans")
+		if !strings.Contains(listResp.Body.String(), fmt.Sprintf(`"userId":%d`, member.ID)) {
+			t.Fatalf("bans list should contain the banned user; got %s", listResp.Body.String())
+		}
+		// Unban → 204; now the same valid invite admits them again.
+		unbanPath := fmt.Sprintf("/api/servers/%d/bans/%d", srv.ID, member.ID)
+		wantStatus(t, hs.req(t, "DELETE", unbanPath, adminTok, ""), http.StatusNoContent, "admin unbans member")
+		wantStatus(t, hs.req(t, "POST", fmt.Sprintf("/api/invites/%s", code), memberTok, ""), http.StatusOK, "unbanned redeems invite")
+		if ok, _ := hs.store.IsServerMember(ctx, srv.ID, member.ID); !ok {
+			t.Fatal("unbanned member should be able to rejoin")
+		}
+		// Unbanning a not-banned user is 404.
+		wantStatus(t, hs.req(t, "DELETE", unbanPath, adminTok, ""), http.StatusNotFound, "unban non-banned")
+	})
+}
+
 // TestRouterMessageEndpointsIntegration covers the edit + reaction REST endpoints,
 // which carry their own authorization (edit is author-only; reactions are gated by
 // channel access) and map store errors to HTTP status. The message under test lives

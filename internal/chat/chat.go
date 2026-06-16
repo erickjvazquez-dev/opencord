@@ -37,6 +37,8 @@ var (
 	ErrInvalidInvite = errors.New("invalid invite code")
 	// ErrInviteExpired is returned when an invite code exists but has expired.
 	ErrInviteExpired = errors.New("invite has expired")
+	// ErrBanned is returned when a banned user tries to (re)join a server.
+	ErrBanned = errors.New("banned from this server")
 	// ErrInvalidRole is returned when a role is not one that can be assigned.
 	ErrInvalidRole = errors.New("invalid role")
 	// ErrInvalidPolicy is returned when a channel posting policy is not valid.
@@ -1089,6 +1091,128 @@ func (s *Store) RemoveServerMember(ctx context.Context, serverID, actorID, targe
 	return nil
 }
 
+// maxBanReasonLen bounds a ban reason (Rule B). Discord allows up to 512.
+const maxBanReasonLen = 512
+
+// ServerBan is one banned user as shown to an admin in the bans list.
+type ServerBan struct {
+	UserID   int64     `json:"userId"`
+	Username string    `json:"username"`
+	Reason   string    `json:"reason,omitempty"`
+	BannedAt time.Time `json:"bannedAt"`
+}
+
+// BanServerMember bans targetID from serverID: it removes their membership (like a kick)
+// AND records a ban so they can't rejoin via an invite until unbanned. The authz mirrors
+// RemoveServerMember exactly (owner/admin only; can't ban yourself, the owner, and an
+// admin can't ban a fellow admin); the target must currently be a member (ErrUserNotFound
+// otherwise). Removal + ban are one transaction so a user is never left half-banned. The
+// reason is trimmed and bounded. The caller evicts the banned user's live sockets (see
+// Hub.EvictUserFromChannels), identical to a kick.
+func (s *Store) BanServerMember(ctx context.Context, serverID, actorID, targetID int64, reason string) error {
+	if targetID == actorID {
+		return ErrForbidden // can't ban yourself
+	}
+	actorRole, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden // non-members and plain members can't ban
+	}
+	targetRole, err := s.ServerRole(ctx, serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if targetRole == "" {
+		return ErrUserNotFound // target isn't a member of this server
+	}
+	if targetRole == "owner" {
+		return ErrForbidden // nobody can ban the owner
+	}
+	if actorRole == "admin" && targetRole == "admin" {
+		return ErrForbidden // admins can't ban fellow admins — only the owner can
+	}
+	reason = strings.TrimSpace(reason)
+	if r := []rune(reason); len(r) > maxBanReasonLen {
+		reason = string(r[:maxBanReasonLen])
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	ct, err := tx.Exec(ctx,
+		`DELETE FROM server_members WHERE server_id = $1 AND user_id = $2 AND role <> 'owner'`,
+		serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotFound // raced away or was the owner (defense-in-depth)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO server_bans (server_id, user_id, banned_by, reason) VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (server_id, user_id) DO UPDATE SET banned_by = EXCLUDED.banned_by, reason = EXCLUDED.reason, created_at = now()`,
+		serverID, targetID, actorID, reason); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// UnbanServerMember lifts targetID's ban from serverID. Owner/admin only; returns
+// ErrUserNotFound if the target wasn't banned. After this they may rejoin via an invite.
+func (s *Store) UnbanServerMember(ctx context.Context, serverID, actorID, targetID int64) error {
+	ok, err := s.IsServerAdmin(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden // non-admins can't unban
+	}
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM server_bans WHERE server_id = $1 AND user_id = $2`, serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotFound // wasn't banned
+	}
+	return nil
+}
+
+// IsServerBanned reports whether userID is banned from serverID.
+func (s *Store) IsServerBanned(ctx context.Context, serverID, userID int64) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM server_bans WHERE server_id = $1 AND user_id = $2)`,
+		serverID, userID).Scan(&ok)
+	return ok, err
+}
+
+// ListServerBans returns a server's banned users, newest ban first. Admin view; the
+// handler gates on IsServerAdmin before calling.
+func (s *Store) ListServerBans(ctx context.Context, serverID int64) ([]ServerBan, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT b.user_id, u.username, b.reason, b.created_at
+		   FROM server_bans b JOIN users u ON u.id = b.user_id
+		  WHERE b.server_id = $1
+		  ORDER BY b.created_at DESC`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ServerBan, 0)
+	for rows.Next() {
+		var b ServerBan
+		if err := rows.Scan(&b.UserID, &b.Username, &b.Reason, &b.BannedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // ListServerMembers returns a server's members with roles, owner/admin first.
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,
@@ -1246,6 +1370,12 @@ func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Se
 	// Expiry is enforced server-side (a stale client can't bypass it). NULL = never.
 	if expiresAt != nil && time.Now().After(*expiresAt) {
 		return Server{}, ErrInviteExpired
+	}
+	// A banned user can't rejoin even with a valid code — enforced server-side (Rule B/C).
+	if banned, err := s.IsServerBanned(ctx, srv.ID, userID); err != nil {
+		return Server{}, err
+	} else if banned {
+		return Server{}, ErrBanned
 	}
 	if err := s.AddServerMember(ctx, srv.ID, userID); err != nil {
 		return Server{}, err

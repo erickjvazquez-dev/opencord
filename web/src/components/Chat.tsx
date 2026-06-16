@@ -26,6 +26,9 @@ import {
   setMessagePinned,
   setServerMemberRole,
   kickServerMember,
+  banServerMember,
+  unbanServerMember,
+  fetchServerBans,
   setMyStatus,
   fetchUnreads,
   markChannelRead,
@@ -36,6 +39,7 @@ import type {
   Message,
   Reaction,
   Server,
+  ServerBan,
   ServerEvent,
   ServerMember,
   User,
@@ -156,6 +160,8 @@ export function Chat({
   const [membersOf, setMembersOf] = useState<{ serverId: number; members: ServerMember[] } | null>(
     null,
   )
+  // Banned users for the server whose members panel is open (admin-only; null until loaded).
+  const [bans, setBans] = useState<ServerBan[] | null>(null)
   // Persistent right-hand member list (Discord-style) for the current server channel.
   const [memberList, setMemberList] = useState<ServerMember[]>([])
   // The caller's own custom status (synced from whichever member list includes them).
@@ -767,12 +773,27 @@ export function Chat({
     }
   }
 
+  // Load a server's bans into the panel — admin-only on the server, so swallow a 403
+  // (non-admins simply see no bans section).
+  const loadBans = async (serverId: number, role?: string) => {
+    if (role !== 'owner' && role !== 'admin') {
+      setBans(null)
+      return
+    }
+    try {
+      setBans(await fetchServerBans(token, serverId))
+    } catch {
+      setBans(null)
+    }
+  }
+
   const openMembers = async (serverId: number) => {
     try {
       setPins(null)
       const members = await fetchServerMembers(token, serverId)
       setMembersOf({ serverId, members })
       if (String(serverId) === activeServerId) setMemberList(members) // keep the sidebar in sync
+      void loadBans(serverId, members.find((m) => m.userId === user.id)?.role)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not load members')
     }
@@ -811,6 +832,31 @@ export function Chat({
       if (String(serverId) === activeServerId) setMemberList(members) // sidebar stays in sync
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not kick member')
+    }
+  }
+  // Ban: removes the member AND blocks rejoining until unbanned. Stronger than kick.
+  const banMember = async (serverId: number, userId: number, username: string) => {
+    if (!window.confirm(`Ban ${username}? They'll be removed and can't rejoin until unbanned.`))
+      return
+    const reason = window.prompt('Reason (optional):', '') ?? ''
+    try {
+      await banServerMember(token, serverId, userId, reason)
+      const members = await fetchServerMembers(token, serverId)
+      setMembersOf({ serverId, members })
+      if (String(serverId) === activeServerId) setMemberList(members) // sidebar stays in sync
+      void loadBans(serverId, members.find((m) => m.userId === user.id)?.role)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not ban member')
+    }
+  }
+  const unbanMember = async (serverId: number, userId: number, username: string) => {
+    if (!window.confirm(`Unban ${username}? They'll be able to rejoin with an invite.`)) return
+    try {
+      await unbanServerMember(token, serverId, userId)
+      const members = membersOf?.members ?? (await fetchServerMembers(token, serverId))
+      void loadBans(serverId, members.find((m) => m.userId === user.id)?.role)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not unban member')
     }
   }
   const editMyStatus = async () => {
@@ -1530,7 +1576,13 @@ export function Chat({
             <div className="search-results">
               <div className="search-results-head">
                 <span>Members ({membersOf.members.length})</span>
-                <button className="link" onClick={() => setMembersOf(null)}>
+                <button
+                  className="link"
+                  onClick={() => {
+                    setMembersOf(null)
+                    setBans(null)
+                  }}
+                >
                   ✕ close
                 </button>
               </div>
@@ -1572,15 +1624,54 @@ export function Chat({
                     mb.role !== 'owner' &&
                     (myRoleInPanel === 'owner' ||
                       (myRoleInPanel === 'admin' && mb.role === 'member')) && (
-                      <button
-                        className="link kick-btn"
-                        onClick={() => void kickMember(membersOf.serverId, mb.userId, mb.username)}
-                      >
-                        kick
-                      </button>
+                      <>
+                        <button
+                          className="link kick-btn"
+                          onClick={() =>
+                            void kickMember(membersOf.serverId, mb.userId, mb.username)
+                          }
+                        >
+                          kick
+                        </button>
+                        {/* Ban: same authz as kick, but also blocks rejoining. */}
+                        <button
+                          className="link ban-btn"
+                          onClick={() => void banMember(membersOf.serverId, mb.userId, mb.username)}
+                        >
+                          ban
+                        </button>
+                      </>
                     )}
                 </div>
               ))}
+              {/* Banned users (admin view): unban restores their ability to rejoin. */}
+              {bans !== null && bans.length > 0 && (
+                <>
+                  <div className="bans-head">Banned ({bans.length})</div>
+                  {bans.map((b) => (
+                    <div key={b.userId} className="member-row banned-row">
+                      <span className="avatar-presence">
+                        <Avatar token={token} userId={b.userId} username={b.username} />
+                      </span>
+                      <span className="member-id">
+                        <span className="author">{b.username}</span>
+                        {b.reason && (
+                          <span className="member-status" title={b.reason}>
+                            {b.reason}
+                          </span>
+                        )}
+                      </span>
+                      <span className="role-badge role-banned">banned</span>
+                      <button
+                        className="link unban-btn"
+                        onClick={() => void unbanMember(membersOf.serverId, b.userId, b.username)}
+                      >
+                        unban
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           )}
           {membersOf === null && searchResults !== null && (

@@ -591,6 +591,90 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			w.WriteHeader(http.StatusNoContent)
 		}
 	})
+	// Ban a member: {userId, reason?} in the body. Owner/admin only; same authz as kick
+	// (can't ban the owner/yourself; an admin can't ban a fellow admin — store enforces).
+	// Removes them AND blocks rejoining until unbanned; evicts their live sockets.
+	r.Post("/servers/{id}/bans", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			UserID int64  `json:"userId"`
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.BanServerMember(r.Context(), id, me.ID, in.UserID, in.Reason); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not ban member"}`, http.StatusInternalServerError)
+		default:
+			// Identical to kick: notify then evict so the banned client drops the server live.
+			hub.SendToUser(in.UserID, ws.Event{Type: "server-removed", ServerID: id})
+			if chans, err := store.ListServerChannels(r.Context(), id); err == nil {
+				ids := make([]int64, 0, len(chans))
+				for _, c := range chans {
+					ids = append(ids, c.ID)
+				}
+				hub.EvictUserFromChannels(in.UserID, ids)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	// Unban a member: {userId} via the path. Owner/admin only.
+	r.Delete("/servers/{id}/bans/{userId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		targetID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.UnbanServerMember(r.Context(), id, me.ID, targetID); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not banned"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not unban member"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	// List a server's bans (admin-gated). A non-admin gets 403, not the list.
+	r.Get("/servers/{id}/bans", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil {
+			http.Error(w, `{"error":"could not list bans"}`, http.StatusInternalServerError)
+			return
+		} else if !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		bans, err := store.ListServerBans(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not list bans"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, bans)
+	})
 	// Redeem an invite code → join its server (the only way to join). 404 on a bad code.
 	r.Post("/invites/{code}", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
@@ -601,6 +685,10 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 		if errors.Is(err, chat.ErrInviteExpired) {
 			http.Error(w, `{"error":"this invite has expired"}`, http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, chat.ErrBanned) {
+			http.Error(w, `{"error":"you are banned from this server"}`, http.StatusForbidden)
 			return
 		}
 		if err != nil {

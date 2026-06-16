@@ -43,6 +43,14 @@ export interface ServerMember {
   status?: string
 }
 
+// A banned user as shown to an admin in the bans list (server moderation).
+export interface ServerBan {
+  userId: number
+  username: string
+  reason?: string
+  bannedAt: string
+}
+
 // A channel with unread messages; `mentions` counts unread @-mentions of you (red badge).
 export interface ChannelUnread {
   id: number

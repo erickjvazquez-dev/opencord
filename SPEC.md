@@ -1230,3 +1230,45 @@ valid (within-window) invite still admits; the not-found path is unchanged.
 **Follow-ups (need a small invite-options form, deferred):** customizable expiry
 (`0 = never`), **max-uses** (`uses`/`max_uses` columns, atomic check-and-increment at
 redeem, already designed), invite links + revoke-invite UI.
+
+---
+
+## Ban members (v0.4 — server moderation parity, 2026-06-16)
+
+**Goal:** server owners/admins can **ban** a member — remove them like a kick AND
+block them from rejoining (an invite redeem rejects a banned user) until **unbanned**.
+Extends the existing kick path (`RemoveServerMember`) and the invite-redeem path.
+Discord-parity moderation: ban / unban / a bans list. Pre-existing `kick` stays; ban is
+the stronger action (kick lets them rejoin with a fresh invite, ban does not).
+
+**Schema:** a new `server_bans` table — `(server_id, user_id, banned_by, reason,
+created_at)`, PK `(server_id, user_id)`, both FKs `ON DELETE CASCADE` (a deleted user or
+server drops its bans). Reason is bounded (`maxBanReasonLen`, server-trimmed).
+
+**Store (`internal/chat`):**
+- `BanServerMember(serverID, actorID, targetID, reason)` — SAME authz as the kick
+  (`RemoveServerMember`): actor must be owner/admin, can't ban self, the owner, and an
+  admin can't ban a fellow admin; target must currently be a member (`ErrUserNotFound`
+  otherwise). Atomic (one tx): delete the membership row AND upsert the ban row. Caller
+  evicts the banned user's live sockets (reuses `Hub.EvictUserFromChannels`).
+- `UnbanServerMember(serverID, actorID, targetID)` — owner/admin only; `ErrUserNotFound`
+  if not banned.
+- `IsServerBanned(serverID, userID)` / `ListServerBans(serverID)`.
+- `RedeemInvite` now rejects a banned user with a new `ErrBanned` **before** adding the
+  membership — enforced server-side, a valid code can't bypass a ban (Rule B/C).
+
+**REST (`internal/httpapi`):** under the existing `/servers/{id}` group —
+`POST /servers/{id}/bans` `{userId, reason}`, `DELETE /servers/{id}/bans/{userId}`,
+`GET /servers/{id}/bans` (admin-gated). Redeem maps `ErrBanned` → **403**. On a
+successful ban the handler sends `server-removed` to the target + evicts its sockets
+(identical to kick), so a banned user's client drops the server live.
+
+**Web:** a **ban** button beside **kick** in the members panel (same admin-gated
+visibility), with a confirm + optional reason prompt; a **Banned (N)** section in the
+panel listing banned users with an **unban** button each. `api.ts`:
+`banServerMember` / `unbanServerMember` / `fetchServerBans`; `ServerBan` type.
+
+**Threat model (Rule B/15 — tested):** unauth → 401; a stranger/plain-member can't ban
+(403); can't ban the owner or yourself (403); an admin can't ban a fellow admin (403);
+a banned user redeeming a still-valid invite → 403 (`ErrBanned`); after unban they may
+rejoin. Reason is bounded + escaped. Authz mirrors the kick matrix exactly.

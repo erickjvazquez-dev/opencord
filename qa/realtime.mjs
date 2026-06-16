@@ -421,57 +421,78 @@ async function main() {
     'opening the channel clears both the unread dot and the mention badge',
   )
 
-  // 8 — Kick (moderation): A (owner) removes B from the server. B disappears from A's
-  // member views. (The WS eviction that cuts B's live access is proven by the Go
-  // integration test; here we verify the user-visible kick UI + removal.)
-  step('A (owner) kicks B → B is removed from the server')
+  // 8 — Ban (moderation): A (owner) bans B from the server. Ban is the stronger form
+  // of kick — it removes B (so every kick assertion still holds) AND records a ban so
+  // B can't rejoin until unbanned. (The rejoin-blocked security guarantee is proven
+  // adversarially by the Go integration test; here we verify the user-visible ban UI:
+  // the ban button, live removal, the admin's Banned section, and unban.)
+  step('A (owner) bans B → B is removed and appears in the Banned section')
   await a
     .locator('.server-group', { hasText: 'team ' + sfx })
     .getByRole('button', { name: 'members' })
     .click()
   const aOwnRow = a.locator('.member-row', { hasText: userA })
   await aOwnRow.waitFor({ timeout: 8000 })
-  // The owner can't kick themselves: no kick button on A's own row.
+  // The owner can't moderate themselves: no kick/ban button on A's own row.
   check(
-    (await aOwnRow.getByRole('button', { name: 'kick' }).count()) === 0,
-    "the owner's own row has no kick button (can't kick yourself)",
+    (await aOwnRow.getByRole('button', { name: 'ban', exact: true }).count()) === 0,
+    "the owner's own row has no ban button (can't ban yourself)",
   )
-  const bKickRow = a.locator('.member-row', { hasText: userB })
+  const bModRow = a.locator('.member-row', { hasText: userB })
+  // Both moderation buttons render on a non-owner's row (shared gating).
   check(
-    (await bKickRow.getByRole('button', { name: 'kick' }).count()) > 0,
-    'owner sees a kick button on B’s row (may kick a non-owner)',
+    (await bModRow.getByRole('button', { name: 'kick' }).count()) > 0,
+    'owner sees a kick button on B’s row',
   )
-  await bKickRow.getByRole('button', { name: 'kick' }).click() // confirm auto-accepts
-  await a
-    .locator('.member-row', { hasText: userB })
-    .waitFor({ state: 'detached', timeout: 8000 })
-    .catch(() => {})
   check(
-    (await a.locator('.member-row', { hasText: userB }).count()) === 0,
-    'B is gone from the members panel after the kick',
+    (await bModRow.getByRole('button', { name: 'ban', exact: true }).count()) > 0,
+    'owner sees a ban button on B’s row',
   )
-  await a.screenshot({ path: join(SHOTS, 'rt-10-kicked.png') })
-  await a.locator('.search-results-head .link', { hasText: 'close' }).click().catch(() => {})
+  ans.a = 'spamming the channel' // the ban reason (prompt auto-answered)
+  await bModRow.getByRole('button', { name: 'ban', exact: true }).click() // confirm auto-accepts
+  // The Banned section appearing is the signal the ban took effect and the panel refreshed.
+  await a.locator('.bans-head').waitFor({ timeout: 8000 })
+  const bBanRow = a.locator('.banned-row', { hasText: userB })
   check(
-    (await a.locator('.member-list [data-member]').filter({ hasText: userB }).count()) === 0,
-    'B is gone from the member-list sidebar after the kick',
+    (await a.locator('.member-row:not(.banned-row)', { hasText: userB }).count()) === 0,
+    'B is gone from the members list after the ban',
   )
+  check(
+    ((await a.locator('.bans-head').textContent()) ?? '').includes('Banned (1)'),
+    'the Banned section shows one banned user',
+  )
+  check(await bBanRow.isVisible(), 'B appears in the admin Banned section after the ban')
+  check(
+    ((await bBanRow.locator('.member-status').textContent()) ?? '').includes('spamming'),
+    'the ban reason renders next to the banned user',
+  )
+  await a.screenshot({ path: join(SHOTS, 'rt-10-banned.png') })
 
-  // 8b — B's client reacts live to the kick (server-removed push): the server drops
-  // out of B's sidebar and, since B was viewing it, B lands back on #general — no
-  // manual refresh, no broken reconnect loop.
+  // 8b — B's client reacts live to the ban (server-removed push): the server drops out
+  // of B's sidebar and, since B was viewing it, B lands back on #general — no manual
+  // refresh, no broken reconnect loop (identical to the kick path).
   step("B's client drops the server live and falls back to #general")
   const bServerGroup = b.locator('.server-group', { hasText: 'team ' + sfx })
   await bServerGroup.waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
   check(
     (await bServerGroup.count()) === 0,
-    'B’s sidebar drops the kicked server live (via the server-removed push)',
+    'B’s sidebar drops the banned server live (via the server-removed push)',
   )
   check(
     ((await b.locator('.brand .channel').textContent()) ?? '').includes('general'),
-    'B is moved to #general after being kicked (no broken reconnect loop)',
+    'B is moved to #general after being banned (no broken reconnect loop)',
   )
-  await b.screenshot({ path: join(SHOTS, 'rt-11-b-kicked.png') })
+  await b.screenshot({ path: join(SHOTS, 'rt-11-b-banned.png') })
+
+  // 8c — Unban: A lifts the ban; B leaves the Banned section (they could now rejoin).
+  step('A unbans B → B leaves the Banned section')
+  await bBanRow.getByRole('button', { name: 'unban' }).click() // confirm auto-accepts
+  await a.locator('.banned-row', { hasText: userB }).waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  check(
+    (await a.locator('.banned-row', { hasText: userB }).count()) === 0,
+    'B is gone from the Banned section after unban',
+  )
+  await a.screenshot({ path: join(SHOTS, 'rt-12-unbanned.png') })
 
   await browser.close()
   console.log(
