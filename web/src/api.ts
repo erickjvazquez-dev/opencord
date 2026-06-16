@@ -69,10 +69,20 @@ export async function createServer(token: string, name: string): Promise<Server>
   return data as Server
 }
 
-export async function createInvite(token: string, serverId: number): Promise<string> {
+// Mint an invite. maxUses (optional, 1–1000) caps how many members the code admits;
+// omit it for an unlimited code (the default).
+export async function createInvite(
+  token: string,
+  serverId: number,
+  maxUses?: number,
+): Promise<string> {
   const res = await fetch(`/api/servers/${serverId}/invites`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(maxUses != null ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: maxUses != null ? JSON.stringify({ maxUses }) : undefined,
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create invite')

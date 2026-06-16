@@ -77,6 +77,12 @@ function inviteExpiryLabel(expiresAt?: string): string {
   return 'expires soon'
 }
 
+// Uses count for an invite row: "N/M uses" when capped, else a plain running count.
+function inviteUsesLabel(iv: Invite): string {
+  if (iv.maxUses != null) return `${iv.uses}/${iv.maxUses} uses`
+  return iv.uses === 1 ? '1 use' : `${iv.uses} uses`
+}
+
 // ── Push-to-talk global hotkey ──────────────────────────────────────────────
 // The bound key is stored by its physical `KeyboardEvent.code` (layout-independent)
 // in localStorage so it survives reloads; Backquote (`) is an unobtrusive default.
@@ -884,10 +890,22 @@ export function Chat({
   }
 
   // Mint a new invite from the management panel (admin) and refresh the list so it
-  // appears immediately. Also surfaces the fresh code so the admin can copy it.
+  // appears immediately. Also surfaces the fresh code so the admin can copy it. Prompts
+  // for an optional max-uses cap (blank = unlimited).
   const createPanelInvite = async (serverId: number) => {
+    const ans = window.prompt('Max uses for this invite (blank = unlimited):', '')
+    if (ans === null) return // cancelled
+    let maxUses: number | undefined
+    if (ans.trim() !== '') {
+      const n = Number(ans.trim())
+      if (!Number.isInteger(n) || n < 1 || n > 1000) {
+        window.alert('Max uses must be a whole number from 1 to 1000 (or blank for unlimited).')
+        return
+      }
+      maxUses = n
+    }
     try {
-      const code = await createInvite(token, serverId)
+      const code = await createInvite(token, serverId, maxUses)
       await loadInvites(serverId, 'admin')
       void copyInvite(code)
     } catch (err) {
@@ -1934,7 +1952,9 @@ export function Chat({
                         {iv.code}
                       </code>
                       <span className="invite-info">
-                        <span className="invite-meta">{inviteExpiryLabel(iv.expiresAt)}</span>
+                        <span className="invite-meta">
+                          {inviteExpiryLabel(iv.expiresAt)} · {inviteUsesLabel(iv)}
+                        </span>
                         <span className="invite-by" title={`created by ${iv.creatorName}`}>
                           by {iv.creatorName}
                         </span>

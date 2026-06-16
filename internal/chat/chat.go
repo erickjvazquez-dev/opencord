@@ -39,6 +39,8 @@ var (
 	ErrInvalidInvite = errors.New("invalid invite code")
 	// ErrInviteExpired is returned when an invite code exists but has expired.
 	ErrInviteExpired = errors.New("invite has expired")
+	// ErrInviteExhausted is returned when an invite has reached its max-uses cap.
+	ErrInviteExhausted = errors.New("invite has reached its maximum uses")
 	// ErrBanned is returned when a banned user tries to (re)join a server.
 	ErrBanned = errors.New("banned from this server")
 	// ErrTimedOut is returned when a timed-out member tries to post.
@@ -1518,6 +1520,17 @@ func inviteCode() (string, error) {
 const inviteTTL = 7 * 24 * time.Hour
 
 func (s *Store) CreateInvite(ctx context.Context, serverID, userID int64) (string, error) {
+	return s.createInvite(ctx, serverID, userID, nil)
+}
+
+// CreateInviteWithMaxUses is CreateInvite with an optional join cap: maxUses nil = unlimited
+// (same as CreateInvite); a non-nil maxUses (>0) admits at most that many members before the
+// code is exhausted. The cap is enforced + the use counted atomically at redeem.
+func (s *Store) CreateInviteWithMaxUses(ctx context.Context, serverID, userID int64, maxUses *int) (string, error) {
+	return s.createInvite(ctx, serverID, userID, maxUses)
+}
+
+func (s *Store) createInvite(ctx context.Context, serverID, userID int64, maxUses *int) (string, error) {
 	expiresAt := time.Now().Add(inviteTTL)
 	for attempt := 0; attempt < 5; attempt++ {
 		code, err := inviteCode()
@@ -1525,8 +1538,8 @@ func (s *Store) CreateInvite(ctx context.Context, serverID, userID int64) (strin
 			return "", err
 		}
 		_, err = s.pool.Exec(ctx,
-			`INSERT INTO server_invites (code, server_id, created_by, expires_at) VALUES ($1, $2, $3, $4)`,
-			code, serverID, userID, expiresAt)
+			`INSERT INTO server_invites (code, server_id, created_by, expires_at, max_uses) VALUES ($1, $2, $3, $4, $5)`,
+			code, serverID, userID, expiresAt, maxUses)
 		if err == nil {
 			return code, nil
 		}
@@ -1544,10 +1557,12 @@ func (s *Store) CreateInvite(ctx context.Context, serverID, userID int64) (strin
 func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Server, error) {
 	var srv Server
 	var expiresAt *time.Time
+	var maxUses *int
+	var uses int
 	err := s.pool.QueryRow(ctx,
-		`SELECT s.id, s.name, s.owner_id, s.created_at, i.expires_at
+		`SELECT s.id, s.name, s.owner_id, s.created_at, i.expires_at, i.max_uses, i.uses
 		   FROM server_invites i JOIN servers s ON s.id = i.server_id
-		  WHERE i.code = $1`, code).Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt, &expiresAt)
+		  WHERE i.code = $1`, code).Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt, &expiresAt, &maxUses, &uses)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Server{}, ErrInvalidInvite
 	}
@@ -1564,7 +1579,41 @@ func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Se
 	} else if banned {
 		return Server{}, ErrBanned
 	}
-	if err := s.AddServerMember(ctx, srv.ID, userID); err != nil {
+	// Already a member? Rejoining is a no-op and must NOT consume a use — Discord doesn't
+	// count an existing member re-opening the link (and keeps legacy re-redeems idempotent).
+	if member, err := s.IsServerMember(ctx, srv.ID, userID); err != nil {
+		return Server{}, err
+	} else if member {
+		srv.Role = "member"
+		return srv, nil
+	}
+	// Fast-path the clean "already exhausted" error; the real guard is the conditional
+	// UPDATE below (max_uses NULL = unlimited), which is race-safe under concurrent joins.
+	if maxUses != nil && uses >= *maxUses {
+		return Server{}, ErrInviteExhausted
+	}
+	// Consume a use and add the member in one tx: if the join fails, the use is rolled
+	// back; if a concurrent redeem took the last slot, our guarded UPDATE affects 0 rows.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Server{}, err
+	}
+	defer tx.Rollback(ctx)
+	ct, err := tx.Exec(ctx,
+		`UPDATE server_invites SET uses = uses + 1
+		  WHERE code = $1 AND (max_uses IS NULL OR uses < max_uses)`, code)
+	if err != nil {
+		return Server{}, err
+	}
+	if ct.RowsAffected() == 0 {
+		return Server{}, ErrInviteExhausted
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO server_members (server_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		srv.ID, userID); err != nil {
+		return Server{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return Server{}, err
 	}
 	srv.Role = "member"
@@ -1579,6 +1628,8 @@ type Invite struct {
 	CreatorName string     `json:"creatorName"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
+	MaxUses     *int       `json:"maxUses,omitempty"` // nil = unlimited
+	Uses        int        `json:"uses"`
 }
 
 // ListInvites returns a server's active (unexpired) invite codes, newest first, joined
@@ -1587,9 +1638,10 @@ type Invite struct {
 // must verify the viewer is an admin (mirrors ListServerBans).
 func (s *Store) ListInvites(ctx context.Context, serverID int64) ([]Invite, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT i.code, i.created_by, u.username, i.created_at, i.expires_at
+		`SELECT i.code, i.created_by, u.username, i.created_at, i.expires_at, i.max_uses, i.uses
 		   FROM server_invites i JOIN users u ON u.id = i.created_by
 		  WHERE i.server_id = $1 AND (i.expires_at IS NULL OR i.expires_at > now())
+		        AND (i.max_uses IS NULL OR i.uses < i.max_uses)
 		  ORDER BY i.created_at DESC`, serverID)
 	if err != nil {
 		return nil, err
@@ -1598,7 +1650,7 @@ func (s *Store) ListInvites(ctx context.Context, serverID int64) ([]Invite, erro
 	out := make([]Invite, 0)
 	for rows.Next() {
 		var iv Invite
-		if err := rows.Scan(&iv.Code, &iv.CreatedBy, &iv.CreatorName, &iv.CreatedAt, &iv.ExpiresAt); err != nil {
+		if err := rows.Scan(&iv.Code, &iv.CreatedBy, &iv.CreatorName, &iv.CreatedAt, &iv.ExpiresAt, &iv.MaxUses, &iv.Uses); err != nil {
 			return nil, err
 		}
 		out = append(out, iv)

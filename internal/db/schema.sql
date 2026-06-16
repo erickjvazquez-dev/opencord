@@ -160,6 +160,10 @@ CREATE TABLE IF NOT EXISTS server_invites (
 CREATE INDEX IF NOT EXISTS server_invites_server_id_idx ON server_invites (server_id);
 -- Invite expiry (v0.4): NULL = never (legacy invites); new invites get now()+7d.
 ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+-- Invite max-uses (v0.4): NULL = unlimited; `uses` counts successful joins. Enforced +
+-- incremented atomically at redeem so concurrent joins can't overshoot the cap.
+ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS max_uses INT;
+ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS uses INT NOT NULL DEFAULT 0;
 
 -- Channel categories (v0.4): a server groups its channels under named, collapsible
 -- categories (Discord-style). A channel with category_id NULL is uncategorized. Deleting

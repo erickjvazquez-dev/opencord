@@ -5,6 +5,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -439,7 +440,20 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 			return
 		}
-		code, err := store.CreateInvite(r.Context(), id, me.ID)
+		// Body is optional: legacy clients send none (→ unlimited). An empty body decodes
+		// to io.EOF (fine); only genuinely malformed JSON is a 400.
+		var in struct {
+			MaxUses *int `json:"maxUses"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if in.MaxUses != nil && (*in.MaxUses < 1 || *in.MaxUses > 1000) {
+			http.Error(w, `{"error":"maxUses must be between 1 and 1000"}`, http.StatusBadRequest)
+			return
+		}
+		code, err := store.CreateInviteWithMaxUses(r.Context(), id, me.ID, in.MaxUses)
 		if err != nil {
 			http.Error(w, `{"error":"could not create invite"}`, http.StatusInternalServerError)
 			return
@@ -868,6 +882,10 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 		if errors.Is(err, chat.ErrInviteExpired) {
 			http.Error(w, `{"error":"this invite has expired"}`, http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, chat.ErrInviteExhausted) {
+			http.Error(w, `{"error":"this invite has reached its maximum uses"}`, http.StatusNotFound)
 			return
 		}
 		if errors.Is(err, chat.ErrBanned) {

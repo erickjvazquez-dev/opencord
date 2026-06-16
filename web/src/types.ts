@@ -64,13 +64,15 @@ export interface ServerBan {
 }
 
 // An active invite code as shown to an admin in the invites list (server management).
-// `expiresAt` is absent for legacy never-expire codes.
+// `expiresAt` is absent for legacy never-expire codes; `maxUses` absent = unlimited.
 export interface Invite {
   code: string
   createdBy: number
   creatorName: string
   createdAt: string
   expiresAt?: string
+  maxUses?: number
+  uses: number
 }
 
 // A channel with unread messages; `mentions` counts unread @-mentions of you (red badge).

@@ -1394,3 +1394,32 @@ quick-mint prompt; an admin's opens the members panel. `Invite` type + `fetchSer
 403). Revoke is scoped by `server_id`, so an admin of server A can't revoke server B's
 code via A's path (cross-server guard). Revoking an unknown/already-gone code → 404. A
 revoked code no longer redeems (404).
+
+---
+
+## Invite max-uses (v0.4)
+
+**Why:** invites had only a time cap (7-day expiry). A max-uses cap lets an admin mint a
+code that admits a fixed number of people (e.g. a one-shot link), the other half of
+Discord's invite controls.
+
+**Store (`internal/chat`):** `server_invites` gains `max_uses INT` (NULL = unlimited) +
+`uses INT NOT NULL DEFAULT 0`. `CreateInviteWithMaxUses(serverID, userID, maxUses *int)`
+(CreateInvite stays the unlimited shorthand → no churn to its 8 existing callers).
+`RedeemInvite` now: already-a-member → no-op, **no use consumed** (idempotent rejoin);
+else a **transaction** does a guarded `UPDATE ... SET uses = uses + 1 WHERE max_uses IS
+NULL OR uses < max_uses` then the member INSERT — so a failed join rolls back the use and
+concurrent redeems of the last slot can't overshoot (one wins, the rest get
+`ErrInviteExhausted`). `Invite` exposes `MaxUses`/`Uses`; `ListInvites` filters out
+exhausted codes (active = redeemable, same as expired).
+
+**REST:** `POST /servers/{id}/invites` accepts an optional `{maxUses}` (1–1000; empty body
+still = unlimited, legacy-safe). Redeeming an exhausted code → 404
+(`this invite has reached its maximum uses`).
+
+**Web:** the panel's **+ New invite** prompts for a max-uses cap (blank = unlimited); each
+invite row shows `N/M uses` (capped) or a running `N uses`.
+
+**Threat model (Rule B/15 — tested):** the cap is enforced + counted server-side (a stale
+client can't bypass it); maxUses is bounded 1–1000; the atomic guarded UPDATE makes the
+limit race-safe; a member re-redeeming never burns a use.

@@ -211,7 +211,7 @@ item from here as the structural milestones above land.
   expiry/creator, a + New invite mint, copy, and a revoke that kills a leaked code so it
   stops redeeming immediately; `GET`/`DELETE /servers/{id}/invites[/{code}]`, revoke
   scoped by `server_id` so no cross-server revoke — Rule B; adversarial integration test +
-  browser E2E + AI-vision). max-uses · invite links · temporary membership TODO
+  browser E2E + AI-vision). **max-uses DONE** (optional 1–1000 join cap, enforced + counted atomically server-side; exhausted → 404, adversarially tested; panel shows N/M uses) · invite links · temporary membership TODO
 - [ ] Server discovery / community servers · vanity invite URLs
 - [ ] Welcome screen + rules screening · server templates
 - [~] Server boosts / tiers (cosmetic) TODO · **member list DONE** — Discord-style

@@ -559,15 +559,18 @@ async function main() {
   )
 
   // 7d3 — Invites management (admin): the section lists the active code, a freshly
-  // created invite appears, and revoking one removes it. The QA bot is the owner (admin),
-  // so the admin-only Invites section renders. The dialog handler auto-accepts the revoke
-  // confirm + any copy-fallback prompt.
-  step('invites section: list, create, revoke')
+  // created invite appears (unlimited + a max-uses one), and revoking one removes it. The
+  // QA bot is the owner (admin), so the admin-only Invites section renders. The "+ New
+  // invite" button prompts for a max-uses cap; the dialog handler auto-answers it with
+  // `promptAnswer` (and also the revoke confirm + any copy-fallback prompt).
+  step('invites section: list, create (unlimited + capped), revoke')
   const invitesHead = page.locator('.invites-head')
   await invitesHead.waitFor({ timeout: 8000 })
   check(await invitesHead.isVisible(), 'admin sees the Invites section in the members panel')
   const invitesBefore = await page.locator('.invite-row').count()
   check(invitesBefore >= 1, 'the previously-minted invite is listed')
+  // Create an unlimited invite (blank max-uses).
+  promptAnswer = ''
   await page.locator('.new-invite-btn').click()
   await page.waitForFunction(
     (n) => document.querySelectorAll('.invite-row').length > n,
@@ -576,15 +579,28 @@ async function main() {
   )
   const invitesAfterCreate = await page.locator('.invite-row').count()
   check(invitesAfterCreate > invitesBefore, 'creating an invite adds it to the list')
+  check(
+    (await page.locator('.invite-meta', { hasText: /\d+ uses?/ }).count()) > 0,
+    'an invite row shows a uses count',
+  )
+  // Create a capped invite (max 5 uses) → a row shows "0/5 uses".
+  promptAnswer = '5'
+  await page.locator('.new-invite-btn').click()
+  await page.locator('.invite-meta', { hasText: '0/5 uses' }).first().waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.invite-meta', { hasText: '0/5 uses' }).count()) > 0,
+    'a max-uses invite renders its 0/5 uses cap',
+  )
   await shot('07d3-invites.png')
+  const invitesAfterCapped = await page.locator('.invite-row').count()
   await page.locator('.invite-row .revoke-invite-btn').first().click()
   await page.waitForFunction(
     (n) => document.querySelectorAll('.invite-row').length < n,
-    invitesAfterCreate,
+    invitesAfterCapped,
     { timeout: 8000 },
   )
   check(
-    (await page.locator('.invite-row').count()) < invitesAfterCreate,
+    (await page.locator('.invite-row').count()) < invitesAfterCapped,
     'revoking an invite removes it from the list',
   )
 

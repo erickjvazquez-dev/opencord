@@ -591,6 +591,75 @@ func TestRouterInviteManagementIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterInviteMaxUsesIntegration proves the max-uses cap end-to-end: the POST body
+// validates the bound (1–1000), a capped code admits exactly its limit then 404s as
+// exhausted, an unlimited code keeps admitting, and a member re-redeeming does NOT burn a
+// use. The cap is enforced + counted server-side (a stale client can't bypass it, Rule B).
+func TestRouterInviteMaxUsesIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "MaxUses Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	invitesPath := fmt.Sprintf("/api/servers/%d/invites", srv.ID)
+
+	t.Run("maxUses body is bounded 1..1000", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", invitesPath, ownerTok, `{"maxUses":0}`), http.StatusBadRequest, "maxUses 0")
+		wantStatus(t, hs.req(t, "POST", invitesPath, ownerTok, `{"maxUses":-3}`), http.StatusBadRequest, "maxUses negative")
+		wantStatus(t, hs.req(t, "POST", invitesPath, ownerTok, `{"maxUses":1001}`), http.StatusBadRequest, "maxUses too big")
+		wantStatus(t, hs.req(t, "POST", invitesPath, ownerTok, `not json`), http.StatusBadRequest, "malformed body")
+		// An empty body is fine (legacy clients) → unlimited.
+		wantStatus(t, hs.req(t, "POST", invitesPath, ownerTok, ""), http.StatusCreated, "empty body → unlimited")
+	})
+
+	t.Run("a maxUses=1 code admits one member then is exhausted", func(t *testing.T) {
+		mint := hs.req(t, "POST", invitesPath, ownerTok, `{"maxUses":1}`)
+		wantStatus(t, mint, http.StatusCreated, "mint capped invite")
+		var minted struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal(mint.Body.Bytes(), &minted); err != nil || minted.Code == "" {
+			t.Fatalf("no code: %v (%s)", err, mint.Body.String())
+		}
+		redeem := fmt.Sprintf("/api/invites/%s", minted.Code)
+		_, firstTok := hs.user(t)
+		_, secondTok := hs.user(t)
+		// First join consumes the only use → 200.
+		wantStatus(t, hs.req(t, "POST", redeem, firstTok, ""), http.StatusOK, "first join (uses the slot)")
+		// The same member re-redeeming must NOT consume a use (idempotent rejoin).
+		wantStatus(t, hs.req(t, "POST", redeem, firstTok, ""), http.StatusOK, "re-redeem by a member is a no-op")
+		// A different user now finds it exhausted → 404.
+		wantStatus(t, hs.req(t, "POST", redeem, secondTok, ""), http.StatusNotFound, "second join is exhausted")
+		// An exhausted code drops out of the admin active list.
+		list := hs.req(t, "GET", invitesPath, ownerTok, "")
+		if strings.Contains(list.Body.String(), fmt.Sprintf(`"code":%q`, minted.Code)) {
+			t.Fatalf("exhausted code should not be listed as active; got %s", list.Body.String())
+		}
+	})
+
+	t.Run("an unlimited code keeps admitting; the list reports the running uses count", func(t *testing.T) {
+		mint := hs.req(t, "POST", invitesPath, ownerTok, `{}`) // {} → unlimited
+		wantStatus(t, mint, http.StatusCreated, "mint unlimited invite")
+		var minted struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(mint.Body.Bytes(), &minted)
+		redeem := fmt.Sprintf("/api/invites/%s", minted.Code)
+		for i := 0; i < 3; i++ {
+			_, tok := hs.user(t)
+			wantStatus(t, hs.req(t, "POST", redeem, tok, ""), http.StatusOK, fmt.Sprintf("unlimited join %d", i+1))
+		}
+		list := hs.req(t, "GET", invitesPath, ownerTok, "")
+		if !strings.Contains(list.Body.String(), fmt.Sprintf(`"code":%q`, minted.Code)) ||
+			!strings.Contains(list.Body.String(), `"uses":3`) {
+			t.Fatalf("unlimited code should list with uses:3; got %s", list.Body.String())
+		}
+	})
+}
+
 // TestRouterTimeoutMemberIntegration walks the timeout/clear endpoints through the HTTP
 // layer (authz matrix mirrors ban) and proves the user-visible guarantee: a timed-out
 // member's post is rejected server-side (ErrTimedOut) until the timeout is cleared, and
