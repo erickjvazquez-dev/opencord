@@ -2368,3 +2368,32 @@ one-off assertion.
 handler must answer each by matching `d.message()` — never assume one global answer covers a
 sequence. Component rotation: advanced **Users/Profiles** this tick (chat/search last tick,
 servers before that) — next, rotate to presence (idle/DnD) or a Messaging item.
+
+---
+
+## 2026-06-16 — presence states (idle/dnd/invisible) + a replace_all near-miss
+
+**Shipped:** four-state presence (online/idle/dnd/invisible) — manual picker,
+`users.presence_state`, pure-unit-tested effective-presence rule (others see
+invisible/disconnected as offline; you see your own true state), `PUT /me/presence`,
+member-list dot colored green/amber/red/grey in both panels. Pure + http + browser tests;
+pushed origin + `railway up`; live round-trip verified (dnd/idle/invisible reflected;
+bogus→online on prod). Component rotation: **presence** this tick.
+
+**Highest-value learning: `replace_all` silently replaced only ONE of two "identical" dot
+renders because they sat at different JSX nesting/indentation — and reported "All occurrences
+replaced," giving false confidence.** The two presence-dot spans (members-management panel vs
+the visible right-sidebar member list) differed only in leading whitespace, so my replace_all
+matched the exact-indentation string once and left the VISIBLE one on the old `mb.online`. All
+Go unit tests + the backend probe passed (backend was correct); only the rendered dot was
+wrong. **Browser QA caught it pre-commit** — the dnd dot never appeared — exactly the class of
+bug HTTP/unit tests miss. Fixed the second spot, re-ran, green.
+
+**Carry this (process rules):**
+1. **`replace_all` only hits EXACT-text matches.** When "the same" code is duplicated at
+   different nesting depths, it will quietly miss the differently-indented copies. After any
+   replace_all on duplicated render logic, **grep the symbol to confirm the count** (`grep -n
+   'presence-dot' …` → expect N) rather than trusting the "all occurrences" message.
+2. **This is why browser QA runs before commit, not after.** A backend-correct, unit-green
+   change can still render wrong; only driving the real UI + AI-vision catches it. The gate
+   worked — keep it mandatory for every UI-touching tick.
