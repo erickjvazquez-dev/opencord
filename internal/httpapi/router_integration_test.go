@@ -207,6 +207,73 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterUnreadIntegration covers GET /unreads + POST /channels/{id}/read: auth
+// required, access-gating on mark-read, and the unread→read→unread lifecycle over HTTP.
+func TestRouterUnreadIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+	_, myTok := hs.user(t)
+	other, _ := hs.user(t)
+
+	// A members-only server channel that the caller is NOT in (for the access-gate check).
+	srv, err := hs.store.CreateServer(ctx, other.ID, "Unread Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	secret, err := hs.store.CreateServerChannel(ctx, srv.ID, "secret")
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+	// A public channel both can use.
+	pub, err := hs.store.CreateChannel(ctx, "rt-unread-"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	if err != nil {
+		t.Fatalf("create public channel: %v", err)
+	}
+
+	unreadIDs := func() []int64 {
+		w := hs.req(t, "GET", "/api/unreads", myTok, "")
+		wantStatus(t, w, http.StatusOK, "GET unreads")
+		var resp struct {
+			ChannelIDs []int64 `json:"channelIds"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode unreads: %v", err)
+		}
+		return resp.ChannelIDs
+	}
+	has := func(ids []int64, id int64) bool {
+		for _, x := range ids {
+			if x == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	wantStatus(t, hs.req(t, "GET", "/api/unreads", "", ""), http.StatusUnauthorized, "unauth GET unreads")
+
+	if _, err := hs.store.Save(ctx, pub.ID, other.ID, other.Username, "hello"); err != nil {
+		t.Fatalf("other posts: %v", err)
+	}
+	if !has(unreadIDs(), pub.ID) {
+		t.Fatal("public channel should be unread after another user posts")
+	}
+	// Mark read over HTTP → no longer unread.
+	wantStatus(t, hs.req(t, "POST", fmt.Sprintf("/api/channels/%d/read", pub.ID), myTok, ""), http.StatusNoContent, "mark read")
+	if has(unreadIDs(), pub.ID) {
+		t.Fatal("public channel should not be unread after POST /read")
+	}
+	// Access gate: marking a channel you can't access is 403, and it never appears unread.
+	wantStatus(t, hs.req(t, "POST", fmt.Sprintf("/api/channels/%d/read", secret.ID), myTok, ""), http.StatusForbidden, "mark read on inaccessible channel")
+	wantStatus(t, hs.req(t, "POST", "/api/channels/abc/read", myTok, ""), http.StatusBadRequest, "mark read bad id")
+	if _, err := hs.store.Save(ctx, secret.ID, other.ID, other.Username, "secret"); err != nil {
+		t.Fatalf("post in secret: %v", err)
+	}
+	if has(unreadIDs(), secret.ID) {
+		t.Fatal("an inaccessible channel must never surface in unreads")
+	}
+}
+
 // TestRouterStatusIntegration covers PUT /me/status: auth required, the caller's own
 // status is set (Rule C — derived from the JWT), and it surfaces in the member list.
 func TestRouterStatusIntegration(t *testing.T) {

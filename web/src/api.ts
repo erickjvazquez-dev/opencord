@@ -103,6 +103,22 @@ export async function setServerMemberRole(
   }
 }
 
+// The caller's accessible channels that have unread messages (drives sidebar dots).
+export async function fetchUnreads(token: string): Promise<number[]> {
+  const res = await fetch('/api/unreads', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return []
+  const data = (await res.json()) as { channelIds?: number[] }
+  return data.channelIds ?? []
+}
+
+// Mark a channel read up to its latest message (fire-and-forget).
+export async function markChannelRead(token: string, channelId: number): Promise<void> {
+  await fetch(`/api/channels/${channelId}/read`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => {})
+}
+
 // Set the caller's own custom status ("" clears it). The server trims + caps it.
 export async function setMyStatus(token: string, status: string): Promise<void> {
   const res = await fetch('/api/me/status', {

@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS channel_members (
 );
 CREATE INDEX IF NOT EXISTS channel_members_user_id_idx ON channel_members (user_id);
 
+-- Read state (v0.4): the highest message id a user has read in a channel. Drives the
+-- sidebar unread indicators. last_read_id = 0 means "never read".
+CREATE TABLE IF NOT EXISTS channel_reads (
+    user_id      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_id   BIGINT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    last_read_id BIGINT NOT NULL DEFAULT 0,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, channel_id)
+);
+
 -- Servers / guilds (v0.2): channels can be grouped under a named server with its own
 -- membership. A channel with server_id IS NULL stays a global public room (the current
 -- behaviour); a channel with a server_id is visible only to that server's members.

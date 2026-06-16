@@ -376,6 +376,33 @@ async function main() {
   )
   await a.screenshot({ path: join(SHOTS, 'rt-09-member-list.png') })
 
+  // 7b — Unread: while B is away in #general, A posts to the server channel → B's
+  // sidebar shows an unread dot on that channel (poll-driven); opening it clears the
+  // dot. (B is still a member here — the kick comes after.)
+  step('A posts while B is in #general → B gets an unread dot, clears on open')
+  await b.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await b.getByPlaceholder('Message #general').waitFor({ timeout: 8000 })
+  const unreadPing = 'unread ping ' + sfx
+  await a.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(unreadPing)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(unreadPing).waitFor({ timeout: 8000 })
+  const bSrvChanBtn = b.locator('.channel-item.server-channel', { hasText: srvChan })
+  let gotUnread = false
+  for (let i = 0; i < 28 && !gotUnread; i++) {
+    // poll is ~10s server-side; wait it out
+    if ((await bSrvChanBtn.locator('.unread-dot').count()) > 0) gotUnread = true
+    else await b.waitForTimeout(500)
+  }
+  check(gotUnread, 'B sees an unread dot on the server channel after A posts while B is away')
+  await b.screenshot({ path: join(SHOTS, 'rt-12-unread.png') })
+  await bSrvChanBtn.click()
+  await b.getByText(unreadPing).waitFor({ timeout: 8000 })
+  await b.waitForTimeout(600)
+  check(
+    (await bSrvChanBtn.locator('.unread-dot').count()) === 0,
+    'opening the channel clears its unread dot (active channel is never unread)',
+  )
+
   // 8 — Kick (moderation): A (owner) removes B from the server. B disappears from A's
   // member views. (The WS eviction that cuts B's live access is proven by the Go
   // integration test; here we verify the user-visible kick UI + removal.)

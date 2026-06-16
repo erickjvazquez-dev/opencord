@@ -1076,3 +1076,38 @@ and lands on `#general` live (no manual refresh).
 
 **Follow-ups this unlocks (separate ticks):** live presence (scoped to co-members),
 live member-joined, cross-channel unread/mention badges — all need exactly this push.
+
+## Unread indicators (parity, iter 95)
+
+**Goal:** channels in the sidebar (global, server, DM) show an **unread** indicator
+(bold + a dot) when they hold messages newer than what you've read; it clears when you
+open the channel. The most-requested Discord-parity gap. MVP = unread *dots*; mention
+*counts* are a follow-up.
+
+**Read state:** new table `channel_reads(user_id, channel_id, last_read_id, updated_at,
+PK(user_id,channel_id))` — CREATE TABLE (no ALTER on hot tables). `last_read_id` = the
+highest message id the user has read in that channel.
+
+**Store:**
+- `MarkChannelRead(user, channel)` — upsert `last_read_id = max(message id in channel)`.
+- `UnreadChannelIDs(user) []int64` — accessible channels (same predicate as
+  `CanAccessChannel`, set-based: public-global OR server-member OR dm-member) that have a
+  non-deleted message with `id > last_read_id` authored by someone else (your own sends
+  never self-unread).
+
+**REST:** `GET /api/unreads` → `{channelIds:[...]}` for the caller; `POST
+/api/channels/{id}/read` → 204 (access-checked via `CanAccessChannel`; 403 otherwise,
+400 bad id). Auth-gated.
+
+**Client:** an `unread: Set<channelId>` synced on load + a ~10s poll. The sidebar bolds +
+dots any channel in the set **except the active one** (the channel you're viewing is never
+"unread"). Opening a channel removes it optimistically; leaving a channel marks it read
+server-side (WS-effect cleanup) so the next poll won't re-flag messages you saw.
+
+**Threat model (Rule B/15 — tested):** mark-read and unread are derived from the JWT user
+(Rule C); `POST /read` on an inaccessible channel → 403 (no read-marker leak); unread
+results are access-scoped (you never learn a channel exists via unread).
+
+**Follow-ups:** mention **counts** (red badge — scan unread bodies for @you/@everyone/
+@here); **instant** unread via the iter-94 per-user push (push channel-activity to
+co-members so dots appear without waiting for the poll); per-channel/server mute.

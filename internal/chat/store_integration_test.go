@@ -647,6 +647,83 @@ func TestServerRolesIntegration(t *testing.T) {
 	}
 }
 
+func TestUnreadChannelsIntegration(t *testing.T) {
+	store, pool, me := setup(t)
+	ctx := context.Background()
+	other := regUser(t, pool)
+
+	has := func(ids []int64, id int64) bool {
+		for _, x := range ids {
+			if x == id {
+				return true
+			}
+		}
+		return false
+	}
+	unread := func() []int64 {
+		ids, err := store.UnreadChannelIDs(ctx, me.ID)
+		if err != nil {
+			t.Fatalf("UnreadChannelIDs: %v", err)
+		}
+		return ids
+	}
+
+	ch, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	// Empty channel → not unread.
+	if has(unread(), ch.ID) {
+		t.Fatal("a channel with no messages should not be unread")
+	}
+	// Someone else posts → unread for me.
+	if _, err := store.Save(ctx, ch.ID, other.ID, other.Username, "hi"); err != nil {
+		t.Fatalf("other posts: %v", err)
+	}
+	if !has(unread(), ch.ID) {
+		t.Fatal("a channel with a new message from someone else should be unread")
+	}
+	// My OWN message never self-unreads (fresh channel only I post in).
+	mine, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create mine: %v", err)
+	}
+	if _, err := store.Save(ctx, mine.ID, me.ID, me.Username, "mine"); err != nil {
+		t.Fatalf("self post: %v", err)
+	}
+	if has(unread(), mine.ID) {
+		t.Fatal("my own message should not mark the channel unread for me")
+	}
+	// Mark read → no longer unread; a newer message → unread again.
+	if err := store.MarkChannelRead(ctx, ch.ID, me.ID); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	if has(unread(), ch.ID) {
+		t.Fatal("after marking read the channel should not be unread")
+	}
+	if _, err := store.Save(ctx, ch.ID, other.ID, other.Username, "again"); err != nil {
+		t.Fatalf("other posts again: %v", err)
+	}
+	if !has(unread(), ch.ID) {
+		t.Fatal("a message after the read marker should make the channel unread again")
+	}
+	// Access scoping: a server channel I'm NOT a member of is never unread for me.
+	srv, err := store.CreateServer(ctx, other.ID, "Other Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	sch, err := store.CreateServerChannel(ctx, srv.ID, "secret")
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+	if _, err := store.Save(ctx, sch.ID, other.ID, other.Username, "secret"); err != nil {
+		t.Fatalf("post in server channel: %v", err)
+	}
+	if has(unread(), sch.ID) {
+		t.Fatal("a server channel I can't access must never surface as unread (access scoping)")
+	}
+}
+
 func TestUserStatusIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

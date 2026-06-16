@@ -741,6 +741,58 @@ func (s *Store) ChannelExists(ctx context.Context, id int64) (bool, error) {
 	return exists, err
 }
 
+// MarkChannelRead advances userID's read marker in channelID to the channel's latest
+// message. Idempotent (upsert). The caller is responsible for the access check.
+func (s *Store) MarkChannelRead(ctx context.Context, channelID, userID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO channel_reads (user_id, channel_id, last_read_id)
+		 VALUES ($1, $2, COALESCE((SELECT MAX(id) FROM messages WHERE channel_id = $2), 0))
+		 ON CONFLICT (user_id, channel_id)
+		 DO UPDATE SET last_read_id = EXCLUDED.last_read_id, updated_at = now()`,
+		userID, channelID)
+	return err
+}
+
+// UnreadChannelIDs returns the ids of channels userID can access that hold a non-deleted
+// message newer than their read marker, authored by someone else (your own sends never
+// self-unread). Access is scoped exactly like CanAccessChannel (public-global OR
+// server-member OR dm-member), so unread never leaks a channel you can't see.
+func (s *Store) UnreadChannelIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT c.id
+		   FROM channels c
+		  WHERE (
+		          (c.kind <> 'dm' AND c.server_id IS NULL)
+		          OR (c.server_id IS NOT NULL AND EXISTS (
+		                SELECT 1 FROM server_members sm
+		                 WHERE sm.server_id = c.server_id AND sm.user_id = $1))
+		          OR (c.kind = 'dm' AND EXISTS (
+		                SELECT 1 FROM channel_members m
+		                 WHERE m.channel_id = c.id AND m.user_id = $1))
+		        )
+		    AND EXISTS (
+		          SELECT 1 FROM messages msg
+		           WHERE msg.channel_id = c.id
+		             AND msg.deleted_at IS NULL
+		             AND msg.user_id <> $1
+		             AND msg.id > COALESCE(
+		                   (SELECT last_read_id FROM channel_reads cr
+		                     WHERE cr.channel_id = c.id AND cr.user_id = $1), 0))`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // CanAccessChannel reports whether userID may read/join channelID. Public
 // channels are open to everyone; DM (and future private) channels require
 // membership. A non-existent channel returns (false, nil).

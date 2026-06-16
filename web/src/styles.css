@@ -196,6 +196,21 @@ button:disabled {
   color: #fff;
 }
 
+/* Unread channel: brighten + bold the name, and show a white dot at the right
+   (Discord's unread pip). The active channel is never marked unread. */
+.channel-item.unread {
+  color: var(--text);
+  font-weight: 700;
+}
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .channel-item .hash {
   color: var(--text-muted);
 }

@@ -70,6 +70,34 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			})
 			r.Get("/channels", chat.HandleChannels(store))
 			r.Post("/channels", chat.HandleCreateChannel(store))
+			// Unread indicators: the caller's accessible channels with unread messages.
+			r.Get("/unreads", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				ids, err := store.UnreadChannelIDs(r.Context(), me.ID)
+				if err != nil {
+					http.Error(w, `{"error":"could not load unreads"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"channelIds": ids})
+			})
+			// Mark a channel read up to its latest message (access-gated, Rule C).
+			r.Post("/channels/{id}/read", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				if ok, err := store.CanAccessChannel(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				if err := store.MarkChannelRead(r.Context(), id, me.ID); err != nil {
+					http.Error(w, `{"error":"could not mark read"}`, http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
 			// Update a server channel — posting policy ('everyone'|'admins') and/or
 			// topic. Admins only. Fields are optional (pointers): each is applied only
 			// when present, so old {postPolicy} clients keep working.

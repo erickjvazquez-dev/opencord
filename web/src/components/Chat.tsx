@@ -27,6 +27,8 @@ import {
   setServerMemberRole,
   kickServerMember,
   setMyStatus,
+  fetchUnreads,
+  markChannelRead,
 } from '../api'
 import type {
   Channel,
@@ -158,6 +160,8 @@ export function Chat({
   const [memberList, setMemberList] = useState<ServerMember[]>([])
   // The caller's own custom status (synced from whichever member list includes them).
   const [myStatus, setMyStatus_] = useState('')
+  // Channel ids with unread messages (sidebar dots). Synced on load + a ~10s poll.
+  const [unread, setUnread] = useState<Set<number>>(new Set())
   // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
@@ -363,6 +367,17 @@ export function Chat({
       wsRef.current?.close()
       Object.values(typingTimers.current).forEach(clearTimeout)
       typingTimers.current = {}
+      // Leaving a channel marks it read (server-side) and clears its local unread dot,
+      // so the next poll won't re-flag the messages we just saw.
+      if (channelId != null) {
+        void markChannelRead(token, channelId)
+        setUnread((prev) => {
+          if (!prev.has(channelId)) return prev
+          const next = new Set(prev)
+          next.delete(channelId)
+          return next
+        })
+      }
     }
   }, [token, channelId, user.username])
 
@@ -943,6 +958,26 @@ export function Chat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberList, membersOf, user.id])
 
+  // Sidebar unread dots: fetch on load + poll. The active channel is filtered out at
+  // render time (you're viewing it), and marked read on leave (WS-effect cleanup), so
+  // the poll won't re-flag messages you've already seen.
+  useEffect(() => {
+    let live = true
+    const load = () =>
+      fetchUnreads(token)
+        .then((ids) => live && setUnread(new Set(ids)))
+        .catch(() => {})
+    void load()
+    const timer = setInterval(load, 10000)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [token])
+
+  // Helper: does a channel show an unread indicator? (Never the one you're viewing.)
+  const isUnread = (id: number) => id !== channelId && unread.has(id)
+
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
     setChannelId(id)
@@ -1039,11 +1074,12 @@ export function Chat({
           {channels.map((c) => (
             <button
               key={c.id}
-              className={c.id === channelId ? 'channel-item active' : 'channel-item'}
+              className={`channel-item${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}`}
               onClick={() => selectChannel(c.id)}
             >
               <span className="hash">#</span>
               {c.name}
+              {isUnread(c.id) && <span className="unread-dot" aria-label="unread" />}
             </button>
           ))}
         </nav>
@@ -1056,11 +1092,12 @@ export function Chat({
           {dms.map((d) => (
             <button
               key={d.id}
-              className={d.id === channelId ? 'channel-item active' : 'channel-item'}
+              className={`channel-item${d.id === channelId ? ' active' : ''}${isUnread(d.id) ? ' unread' : ''}`}
               onClick={() => selectChannel(d.id)}
             >
               <Avatar token={token} userId={d.user.id} username={d.user.username} className="dm-avatar" />
               {d.user.username}
+              {isUnread(d.id) && <span className="unread-dot" aria-label="unread" />}
             </button>
           ))}
         </nav>
@@ -1078,15 +1115,12 @@ export function Chat({
               {(serverChannels[s.id] ?? []).map((c) => (
                 <button
                   key={c.id}
-                  className={
-                    c.id === channelId
-                      ? 'channel-item server-channel active'
-                      : 'channel-item server-channel'
-                  }
+                  className={`channel-item server-channel${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}`}
                   onClick={() => selectChannel(c.id)}
                 >
                   <span className="hash">#</span>
                   {c.name}
+                  {isUnread(c.id) && <span className="unread-dot" aria-label="unread" />}
                 </button>
               ))}
               <div className="server-group-actions">
