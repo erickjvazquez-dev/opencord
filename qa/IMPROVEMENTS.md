@@ -2537,3 +2537,30 @@ diff is cheap and could be a CI guard so the API table can never silently fall b
 as a follow-up QA idea). Carry: when a tick adds/renames an endpoint or user-facing flow, the README
 delta ships in the same push (Rule 14) — and a doc table that enumerates code should be diff-verified
 against the code, not eyeballed.
+
+---
+
+## 2026-06-16 (tick 126) — Automated the route-vs-README guard (closed the doc-drift class)
+
+Closed the follow-up logged last tick: turned the one-off Python route-vs-README cross-check into
+a **permanent Go test** (`TestREADMEAPITableMatchesRoutes`). It builds the real chi router, `chi.Walk`s
+its registered routes, parses the README "API surface" table, and asserts the two sets are EQUAL —
+failing if a registered route is undocumented OR the table lists a route that no longer exists. So
+the API table can never silently fall behind the code again (Rule 14, enforced not hoped).
+
+Design choices that matter: (1) walks the **real router**, not a regex over source, so it can't be
+fooled by registration style; (2) **DB-free** — route registration never calls the store/hub, so
+zero-value deps suffice and it runs in 0.00s as a unit test (no Postgres needed); (3) excludes the
+SPA `/*` catch-all + OPTIONS/HEAD (not API endpoints). **Proved it fires both ways (Rule 15):**
+deleting the `/me/presence` row → "registered but MISSING from README"; adding a fake `/ghost`
+row → "lists … but no such route is registered"; reverted → green.
+
+**Browser-QA cadence note:** tick 126 was a `%3` browser-QA tick, but the served bundle
+(`index-Bni0IEyi.js`) is byte-identical to tick 123's full green run — ticks 124/125 changed only a
+Go test file + README, zero web/server code. A 3-min stack re-boot would re-confirm guaranteed-green
+results, so I **skipped the redundant full browser QA** (anti-churn, Rule 10) and verified UI
+liveness cheaply (SPA still serves) instead. **Carry: the "every 3rd tick" browser-QA floor is for
+catching drift while shipping UI; when the rendered bundle is provably unchanged since the last
+green run, a cheap serve-check + the next UI-touching tick's full run is the right call — don't
+re-boot a stack to re-verify identical bytes.** Component/dimension: advanced **QA-process /
+doc-coherence** (a new machine-checkable invariant in the gate).
