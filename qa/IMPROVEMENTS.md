@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 98) — Acted on last tick's own suggestion: proactively de-flaked the gate
+
+A verification + loop-health tick. Ran the full browser QA (browser/realtime/voice all
+green — the product is healthy after the iter-90→97 feature flurry) + AI-vision (core
+chat/header/sidebar clean, no regression). Then **acted on the tick-97 reflection's own
+suggestion**: audited the suite for the fixed-`Sleep`-then-assert pattern that false-red'd
+twice (slowmode iter-91, rate-limit iter-97) and proactively converted the two remaining
+*same-class* WS assertions to polls — the voice flood-guard's "legit burst relayed in
+full" (lower-bound count) and the hostile-frame battery's "final-legit persisted" check.
+
+**Highest-value lesson — the loop's own reflections are a backlog; work it, don't just
+append to it.** Tick 97 flagged "convert remaining fixed-sleep patterns proactively." This
+tick did exactly that instead of writing a new feature, and it's the right call: a flaky
+health gate undermines every future tick's fix-first decision (a false P0 wastes a whole
+tick on a non-bug). Distinguishing the genuinely-flaky pattern (fixed-sleep then assert a
+**lower bound** / a specific result — flakes under load) from the safe one (assert an
+**upper bound** / tolerant direction — load only makes it more true, e.g. flood-guard
+Phase 2, left as-is) is the key judgment — don't poll-convert blindly.
+
+- **Anti-churn note (correctly applied):** this is a **test-only** change — `_test.go`
+  files aren't in the built binary, so the deployed artifact is byte-identical. Committed +
+  pushed for source control, but **did not deploy** (no rollout-verify needed — nothing new
+  serves). Deploying here would be pure churn (Rule 10/16).
+- **Suite-flake status:** all four known timing-sensitive assertions (slowmode, rate-limit,
+  voice flood-guard P1, hostile-frame final) are now poll-based or load-tolerant. Remaining
+  `time.Sleep`s are poll *intervals* or the inherently-duration-based slowmode wait — no
+  fixed-sleep-then-lower-bound-assert remains. Gate should be robust under load now.
+
 ## 2026-06-15 (tick 97) — Rotated to a security/QA pass after 6 feature ticks; found a real edge + a flake
 
 After 6 straight Track-1/2 feature ticks, deliberately rotated to **Track-0 (security/QA —
