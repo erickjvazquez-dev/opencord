@@ -701,6 +701,44 @@ async function main() {
   await shot('07i-avatar-message.png')
   check(await msgImg.isVisible(), 'after reload, message-list avatars render the uploaded image')
 
+  // 7j — Server settings (owner): create a throwaway server, rename it (the sidebar
+  // relabels live), then delete it (typed-name confirm) and watch it leave the sidebar.
+  // Isolated on its own server so it never disturbs the "qa server" flow above.
+  step('server settings: create → rename → delete a throwaway server')
+  promptAnswer = 'qa settings srv'
+  await page.getByRole('button', { name: '+ New server' }).click()
+  await page.locator('.server-name', { hasText: 'qa settings srv' }).waitFor({ timeout: 8000 })
+  // Open its members panel — the Server settings section lives at the top (owner-only).
+  await page
+    .locator('.server-group', { hasText: 'qa settings srv' })
+    .getByRole('button', { name: 'members' })
+    .click()
+  await page.locator('.server-settings').waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.server-settings-head').isVisible(),
+    'owner sees the Server settings section in the members panel',
+  )
+  // Rename → the sidebar relabels (optimistic + the live server-renamed WS push).
+  promptAnswer = 'qa settings renamed'
+  await page.locator('.rename-server-btn').click()
+  await page.locator('.server-name', { hasText: 'qa settings renamed' }).waitFor({ timeout: 8000 })
+  await shot('07j-server-renamed.png')
+  check(
+    await page.locator('.server-name', { hasText: 'qa settings renamed' }).isVisible(),
+    'renaming a server relabels it in the sidebar',
+  )
+  // Delete → the typed-name confirm prompt is auto-answered with the (renamed) name.
+  promptAnswer = 'qa settings renamed'
+  await page.locator('.delete-server-btn').click()
+  await page
+    .locator('.server-name', { hasText: 'qa settings renamed' })
+    .waitFor({ state: 'detached', timeout: 8000 })
+  await shot('07j-server-deleted.png')
+  check(
+    (await page.locator('.server-name', { hasText: 'qa settings renamed' }).count()) === 0,
+    'deleting a server removes it from the sidebar',
+  )
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

@@ -1324,6 +1324,92 @@ func (s *Store) ClearTimeout(ctx context.Context, serverID, actorID, targetID in
 	return nil
 }
 
+// RenameServer renames serverID to name. The actor must be an owner or admin
+// (Discord's "Manage Server"); a plain member or non-member gets ErrForbidden, an
+// unknown server ErrServerNotFound. The name is assumed already trimmed/validated by
+// the caller (1–64 chars, like CreateServer). Returns the updated row with the actor's
+// role so the caller can echo it back.
+func (s *Store) RenameServer(ctx context.Context, serverID, actorID int64, name string) (Server, error) {
+	role, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return Server{}, err
+	}
+	if role == "" {
+		// Don't leak existence to a non-member, but distinguish a real unknown server
+		// so the caller can 404 rather than 403 when the server truly doesn't exist.
+		var exists bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM servers WHERE id = $1)`, serverID).Scan(&exists); err != nil {
+			return Server{}, err
+		}
+		if !exists {
+			return Server{}, ErrServerNotFound
+		}
+		return Server{}, ErrForbidden
+	}
+	if role != "owner" && role != "admin" {
+		return Server{}, ErrForbidden
+	}
+	srv := Server{Role: role}
+	err = s.pool.QueryRow(ctx,
+		`UPDATE servers SET name = $1 WHERE id = $2 RETURNING id, name, owner_id, created_at`,
+		name, serverID).Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Server{}, ErrServerNotFound
+	}
+	if err != nil {
+		return Server{}, err
+	}
+	return srv, nil
+}
+
+// DeleteServer permanently deletes serverID. Only the server OWNER may delete it
+// (destructive — an admin can't); a non-owner (incl. admin and non-member) gets
+// ErrForbidden, an unknown server ErrServerNotFound. The delete is one transaction:
+// the server's messages are removed first (messages.channel_id has no ON DELETE
+// CASCADE, so the channel cascade would otherwise hit an FK violation), then the
+// server row is deleted — its ON DELETE CASCADE FKs sweep server_members, channels
+// (and their channel_reads/pins), server_invites, channel_categories, and server_bans.
+// The global #general (server_id IS NULL) is never touched. The caller is responsible
+// for notifying + evicting the (now ex-)members' live sockets (see Hub helpers); gather
+// their ids and the channel ids BEFORE calling this, as the rows are gone afterwards.
+func (s *Store) DeleteServer(ctx context.Context, serverID, actorID int64) error {
+	role, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if role == "" {
+		var exists bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM servers WHERE id = $1)`, serverID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrServerNotFound
+		}
+		return ErrForbidden
+	}
+	if role != "owner" {
+		return ErrForbidden // only the owner deletes the server
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM messages WHERE channel_id IN (SELECT id FROM channels WHERE server_id = $1)`,
+		serverID); err != nil {
+		return err
+	}
+	ct, err := tx.Exec(ctx, `DELETE FROM servers WHERE id = $1`, serverID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrServerNotFound // raced away between the role check and the delete
+	}
+	return tx.Commit(ctx)
+}
+
 // ListServerMembers returns a server's members with roles, owner/admin first.
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,

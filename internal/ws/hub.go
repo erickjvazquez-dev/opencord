@@ -29,8 +29,10 @@ type Event struct {
 	// On omitted (false) means the peer stopped sharing.
 	On       bool   `json:"on,omitempty"`
 	StreamID string `json:"streamId,omitempty"`
-	// ServerID scopes a user-targeted event to a server (e.g. "server-removed").
-	ServerID int64 `json:"serverId,omitempty"`
+	// ServerID scopes a user-targeted event to a server (e.g. "server-removed",
+	// "server-renamed"). Name carries a server's new name on "server-renamed".
+	ServerID int64  `json:"serverId,omitempty"`
+	Name     string `json:"name,omitempty"`
 }
 
 // targetedEvent is an Event addressed to a specific channel — used for events

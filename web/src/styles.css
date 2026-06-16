@@ -1184,6 +1184,34 @@ button:disabled {
   color: var(--danger);
 }
 
+/* Server-settings row at the top of the members panel (owner/admin). Dedicated
+   classes — NOT .member-row / .invites-head / .bans-head — so it never collides
+   with the QA + behavioural selectors those carry. */
+.server-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 4px 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+}
+.server-settings-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+.rename-server-btn {
+  font-weight: 600;
+}
+/* Delete is the most destructive server action — danger-tinted + bold. */
+.delete-server-btn {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 /* Ban is the strongest action — danger-tinted + bold so it reads apart from kick. */
 .ban-btn {
   color: var(--danger);

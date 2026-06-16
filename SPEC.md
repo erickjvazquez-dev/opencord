@@ -1423,3 +1423,48 @@ invite row shows `N/M uses` (capped) or a running `N uses`.
 **Threat model (Rule B/15 — tested):** the cap is enforced + counted server-side (a stale
 client can't bypass it); maxUses is bounded 1–1000; the atomic guarded UPDATE makes the
 limit race-safe; a member re-redeeming never burns a use.
+
+## v0.3 — Server settings: rename + delete a server (owner/admin)
+
+**Why:** a server, once created, could never be renamed or removed — the one missing
+half of basic server management (Discord's Server Settings → Overview + Delete Server).
+Closes the unchecked "Create/join servers + **server settings**" parity item.
+
+**Store (`internal/chat`):**
+- `RenameServer(serverID, actorID, name) (Server, error)` — **admin+** (owner or admin,
+  Discord's "Manage Server"). `UPDATE servers SET name=$1 WHERE id=$2 RETURNING …`; not an
+  admin → `ErrForbidden`; unknown server → `ErrServerNotFound`. Returns the updated row
+  with the actor's role.
+- `DeleteServer(serverID, actorID) error` — **owner-only** (destructive, Discord parity).
+  Non-owner (incl. admin + non-member) → `ErrForbidden`; unknown → `ErrServerNotFound`.
+  One **transaction**: `DELETE FROM messages WHERE channel_id IN (server's channels)`
+  first — `messages.channel_id` has no `ON DELETE CASCADE`, so the channel cascade would
+  otherwise hit an FK violation — then `DELETE FROM servers WHERE id=$1`, whose
+  `ON DELETE CASCADE` FKs remove the server's `server_members`, `channels` (→ their
+  `channel_reads`/pins via cascade), `server_invites`, `channel_categories`, and
+  `server_bans`. The global `#general` (`server_id IS NULL`) is untouched.
+
+**REST:**
+- `PATCH /servers/{id}` `{name}` (1–64 chars, trimmed — same validation as create) →
+  200 with the updated server; 403 non-admin; 404 unknown.
+- `DELETE /servers/{id}` → 204; 403 non-owner; 404 unknown.
+
+**WS (live):**
+- Rename broadcasts `server-renamed` (`serverId` + new `name`) to **every member** via
+  `Hub.SendToUser`, so each member's sidebar relabels live without a refetch. `Event`
+  gains a `Name` field for this.
+- Delete reuses the kick/ban path: each member gets a `server-removed` push then
+  `Hub.EvictUserFromChannels` on the server's (now-deleted) channel ids, so every
+  member's client drops the server and falls back to `#general` live.
+
+**Web:** an owner/admin **⚙ Server Settings** affordance in the members panel: an inline
+**rename** field (admin+) and, for the **owner only**, a **Delete server** button behind a
+typed/confirmed prompt. Handles `server-renamed` (relabel in place) and the existing
+`server-removed` (drop the server) live.
+
+**Threat model (Rule B/15 — tested):** rename is admin-gated and the name is bounded
+(1–64, trimmed) server-side; delete is strictly owner-only — an admin, a plain member, and
+a non-member are all rejected (403), proven by an authz-matrix integration test; the delete
+is transactional (messages-then-cascade) so a server is never left half-deleted, and the
+cascade is verified to remove members/channels/messages while leaving the global `#general`
+intact.

@@ -202,7 +202,13 @@ This is the exhaustive backlog (✓ = shipped); the loop pulls the next highest-
 item from here as the structural milestones above land.
 
 ### Servers / Guilds
-- [ ] Create/join servers (guilds) + server settings
+- [~] Create/join servers (guilds) DONE + **server settings: rename + delete DONE**
+  (rename = owner/admin "Manage Server", live `server-renamed` sidebar relabel; delete =
+  owner-only, destructive — one tx removes the server's messages then cascades its members/
+  channels/invites/categories/bans, global `#general` untouched, members live-evicted via
+  `server-removed`. Authz matrix + cascade adversarially tested at store+HTTP, browser E2E:
+  create → rename → delete. ⚙ Server settings section in the members panel.) · server
+  description / icon / vanity URL / transfer-ownership / leave-server TODO
 - [~] **Channel categories DONE** (collapsible groups; create + nest a channel + optional
   categoryId on channel create, Rule-B cross-server guard) · ordering/drag TODO
 - [~] Invites — code-join + **7-day expiry DONE** (enforced server-side at redeem;

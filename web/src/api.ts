@@ -69,6 +69,34 @@ export async function createServer(token: string, name: string): Promise<Server>
   return data as Server
 }
 
+// Rename a server (owner/admin only; the server enforces who may act).
+export async function renameServer(
+  token: string,
+  serverId: number,
+  name: string,
+): Promise<Server> {
+  const res = await fetch(`/api/servers/${serverId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not rename server')
+  return data as Server
+}
+
+// Delete a server (owner only; destructive — the server enforces it).
+export async function deleteServer(token: string, serverId: number): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not delete server')
+  }
+}
+
 // Mint an invite. maxUses (optional, 1–1000) caps how many members the code admits;
 // omit it for an unlimited code (the default).
 export async function createInvite(

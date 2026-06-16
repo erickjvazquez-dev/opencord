@@ -1069,6 +1069,164 @@ func TestRemoveServerMemberIntegration(t *testing.T) {
 	}
 }
 
+// TestRenameServerIntegration proves the rename authz matrix: admin+ may rename, a
+// plain member / non-member may not, and an unknown server 404s — and that a successful
+// rename actually lands in the stored row.
+func TestRenameServerIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	admin := regUser(t, pool)
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Original Name")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member %d: %v", u.ID, err)
+		}
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+
+	// --- adversarial: none of these may rename (Rule 15) ---
+	for _, c := range []struct {
+		name  string
+		actor int64
+		srvID int64
+		want  error
+	}{
+		{"plain member can't rename", member.ID, srv.ID, chat.ErrForbidden},
+		{"non-member can't rename", stranger.ID, srv.ID, chat.ErrForbidden},
+		{"unknown server → not found", owner.ID, srv.ID + 99999, chat.ErrServerNotFound},
+	} {
+		if _, err := store.RenameServer(ctx, c.srvID, c.actor, "Hijacked"); !errors.Is(err, c.want) {
+			t.Fatalf("%s: err = %v, want %v", c.name, err, c.want)
+		}
+	}
+	// Guard: the name is untouched after the rejected renames.
+	if servers, _ := store.ListServers(ctx, owner.ID); len(servers) != 1 || servers[0].Name != "Original Name" {
+		t.Fatalf("name should be unchanged after rejected renames: %+v", servers)
+	}
+
+	// --- happy paths: owner and admin can both rename ---
+	if got, err := store.RenameServer(ctx, srv.ID, owner.ID, "Owner Renamed"); err != nil || got.Name != "Owner Renamed" {
+		t.Fatalf("owner rename: got %+v err %v", got, err)
+	}
+	if got, err := store.RenameServer(ctx, srv.ID, admin.ID, "Admin Renamed"); err != nil || got.Name != "Admin Renamed" {
+		t.Fatalf("admin rename: got %+v err %v", got, err)
+	}
+	if servers, _ := store.ListServers(ctx, member.ID); len(servers) != 1 || servers[0].Name != "Admin Renamed" {
+		t.Fatalf("member should see the renamed server: %+v", servers)
+	}
+}
+
+// TestDeleteServerIntegration proves delete is owner-only and cascades correctly:
+// an admin/member/non-member can't delete; the owner's delete removes the server, its
+// members, channels, and messages, while leaving the global #general (and its messages)
+// intact. A successful delete also proves the messages-then-cascade tx ran — without it
+// the channel cascade would hit the messages FK and the delete would error.
+func TestDeleteServerIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	admin := regUser(t, pool)
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	// A message in the global #general must survive the server delete.
+	publics, err := store.ListChannels(ctx)
+	if err != nil || len(publics) == 0 {
+		t.Fatalf("list global channels: %v (%d)", err, len(publics))
+	}
+	generalID := publics[0].ID
+	for _, c := range publics {
+		if c.Name == "general" {
+			generalID = c.ID
+		}
+	}
+	if _, err := store.Save(ctx, generalID, owner.ID, owner.Username, "global survives"); err != nil {
+		t.Fatalf("save global message: %v", err)
+	}
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Doomed Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member %d: %v", u.ID, err)
+		}
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	ch, err := store.CreateServerChannel(ctx, srv.ID, "doomed-chan")
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+	// Messages in the server channel are the reason the tx must delete messages before
+	// the channel cascade (messages.channel_id has no ON DELETE CASCADE).
+	for _, body := range []string{"msg one", "msg two", "msg three"} {
+		if _, err := store.Save(ctx, ch.ID, member.ID, member.Username, body); err != nil {
+			t.Fatalf("save server message: %v", err)
+		}
+	}
+
+	// --- adversarial: only the owner may delete (Rule 15) ---
+	for _, c := range []struct {
+		name  string
+		actor int64
+		srvID int64
+		want  error
+	}{
+		{"admin can't delete", admin.ID, srv.ID, chat.ErrForbidden},
+		{"plain member can't delete", member.ID, srv.ID, chat.ErrForbidden},
+		{"non-member can't delete", stranger.ID, srv.ID, chat.ErrForbidden},
+		{"unknown server → not found", owner.ID, srv.ID + 99999, chat.ErrServerNotFound},
+	} {
+		if err := store.DeleteServer(ctx, c.srvID, c.actor); !errors.Is(err, c.want) {
+			t.Fatalf("%s: err = %v, want %v", c.name, err, c.want)
+		}
+	}
+	// Guard: the server still exists after the rejected deletes.
+	if servers, _ := store.ListServers(ctx, owner.ID); len(servers) != 1 {
+		t.Fatalf("server should survive rejected deletes: %+v", servers)
+	}
+
+	// --- happy path: the owner deletes it, cascading members/channels/messages ---
+	if err := store.DeleteServer(ctx, srv.ID, owner.ID); err != nil {
+		t.Fatalf("owner delete: %v", err)
+	}
+	if servers, _ := store.ListServers(ctx, owner.ID); len(servers) != 0 {
+		t.Fatalf("server should be gone for the owner: %+v", servers)
+	}
+	if ok, _ := store.IsServerMember(ctx, srv.ID, member.ID); ok {
+		t.Fatal("members should be gone after the server delete")
+	}
+	if chans, _ := store.ListServerChannels(ctx, srv.ID); len(chans) != 0 {
+		t.Fatalf("server channels should be gone: %+v", chans)
+	}
+	// Messages in the deleted channel are gone (proves the cascade tx ran).
+	var msgCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE channel_id = $1`, ch.ID).Scan(&msgCount); err != nil {
+		t.Fatalf("count server messages: %v", err)
+	}
+	if msgCount != 0 {
+		t.Fatalf("server channel messages should be deleted, found %d", msgCount)
+	}
+	// The global #general and its message are untouched.
+	var globalCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE channel_id = $1`, generalID).Scan(&globalCount); err != nil {
+		t.Fatalf("count global messages: %v", err)
+	}
+	if globalCount == 0 {
+		t.Fatal("global #general message must survive the server delete")
+	}
+}
+
 func TestMessageModerationIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

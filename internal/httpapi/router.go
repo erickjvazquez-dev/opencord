@@ -427,6 +427,81 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 		writeJSON(w, http.StatusCreated, srv)
 	})
+	// Rename a server (owner/admin — Discord's "Manage Server"). Live-relabels every
+	// member's sidebar via a "server-renamed" push.
+	r.Patch("/servers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		name := strings.TrimSpace(in.Name)
+		if name == "" || len(name) > 64 {
+			http.Error(w, `{"error":"server name must be 1-64 chars"}`, http.StatusBadRequest)
+			return
+		}
+		srv, err := store.RenameServer(r.Context(), id, me.ID, name)
+		switch {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrServerNotFound):
+			http.Error(w, `{"error":"server not found"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not rename server"}`, http.StatusInternalServerError)
+		default:
+			// Tell every member so their sidebar relabels live (best-effort UX).
+			if members, err := store.ListServerMembers(r.Context(), id); err == nil {
+				for _, m := range members {
+					hub.SendToUser(m.UserID, ws.Event{Type: "server-renamed", ServerID: id, Name: srv.Name})
+				}
+			}
+			writeJSON(w, http.StatusOK, srv)
+		}
+	})
+	// Delete a server (owner only — destructive). Cascades away its channels, members,
+	// messages, invites, categories, and bans; the global #general is untouched. Every
+	// member is pushed "server-removed" + evicted from the (now-deleted) channels so
+	// their client drops the server live, identical to a kick/ban.
+	r.Delete("/servers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		// Gather members + channel ids BEFORE the delete — they're gone afterwards.
+		members, _ := store.ListServerMembers(r.Context(), id)
+		chans, _ := store.ListServerChannels(r.Context(), id)
+		switch err := store.DeleteServer(r.Context(), id, me.ID); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrServerNotFound):
+			http.Error(w, `{"error":"server not found"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not delete server"}`, http.StatusInternalServerError)
+		default:
+			ids := make([]int64, 0, len(chans))
+			for _, c := range chans {
+				ids = append(ids, c.ID)
+			}
+			for _, m := range members {
+				if m.UserID == me.ID {
+					continue // the actor deleted it — their own HTTP response cleans up (no "you were removed" notice)
+				}
+				hub.SendToUser(m.UserID, ws.Event{Type: "server-removed", ServerID: id})
+				hub.EvictUserFromChannels(m.UserID, ids)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	// Mint an invite code for a server (members only). Joining is invite-only — the
 	// old open POST /servers/{id}/join (anyone could join by guessing the id) is gone.
 	r.Post("/servers/{id}/invites", func(w http.ResponseWriter, r *http.Request) {

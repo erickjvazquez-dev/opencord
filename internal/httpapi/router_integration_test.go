@@ -409,6 +409,72 @@ func TestRouterKickMemberIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterServerSettingsIntegration walks the server rename (PATCH /servers/{id}) and
+// delete (DELETE /servers/{id}) endpoints through the HTTP layer: unauth, the authz
+// matrix (rename = admin+, delete = owner-only), body validation, malformed ids, and the
+// success paths — asserting the store→HTTP status mapping a hostile caller sees (Rule B/15).
+func TestRouterServerSettingsIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	admin, adminTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Settings Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := hs.store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member: %v", err)
+		}
+	}
+	if err := hs.store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	path := fmt.Sprintf("/api/servers/%d", srv.ID)
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", path, "", `{"name":"X"}`), http.StatusUnauthorized, "unauth rename")
+		wantStatus(t, hs.req(t, "DELETE", path, "", ""), http.StatusUnauthorized, "unauth delete")
+	})
+	t.Run("malformed / invalid input", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", "/api/servers/abc", ownerTok, `{"name":"X"}`), http.StatusBadRequest, "bad server id")
+		wantStatus(t, hs.req(t, "PATCH", path, ownerTok, `{"name":"   "}`), http.StatusBadRequest, "blank name")
+		wantStatus(t, hs.req(t, "PATCH", path, ownerTok, `{"name":"`+strings.Repeat("x", 65)+`"}`), http.StatusBadRequest, "over-long name")
+	})
+	t.Run("rename authz: member/stranger forbidden", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", path, memberTok, `{"name":"Hijacked"}`), http.StatusForbidden, "member renames")
+		wantStatus(t, hs.req(t, "PATCH", path, strangerTok, `{"name":"Hijacked"}`), http.StatusForbidden, "stranger renames")
+	})
+	t.Run("delete authz: admin/member/stranger forbidden", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", path, adminTok, ""), http.StatusForbidden, "admin deletes")
+		wantStatus(t, hs.req(t, "DELETE", path, memberTok, ""), http.StatusForbidden, "member deletes")
+		wantStatus(t, hs.req(t, "DELETE", path, strangerTok, ""), http.StatusForbidden, "stranger deletes")
+		// Still present after every rejected delete.
+		if servers, _ := hs.store.ListServers(ctx, owner.ID); len(servers) != 1 {
+			t.Fatalf("server should survive rejected deletes: %+v", servers)
+		}
+	})
+	t.Run("admin can rename → 200", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "PATCH", path, adminTok, `{"name":"Admin Renamed"}`), http.StatusOK, "admin renames")
+		if servers, _ := hs.store.ListServers(ctx, owner.ID); len(servers) != 1 || servers[0].Name != "Admin Renamed" {
+			t.Fatalf("rename should land: %+v", servers)
+		}
+	})
+	t.Run("owner deletes → 204 then gone", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", path, ownerTok, ""), http.StatusNoContent, "owner deletes")
+		if servers, _ := hs.store.ListServers(ctx, owner.ID); len(servers) != 0 {
+			t.Fatalf("server should be gone: %+v", servers)
+		}
+		// Operating on the now-deleted server is a 404.
+		wantStatus(t, hs.req(t, "PATCH", path, ownerTok, `{"name":"Zombie"}`), http.StatusNotFound, "rename deleted server")
+		wantStatus(t, hs.req(t, "DELETE", path, ownerTok, ""), http.StatusNotFound, "re-delete server")
+	})
+}
+
 // TestRouterBanMemberIntegration walks the ban/unban endpoints through the HTTP layer:
 // unauth, the authz matrix (mirrors kick), malformed ids, the success path, and the
 // security guarantee that a banned user can't redeem a *valid* invite until unbanned

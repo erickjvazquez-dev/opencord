@@ -138,6 +138,8 @@ export interface ServerEvent {
     | 'voice-screen'
     // Per-user push: you were removed from a server (serverId).
     | 'server-removed'
+    // Per-member push: a server you're in was renamed (serverId + name).
+    | 'server-renamed'
   message?: Message
   history?: Message[]
   username?: string
@@ -153,5 +155,7 @@ export interface ServerEvent {
   on?: boolean
   streamId?: string
   // server-removed: which server the user was removed from.
+  // server-renamed: which server (serverId) and its new name.
   serverId?: number
+  name?: string
 }

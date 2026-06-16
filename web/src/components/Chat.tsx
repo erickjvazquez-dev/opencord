@@ -4,6 +4,8 @@ import {
   createChannel,
   createInvite,
   createServer,
+  renameServer,
+  deleteServer,
   createServerChannel,
   createChannelCategory,
   deleteChannelCategory,
@@ -392,6 +394,10 @@ export function Chat({
             if (general) setChannelId(general.id)
           }
           window.alert('You were removed from this server.')
+        } else if (data.type === 'server-renamed' && data.serverId && data.name) {
+          // The server was renamed by its owner/admin — relabel it live in the sidebar.
+          const { serverId: renamedId, name: newName } = data
+          setServers((cur) => cur.map((s) => (s.id === renamedId ? { ...s, name: newName } : s)))
         } else if (data.type === 'error' && data.error) window.alert(data.error)
       }
     }
@@ -1022,6 +1028,48 @@ export function Chat({
       if (String(serverId) === activeServerId) setMemberList(members)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not clear timeout')
+    }
+  }
+  // Rename a server (owner/admin). Optimistically relabels the sidebar; the WS
+  // "server-renamed" push keeps every other member in sync.
+  const renameServerPanel = async (serverId: number, current: string) => {
+    const next = window.prompt('Rename server (1-64 chars):', current)?.trim()
+    if (!next || next === current) return
+    try {
+      const srv = await renameServer(token, serverId, next)
+      setServers((cur) => cur.map((s) => (s.id === serverId ? { ...s, name: srv.name } : s)))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not rename server')
+    }
+  }
+  // Delete a server (owner only, destructive). Requires typing the name to confirm,
+  // then drops it from the sidebar and falls back to #general if we were viewing it.
+  const deleteServerPanel = async (serverId: number, name: string) => {
+    const typed = window.prompt(
+      `Delete "${name}"? This permanently removes its channels and messages and can't be undone.\n\nType the server name to confirm:`,
+    )?.trim()
+    if (typed !== name) {
+      if (typed != null) window.alert('Name did not match — server not deleted.')
+      return
+    }
+    try {
+      await deleteServer(token, serverId)
+      const wasViewing = (serverChannels[serverId] ?? []).some((c) => c.id === channelId)
+      setServers((cur) => cur.filter((s) => s.id !== serverId))
+      setServerChannels((cur) => {
+        const nextMap = { ...cur }
+        delete nextMap[serverId]
+        return nextMap
+      })
+      setMembersOf(null)
+      setBans(null)
+      setServerInvites(null)
+      if (wasViewing) {
+        const general = channels.find((c) => c.name === 'general') ?? channels[0]
+        if (general) setChannelId(general.id)
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not delete server')
     }
   }
   const editMyStatus = async () => {
@@ -1840,6 +1888,38 @@ export function Chat({
                   ✕ close
                 </button>
               </div>
+              {/* Server settings (owner/admin). Dedicated classes (NOT .member-row /
+                  .invites-head / .bans-head) so this never collides with the QA +
+                  behavioural selectors those carry. Rename is admin+, delete owner-only. */}
+              {(myRoleInPanel === 'owner' || myRoleInPanel === 'admin') && (
+                <div className="server-settings">
+                  <span className="server-settings-head">⚙ Server settings</span>
+                  <button
+                    className="link rename-server-btn"
+                    onClick={() =>
+                      void renameServerPanel(
+                        membersOf.serverId,
+                        servers.find((s) => s.id === membersOf.serverId)?.name ?? '',
+                      )
+                    }
+                  >
+                    rename
+                  </button>
+                  {myRoleInPanel === 'owner' && (
+                    <button
+                      className="link delete-server-btn"
+                      onClick={() =>
+                        void deleteServerPanel(
+                          membersOf.serverId,
+                          servers.find((s) => s.id === membersOf.serverId)?.name ?? '',
+                        )
+                      }
+                    >
+                      delete server
+                    </button>
+                  )}
+                </div>
+              )}
               {membersOf.members.map((mb) => (
                 <div key={mb.userId} className={`member-row${mb.online ? '' : ' offline'}`}>
                   <span className="avatar-presence">
