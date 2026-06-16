@@ -2034,3 +2034,34 @@ the feature itself is broken — here the feature was fine; the harness coupling
 **Next QA growth / follow-ups:** category reorder/drag, move-an-existing-channel between
 categories, and "keep the active channel visible even under a collapsed category" (Discord
 behaviour) are deferred polish — each wants its own assertion when built.
+
+---
+
+## 2026-06-16 — tick 105: jump-to-message (reply / pin / search → original)
+
+**Shipped:** clicking a quoted reply preview, a pinned message, or a search result now
+scrolls to + briefly flashes (accent highlight) the original message in the channel.
+Two code paths: the *inline* case (reply preview — list already on screen, jump via
+requestAnimationFrame) and the *close-a-panel* case (pin/search — close the panel, then a
+useEffect retries the jump once the message list is rendered). Frontend-only. Reply-jump
++ search-jump E2E + AI-vision verified (the flash highlight is clearly visible).
+
+**Highest-value lesson — a useCallback in a dependency array must be DECLARED above the
+effect that lists it.** I first defined `doJump`/`jumpToMessage` next to the panel
+handlers (~line 835) but referenced `doJump` in an effect's dependency array at ~line 414.
+The dep array is evaluated *during render*, so `doJump` (a `const`) was in its temporal
+dead zone there → a ReferenceError at render, before any QA could run. tsc/vite still
+*built* (TDZ is a runtime error, not a type error), so the build was green but the app
+would have crashed on mount. Fix: hoist `doJump` above the effect. Caught it by reasoning
+about hook ordering before running QA — but it's a reminder that **a green `tsc`/`vite`
+build does NOT prove the component mounts** (Rule 14: the browser QA, which actually
+mounts and drives the app, is what proves it).
+
+**Loop-process note:** for hooks, define a value before the first effect/callback whose
+dependency array references it; "group related functions together" can silently create a
+TDZ when one is used in an earlier effect. The browser QA (real mount) is the guardrail —
+keep adding assertions that exercise newly-wired handlers.
+
+**Next QA growth / follow-ups:** pins-panel jump has the same code path as search-jump
+(covered); fetch-older-messages-on-jump (when the target is outside the loaded window) and
+a pins-panel jump assertion are deferred.

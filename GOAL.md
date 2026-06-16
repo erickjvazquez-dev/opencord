@@ -100,6 +100,11 @@ tunnel, paid cloud only for 24/7 hosting.**
 - [x] Search — in-channel message search (case-insensitive, access-gated, LIKE-wildcards escaped per Rule B), header search box + results panel (channel-spanning search later)
 - [x] Message grouping (collapse consecutive same-author messages within 5 min) — flagged then closed by browser AI-vision QA 2026-06-13
 - [x] Mobile-responsive layout — sidebar collapses into an off-canvas drawer behind a header menu toggle (≤640px); chat goes full-width; backdrop + close-on-select (E2E + vision verified)
+- [x] Jump-to-message — clicking a quoted reply preview, a pinned message, or a search
+  result scrolls to + briefly flashes the original message in the channel (closing the
+  panel first when needed). Frontend-only; reply-jump (inline) + search-jump (close-panel
+  path) E2E + AI-vision verified. (No-op when the target is older than the loaded window —
+  fetch-older-on-jump is a follow-up.)
 
 ## Later
 

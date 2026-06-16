@@ -502,6 +502,31 @@ button:disabled {
   margin-top: -8px;
 }
 
+/* A jumped-to message flashes briefly so the eye lands on it after a jump. */
+.message.flash {
+  animation: flash-msg 1.5s ease-out;
+  border-radius: 4px;
+}
+@keyframes flash-msg {
+  0% {
+    background: color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* Clickable result rows in the search / pins panels (click → jump to the message). */
+.message.jumpable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  margin: -4px -4px 10px;
+}
+.message.jumpable:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .avatar-spacer {
   width: 38px;
   flex-shrink: 0;
@@ -666,6 +691,18 @@ button:disabled {
   color: var(--text-muted);
   margin-bottom: 2px;
   min-width: 0;
+  /* It's a <button> now (click → jump to the replied-to message): strip button chrome. */
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  max-width: 100%;
+  cursor: pointer;
+}
+.reply-context:hover .reply-author,
+.reply-context:hover .reply-snippet {
+  color: var(--text);
 }
 .reply-arrow {
   color: var(--text-muted);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   addReaction,
   createChannel,
@@ -141,6 +141,10 @@ export function Chat({
   const [collapsedCats, setCollapsedCats] = useState<Set<number>>(new Set())
   const [channelId, setChannelId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  // Message id to briefly highlight after a jump (click a reply preview / pin / search hit).
+  const [flashId, setFlashId] = useState<number | null>(null)
+  // A jump target awaiting the message list to be on-screen (e.g. after closing a panel).
+  const pendingJump = useRef<number | null>(null)
   const [online, setOnline] = useState(0)
   const [connected, setConnected] = useState(false)
   const [draft, setDraft] = useState('')
@@ -406,6 +410,36 @@ export function Chat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // doJump scrolls the pending target message into view + briefly flashes it. No-op if the
+  // message isn't in the rendered list yet (panel still open, or it's older than the loaded
+  // window) — the effect below retries once the list is on screen / messages change.
+  const doJump = useCallback(() => {
+    const id = pendingJump.current
+    if (id == null) return
+    const el = document.getElementById(`msg-${id}`)
+    if (!el) return
+    pendingJump.current = null
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFlashId(id)
+    window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1500)
+  }, [])
+
+  // Jump to a message: close any open panel so the message list shows, then scroll+flash.
+  // requestAnimationFrame covers the inline case (reply preview — list already visible);
+  // the effect below covers the close-a-panel-first case (pins / search result).
+  const jumpToMessage = (id: number) => {
+    pendingJump.current = id
+    setSearchResults(null)
+    setPins(null)
+    setMembersOf(null)
+    requestAnimationFrame(doJump)
+  }
+
+  // Once a closed panel / new messages put the list on screen, finish a pending jump.
+  useEffect(() => {
+    if (pendingJump.current != null) doJump()
+  }, [searchResults, pins, membersOf, messages, doJump])
 
   const submitDraft = () => {
     const body = draft.trim()
@@ -1817,7 +1851,12 @@ export function Chat({
               </div>
               {searchResults.length === 0 && <div className="search-empty">No matches.</div>}
               {searchResults.map((m) => (
-                <div key={m.id} className="message">
+                <div
+                  key={m.id}
+                  className="message jumpable"
+                  title="jump to this message"
+                  onClick={() => jumpToMessage(m.id)}
+                >
                   <Avatar token={token} userId={m.userId} username={m.username} />
                   <div className="message-content">
                     <div className="message-head">
@@ -1842,7 +1881,12 @@ export function Chat({
               </div>
               {pins.length === 0 && <div className="search-empty">No pinned messages yet.</div>}
               {pins.map((m) => (
-                <div key={m.id} className="message">
+                <div
+                  key={m.id}
+                  className="message jumpable"
+                  title="jump to this message"
+                  onClick={() => jumpToMessage(m.id)}
+                >
                   <Avatar token={token} userId={m.userId} username={m.username} />
                   <div className="message-content">
                     <div className="message-head">
@@ -1873,7 +1917,8 @@ export function Chat({
             return (
               <div
                 key={m.id}
-                className={`message${m.deleted ? ' deleted' : ''}${grouped ? ' grouped' : ''}`}
+                id={`msg-${m.id}`}
+                className={`message${m.deleted ? ' deleted' : ''}${grouped ? ' grouped' : ''}${m.id === flashId ? ' flash' : ''}`}
               >
                 {grouped ? (
                   <div className="avatar-spacer" aria-hidden />
@@ -1909,13 +1954,19 @@ export function Chat({
                     </span>
                   )}
                   {m.replyTo && !m.deleted && (
-                    <div className="reply-context" aria-label={`replying to ${m.replyToAuthor}`}>
+                    <button
+                      type="button"
+                      className="reply-context"
+                      aria-label={`jump to ${m.replyToAuthor}'s message`}
+                      title="jump to the replied-to message"
+                      onClick={() => jumpToMessage(m.replyTo as number)}
+                    >
                       <span className="reply-arrow" aria-hidden>
                         ↰
                       </span>
                       <span className="reply-author">{m.replyToAuthor}</span>
                       <span className="reply-snippet">{m.replyToBody}</span>
-                    </div>
+                    </button>
                   )}
                   {editingId === m.id ? (
                     <div className="edit-row">

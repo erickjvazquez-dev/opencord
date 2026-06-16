@@ -273,6 +273,19 @@ async function main() {
     'the "Replying to" bar clears after sending the reply',
   )
 
+  // 3h — Jump-to-message: clicking the quoted reply preview scrolls to + briefly flashes
+  // the original message it points to (Discord parity). The flash class is transient
+  // (~1.5s), so catch it right after the click.
+  step('click the reply preview → the original message flashes (jump-to-message)')
+  await replyMsg.locator('.reply-context').click()
+  const flashed = page.locator('.message.flash')
+  await flashed.waitFor({ timeout: 4000 })
+  check(
+    ((await flashed.locator('.body').first().textContent()) ?? '').includes(body),
+    'clicking the reply preview flashes the original message it points to',
+  )
+  await shot('03h-jump.png')
+
   // 4 — Edit the message (its reaction must survive the edit).
   step('hover message → edit → change → save')
   await msg.hover()
@@ -483,6 +496,23 @@ async function main() {
   )
   await page.getByRole('button', { name: 'clear' }).click()
   check((await page.locator('.search-results').count()) === 0, 'clearing search returns to the channel')
+
+  // 7c-jump — a search result is clickable: clicking it closes the panel and jumps to +
+  // flashes the message in the channel (jump-to-message via the close-a-panel path).
+  step('click a search result → panel closes + the message flashes')
+  await searchBox.fill('server')
+  await searchBox.press('Enter')
+  const sResult = page.locator('.search-results .message.jumpable', { hasText: srvBody }).first()
+  await sResult.waitFor({ timeout: 8000 })
+  await sResult.click()
+  check(
+    (await page.locator('.search-results').count()) === 0,
+    'clicking a search result closes the search panel (back to the channel)',
+  )
+  const sFlash = page.locator('.message.flash', { hasText: srvBody })
+  await sFlash.waitFor({ timeout: 4000 })
+  check((await sFlash.count()) > 0, 'clicking a search result flashes the jumped-to message')
+  await shot('07c-jump.png')
 
   // 7c2 — Search operators: from:<author> finds the message; from:<nobody> finds none.
   step('search operator from: filters by author')
