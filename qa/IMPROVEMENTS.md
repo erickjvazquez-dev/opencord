@@ -2065,3 +2065,23 @@ keep adding assertions that exercise newly-wired handlers.
 **Next QA growth / follow-ups:** pins-panel jump has the same code path as search-jump
 (covered); fetch-older-messages-on-jump (when the target is outside the loaded window) and
 a pins-panel jump assertion are deferred.
+
+---
+
+## 2026-06-16 — tick 106: delete category (lifecycle completion)
+
+**Shipped:** `DELETE /servers/{id}/categories/{catId}` (admin-gated) + a "✕" on each
+category header. Completes the category lifecycle (tick 104 shipped create-only, so a
+typo'd category was permanent). The FK's `ON DELETE SET NULL` already orphans channels
+safely — deleting a category leaves its channels as uncategorized, never deletes them.
+Adversarial test (authz + cross-server-delete-via-path guarded by `AND server_id`, 3x) +
+browser E2E (delete → group gone, channel survives uncategorized) + AI-vision.
+
+**Note (deliberately a tight tick):** this was the 6th feature ticket in one session;
+chose a small, lifecycle-completing item with minimal blast radius (1 store fn + 1 route +
+1 button, all additive) over a large feature, to stay surgical under deep context. The
+frontend updates `serverCategories` + clears the affected channels' `categoryId` locally
+(no refetch) so the UI matches the server's `SET NULL` without a round-trip.
+
+**Follow-ups still open for categories:** rename, reorder/drag, move-an-existing-channel
+between categories, "keep active channel visible under a collapsed category".

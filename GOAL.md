@@ -226,10 +226,13 @@ item from here as the structural milestones above land.
   (ON DELETE SET NULL → deleting a category leaves channels uncategorized). Admin-gated
   create (`POST /servers/{id}/categories`), member list, optional `categoryId` on channel
   create (cross-server category attach rejected, Rule B). Sidebar renders uncategorized
-  channels first, then collapsible groups with a per-category "+" to add a channel.
-  Adversarial integration test + browser E2E (create → nest → collapse/expand) +
-  AI-vision verified. (Reorder/drag + move-existing-channel + per-channel permissions +
-  channel topic[done] still TODO)
+  channels first, then collapsible groups with a per-category "+" to add a channel and a
+  "✕" to **delete** the category (admin; channels survive as uncategorized via the FK's
+  ON DELETE SET NULL, cross-server delete rejected). Adversarial integration test
+  (create/list/delete authz + cross-server guards) + browser E2E (create → nest →
+  collapse/expand → delete → channel survives uncategorized) + AI-vision verified.
+  (Reorder/drag + move-existing-channel + per-channel permissions + channel topic[done]
+  still TODO)
 - [~] **Slowmode** (per-channel post cooldown, admin-set, server-enforced, 🐌 badge —
   E2E + adversarial test) · NSFW gating · announcement channels (done: read-only
   policy) + following · channel topic (done)

@@ -428,6 +428,18 @@ async function main() {
     await catGroup.locator('.channel-item', { hasText: catChan }).isVisible(),
     'expanding the category shows its channels again',
   )
+  // Delete the category → the collapsible group disappears, but its channel survives
+  // (now uncategorized, rendered at the top) — the server sets category_id NULL.
+  await catGroup.locator('.category-del').click() // confirm auto-accepts
+  await catGroup.waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  check(
+    (await page.locator('.channel-category', { hasText: 'Text Channels' }).count()) === 0,
+    'deleting a category removes the collapsible group',
+  )
+  check(
+    await page.getByRole('button', { name: new RegExp(catChan) }).isVisible(),
+    'the category’s channel survives (now uncategorized) after the category is deleted',
+  )
   // Restore the active channel to the one holding our posted message — later steps
   // (search) run against the active channel, which we switched away from above.
   await page.getByRole('button', { name: new RegExp(srvChan) }).click()

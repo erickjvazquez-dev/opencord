@@ -293,6 +293,22 @@ export async function createChannelCategory(
   return data as ChannelCategory
 }
 
+// Delete a category (admin-gated). Its channels survive and become uncategorized.
+export async function deleteChannelCategory(
+  token: string,
+  serverId: number,
+  categoryId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/categories/${categoryId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not delete category')
+  }
+}
+
 export async function setChannelPolicy(
   token: string,
   channelId: number,

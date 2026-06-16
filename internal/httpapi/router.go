@@ -553,6 +553,32 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 		writeJSON(w, http.StatusCreated, c)
 	})
+	// Delete a category (admin-gated). Its channels survive (become uncategorized).
+	r.Delete("/servers/{id}/categories/{catId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		catID, err := strconv.ParseInt(chi.URLParam(r, "catId"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid category id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		switch err := store.DeleteChannelCategory(r.Context(), id, catID); {
+		case errors.Is(err, chat.ErrCategoryNotFound):
+			http.Error(w, `{"error":"category not found"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not delete category"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	// List a server's members with their roles (members only).
 	r.Get("/servers/{id}/members", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())

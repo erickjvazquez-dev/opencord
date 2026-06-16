@@ -707,6 +707,43 @@ func TestRouterChannelCategoriesIntegration(t *testing.T) {
 			}
 		}
 	})
+	t.Run("delete category: authz + the channel survives as uncategorized", func(t *testing.T) {
+		cat, err := hs.store.CreateChannelCategory(ctx, srv.ID, "Doomed")
+		if err != nil {
+			t.Fatalf("create category: %v", err)
+		}
+		ch, err := hs.store.CreateServerChannelInCategory(ctx, srv.ID, "keepme", &cat.ID)
+		if err != nil {
+			t.Fatalf("create channel in category: %v", err)
+		}
+		delPath := fmt.Sprintf("/api/servers/%d/categories/%d", srv.ID, cat.ID)
+		// Non-admins can't delete.
+		wantStatus(t, hs.req(t, "DELETE", delPath, "", ""), http.StatusUnauthorized, "unauth delete")
+		wantStatus(t, hs.req(t, "DELETE", delPath, memberTok, ""), http.StatusForbidden, "member delete")
+		// Can't delete another server's category via this server's path (Rule B → 404).
+		wantStatus(t, hs.req(t, "DELETE", fmt.Sprintf("/api/servers/%d/categories/%d", srv.ID, otherCat.ID), ownerTok, ""), http.StatusNotFound, "cross-server delete")
+		// Admin deletes it → 204; the channel survives but is now uncategorized.
+		wantStatus(t, hs.req(t, "DELETE", delPath, ownerTok, ""), http.StatusNoContent, "admin deletes category")
+		chans, err := hs.store.ListServerChannels(ctx, srv.ID)
+		if err != nil {
+			t.Fatalf("list channels: %v", err)
+		}
+		var found, stillCategorized bool
+		for _, c := range chans {
+			if c.ID == ch.ID {
+				found = true
+				stillCategorized = c.CategoryID != nil
+			}
+		}
+		if !found {
+			t.Fatal("the channel should still exist after its category is deleted")
+		}
+		if stillCategorized {
+			t.Fatal("the channel should be uncategorized (category_id NULL) after the category is deleted")
+		}
+		// Deleting it again is a 404.
+		wantStatus(t, hs.req(t, "DELETE", delPath, ownerTok, ""), http.StatusNotFound, "re-delete category")
+	})
 }
 
 // TestRouterMessageEndpointsIntegration covers the edit + reaction REST endpoints,

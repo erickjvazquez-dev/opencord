@@ -1446,6 +1446,22 @@ func (s *Store) CreateChannelCategory(ctx context.Context, serverID int64, name 
 	return c, err
 }
 
+// DeleteChannelCategory removes categoryID from serverID. The caller verifies admin. The
+// `AND server_id` clause means you can't delete another server's category (Rule B). The
+// category's channels survive — the FK's ON DELETE SET NULL makes them uncategorized.
+// Returns ErrCategoryNotFound if no such category exists in the server.
+func (s *Store) DeleteChannelCategory(ctx context.Context, serverID, categoryID int64) error {
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM channel_categories WHERE id = $1 AND server_id = $2`, categoryID, serverID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrCategoryNotFound
+	}
+	return nil
+}
+
 // ListChannelCategories returns serverID's categories, oldest first.
 func (s *Store) ListChannelCategories(ctx context.Context, serverID int64) ([]ChannelCategory, error) {
 	rows, err := s.pool.Query(ctx,

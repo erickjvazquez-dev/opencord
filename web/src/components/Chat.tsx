@@ -6,6 +6,7 @@ import {
   createServer,
   createServerChannel,
   createChannelCategory,
+  deleteChannelCategory,
   fetchChannelCategories,
   deleteMessage,
   editMessage,
@@ -977,6 +978,28 @@ export function Chat({
       window.alert(err instanceof Error ? err.message : 'could not create category')
     }
   }
+  // Delete a category. Its channels survive (server sets their category_id NULL), so we
+  // drop the category locally AND clear the matching channels' categoryId so they render
+  // as uncategorized without a refetch.
+  const removeCategory = async (serverId: number, categoryId: number, name: string) => {
+    if (!window.confirm(`Delete the "${name}" category? Its channels become uncategorized.`))
+      return
+    try {
+      await deleteChannelCategory(token, serverId, categoryId)
+      setServerCategories((cur) => ({
+        ...cur,
+        [serverId]: (cur[serverId] ?? []).filter((c) => c.id !== categoryId),
+      }))
+      setServerChannels((cur) => ({
+        ...cur,
+        [serverId]: (cur[serverId] ?? []).map((c) =>
+          c.categoryId === categoryId ? { ...c, categoryId: undefined } : c,
+        ),
+      }))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not delete category')
+    }
+  }
   const toggleCategory = (categoryId: number) =>
     setCollapsedCats((cur) => {
       const next = new Set(cur)
@@ -1312,6 +1335,14 @@ export function Chat({
                         onClick={() => void addServerChannel(s.id, cat.id)}
                       >
                         +
+                      </button>
+                      <button
+                        className="category-del"
+                        title="delete this category"
+                        aria-label={`delete the ${cat.name} category`}
+                        onClick={() => void removeCategory(s.id, cat.id, cat.name)}
+                      >
+                        ✕
                       </button>
                     </div>
                     {!collapsed && chans.map(channelButton)}
