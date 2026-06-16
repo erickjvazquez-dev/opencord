@@ -2256,3 +2256,31 @@ when an assertion and the rendered pixels disagree, trust the pixels and fix the
 
 **Deploy note:** frontend-only change → committed, pushed origin, `railway up`, live rollout
 to be confirmed by fetching the served bundle.
+
+---
+
+## 2026-06-16 — tick 115: leave server (the join counterpart) + reusing test state cleanly
+
+**Shipped:** `LeaveServer` — voluntary self-removal for any non-owner member (`POST
+/servers/{id}/leave`). The owner can't leave (403 — must delete/transfer, Discord's rule);
+non-member/unknown → 404; the leaver's own live sockets are evicted. The members-panel
+⚙ Server settings section now renders for every member: owner sees "delete server",
+non-owners see "leave server". Closes the leave-server TODO left by tick-113.
+
+**QA grown:** the leave flow lives in `realtime.mjs` (browser.mjs's bot always *owns* its
+servers, so it can never exercise leave). The new step reuses the two-client state already
+built up — after the ban/unban sequence, B (now unbanned, a non-owner) rejoins via the
+still-valid invite and leaves, asserting the panel shows "leave server" (not "delete
+server") and the server drops from B's sidebar. AI-vision confirmed B's post-leave sidebar
+is empty and B fell back to #general.
+
+**Highest-value learning (reflection): pick the QA harness whose actors can actually reach
+the code path.** Leave is owner-forbidden, so the single-client owner-bot in browser.mjs
+structurally *cannot* test it — only realtime.mjs has a non-owner member (B, who joined via
+invite). The cheap move was to extend the existing two-client narrative (its ban/unban
+already leaves B as a rejoinable non-owner) rather than stand up a fresh fixture. Carry
+this: before writing a UI test, check the harness's actors hold the role the path requires
+— a test in the wrong harness either can't be written or quietly tests the wrong branch.
+
+**Deploy note:** real app change → committed, pushed origin, `railway up`; live rollout to
+be confirmed by fetching the served bundle for the new `.leave-server-btn` class.
