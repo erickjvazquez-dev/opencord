@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 97) — Rotated to a security/QA pass after 6 feature ticks; found a real edge + a flake
+
+After 6 straight Track-1/2 feature ticks, deliberately rotated to **Track-0 (security/QA —
+"do this MOST")**. **Component advanced: security → hostile-input-proof.** A Rule-15 sweep
+of the input surfaces found bodies all properly bounded (MaxBytesReader everywhere, incl.
+pre-auth), but surfaced one real edge: **register with an over-long password → 500, not
+400** (no password max; bcrypt rejects >72 bytes). Ran the full Rule-15 cycle (reproduce
+the 500 → fix → re-attack 400 → happy path) and added the regression. Also caught a
+**load-sensitive flaky test** (`TestServeWSRateLimitIntegration`, fixed-sleep) when the
+full suite ran on a busy machine, and de-flaked it (poll, not sleep).
+
+**Highest-value lesson — "all bodies are bounded" is necessary but not sufficient; check
+what the bounded-but-invalid input does next.** The body cap (64 KiB) stopped a *huge*
+password, but a merely-too-long-for-bcrypt one (73 bytes) sailed past validation into a
+crash-shaped 500. The hardening question isn't only "is the input bounded?" but "for every
+value still inside the bound, is there a downstream limit it can violate?" bcrypt's 72-byte
+limit is exactly such a hidden downstream bound. **Rule for input validation: validate
+against the *consumer's* limits, not just the transport's.**
+
+- **Process note — rotate Track 0 deliberately.** Six feature ticks in a row drifted the
+  loop toward Track 1/2; the explicit rotation (and the "do this MOST" reminder) paid off
+  with a real find. Worth doing a dedicated security/QA tick every ~5–6 feature ticks, not
+  only when something breaks.
+- **Flaky-test watch:** two timing-flakes found now under load (slowmode iter-91, rate-limit
+  iter-97), both fixed-sleep → poll. **Candidate loop improvement:** audit the suite for any
+  remaining `time.Sleep(<fixed>)`-then-assert patterns and convert them to polls *proactively*
+  before they false-red the gate — a good next Track-0 micro-tick.
+
 ## 2026-06-15 (tick 96) — Red mention badges; match the server detector to the client renderer
 
 Shipped **mention-count badges** (red pill with a count), completing the iter-95

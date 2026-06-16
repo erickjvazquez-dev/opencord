@@ -30,6 +30,15 @@ tunnel, paid cloud only for 24/7 hosting.**
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 
+- [x] **P2 (security/robustness, found+fixed iter 97 via Rule-15 pass): register with an
+  over-long password returned 500, not 400.** Passwords had a min (≥6) but no max; bcrypt
+  rejects inputs >72 bytes, so a 73–65536-byte password (within the 64 KiB body cap)
+  surfaced as a generic 500 from inside Register. Fixed: `HandleRegister` now bounds
+  password to 6–72 bytes (`maxPasswordLen`) → clean 400. Reproduced (500) → fixed →
+  re-attacked (400) → happy path intact; regression test added. Login unaffected (over-long
+  password → normal 401). Also de-flaked `TestServeWSRateLimitIntegration` (a load-sensitive
+  fixed-sleep → poll) so the health gate can't false-red.
+
 - [x] **P1 (UI polish, found+fixed iter 90 via AI-vision QA): the channel header wrapped its text in
   server channels.** With the member-list sidebar present (~220px, shown >900px) the chat column is
   narrow; `.chat-header` had no `flex-wrap`, so its flex items shrank to min-content and wrapped their
