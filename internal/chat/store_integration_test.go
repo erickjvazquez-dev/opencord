@@ -566,6 +566,81 @@ func TestSearchMessagesIntegration(t *testing.T) {
 	}
 }
 
+func TestSearchOperatorsIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+
+	if _, err := store.Save(ctx, ch.ID, alice.ID, alice.Username, "alice plain message"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, bob.ID, bob.Username, "bob plain message"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, alice.ID, alice.Username, "check this https://example.com out"); err != nil {
+		t.Fatalf("save link: %v", err)
+	}
+	if _, err := store.SaveWithAttachments(ctx, ch.ID, bob.ID, bob.Username, "here is a pic", nil,
+		[]chat.NewAttachment{{StorageKey: "k1", Filename: "p.png", ContentType: "image/png", Size: 10}}); err != nil {
+		t.Fatalf("save image: %v", err)
+	}
+	if _, err := store.SaveWithAttachments(ctx, ch.ID, bob.ID, bob.Username, "here is a doc", nil,
+		[]chat.NewAttachment{{StorageKey: "k2", Filename: "d.pdf", ContentType: "application/pdf", Size: 20}}); err != nil {
+		t.Fatalf("save file: %v", err)
+	}
+
+	search := func(q string) []string {
+		res, err := store.SearchMessages(ctx, ch.ID, q, 50)
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		out := make([]string, 0, len(res))
+		for _, m := range res {
+			out = append(out, m.Body)
+		}
+		return out
+	}
+	has := func(bodies []string, body string) bool {
+		for _, b := range bodies {
+			if b == body {
+				return true
+			}
+		}
+		return false
+	}
+
+	// from: filters by author (case-insensitive), independent of body text.
+	fromBob := search("from:" + bob.Username)
+	if !has(fromBob, "bob plain message") || has(fromBob, "alice plain message") {
+		t.Fatalf("from:%s should return only bob's messages, got %v", bob.Username, fromBob)
+	}
+	// from: is case-insensitive.
+	if got := search("from:" + strings.ToUpper(bob.Username)); !has(got, "bob plain message") {
+		t.Fatalf("from: should be case-insensitive, got %v", got)
+	}
+	// from: + free text — author AND body.
+	if got := search("from:" + bob.Username + " pic"); !has(got, "here is a pic") || has(got, "bob plain message") {
+		t.Fatalf("from:bob pic should match only bob's 'pic' message, got %v", got)
+	}
+	// has:link
+	if got := search("has:link"); !has(got, "check this https://example.com out") || has(got, "alice plain message") {
+		t.Fatalf("has:link should match only the URL message, got %v", got)
+	}
+	// has:image — only the image-attachment message.
+	if got := search("has:image"); !has(got, "here is a pic") || has(got, "here is a doc") {
+		t.Fatalf("has:image should match only the image message, got %v", got)
+	}
+	// has:file — only the non-image attachment message.
+	if got := search("has:file"); !has(got, "here is a doc") || has(got, "here is a pic") {
+		t.Fatalf("has:file should match only the non-image attachment message, got %v", got)
+	}
+	// Injection attempt in from: is inert (bind param) — no rows, no error.
+	if got := search("from:' OR '1'='1"); len(got) != 0 {
+		t.Fatalf("an injection in from: must match nothing, got %v", got)
+	}
+}
+
 func TestServerRolesIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

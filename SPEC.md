@@ -1176,3 +1176,32 @@ passes on loopback (host candidates).
 **Follow-ups:** ephemeral/time-limited TURN credentials (coturn REST/HMAC) instead of
 static long-term creds; a way to fully disable the default public STUN (offline LAN);
 TURN for the SFU deployment.
+
+## Search operators — from: / has: (parity, iter 100)
+
+**Goal:** extend in-channel search with Discord-style filter operators alongside free
+text: `from:<username>` (author), `has:link`, `has:image`, `has:file`. Advances the
+explicit Messaging backlog item "Message search (from/in/has/before/after)".
+
+**Parsing (`parseSearchQuery`):** tokenize the query; `from:X` / `has:link|image|file`
+become filters, everything else is the free-text match (so `from:alice deploy` searches
+alice's messages containing "deploy"). Unknown `has:` values fall through to free text
+(graceful). Operator-only queries (e.g. `has:link`) are valid — no free-text clause.
+
+**Query (`SearchMessages`, dynamic but fully parameterized — Rule B):** conditions are
+appended per filter; every value (channel, text, from, limit) is a bind parameter (no SQL
+injection); operator fragments are fixed SQL. `has:link` = `body ~* 'https?://'`;
+`has:image`/`has:file` = `EXISTS` on `attachments` by `content_type LIKE 'image/%'` (or
+NOT). `from:` is a case-insensitive exact username match. Free text keeps the
+LIKE-wildcard-escaped ILIKE. Access-gating + the ≤200-char bound are unchanged (handler).
+
+**Client:** no required change (operators work through the existing search box); the search
+placeholder gains a discoverability hint.
+
+**Threat model (Rule B/15 — tested):** `from:` value and free text are bind params (an
+injection attempt in either is inert); LIKE wildcards in free text stay escaped; the
+attachment EXISTS subqueries are channel-scoped via the outer `m.channel_id`. Access
+scoping unchanged — search still only returns messages from a channel you can access.
+
+**Follow-ups:** `in:#channel` (cross-channel search), `before:`/`after:` date filters,
+`has:video`, combining with the planned global search.

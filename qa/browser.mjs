@@ -436,8 +436,9 @@ async function main() {
 
   // 7c — Search the current channel and confirm the matching message shows.
   step('search the channel → matching message appears, clear returns to live')
-  await page.getByPlaceholder('Search this channel').fill('server')
-  await page.getByPlaceholder('Search this channel').press('Enter')
+  const searchBox = page.locator('.search-input')
+  await searchBox.fill('server')
+  await searchBox.press('Enter')
   await page.locator('.search-results').waitFor({ timeout: 8000 })
   await shot('07c-search.png')
   check(
@@ -446,6 +447,25 @@ async function main() {
   )
   await page.getByRole('button', { name: 'clear' }).click()
   check((await page.locator('.search-results').count()) === 0, 'clearing search returns to the channel')
+
+  // 7c2 — Search operators: from:<author> finds the message; from:<nobody> finds none.
+  step('search operator from: filters by author')
+  await searchBox.fill('from:' + user)
+  await searchBox.press('Enter')
+  await page.locator('.search-results').waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.search-results').getByText(srvBody).isVisible(),
+    'from:<self> finds my message in the channel',
+  )
+  await page.getByRole('button', { name: 'clear' }).click()
+  await searchBox.fill('from:nobody_' + user)
+  await searchBox.press('Enter')
+  await page.locator('.search-results').waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.search-results').getByText(srvBody).count()) === 0,
+    'from:<unknown-user> matches nothing',
+  )
+  await page.getByRole('button', { name: 'clear' }).click()
 
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')

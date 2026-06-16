@@ -1229,7 +1229,8 @@ export function Chat({
           <form className="search-form" onSubmit={runSearch}>
             <input
               className="search-input"
-              placeholder="Search this channel…"
+              placeholder="Search… (try from:user has:link)"
+              title="Filters: from:<user>, has:link, has:image, has:file"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />

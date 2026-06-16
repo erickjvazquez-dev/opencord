@@ -1338,18 +1338,73 @@ func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message,
 	return out, rows.Err()
 }
 
-// SearchMessages returns up to limit non-deleted messages in channelID whose body
-// contains query (case-insensitive), in chronological order. The query's LIKE
-// wildcards are escaped so it matches literally — a user typing '%' can't turn the
-// search into match-all.
+// searchFilters is a parsed search query: free text plus Discord-style operators.
+type searchFilters struct {
+	text     string // remaining free text (LIKE-matched)
+	from     string // from:<username> — author filter (case-insensitive exact)
+	hasLink  bool   // has:link  — body contains a URL
+	hasImage bool   // has:image — has an image attachment
+	hasFile  bool   // has:file  — has a non-image attachment
+}
+
+// parseSearchQuery splits a query into free text and operators. `from:X` and
+// `has:link|image|file` become filters; any other token (incl. an unknown has:value)
+// stays as free text, so `from:alice deploy` = alice's messages containing "deploy".
+func parseSearchQuery(q string) searchFilters {
+	var f searchFilters
+	var text []string
+	for _, tok := range strings.Fields(q) {
+		switch lower := strings.ToLower(tok); {
+		case strings.HasPrefix(lower, "from:") && len(tok) > len("from:"):
+			f.from = tok[len("from:"):]
+		case lower == "has:link":
+			f.hasLink = true
+		case lower == "has:image":
+			f.hasImage = true
+		case lower == "has:file":
+			f.hasFile = true
+		default:
+			text = append(text, tok)
+		}
+	}
+	f.text = strings.Join(text, " ")
+	return f
+}
+
+// SearchMessages returns up to limit non-deleted messages in channelID matching query,
+// in chronological order. Query supports free text (LIKE-wildcard-escaped so '%' is
+// literal — can't turn into match-all) plus operators: from:<user>, has:link, has:image,
+// has:file. The SQL is built dynamically but every value is a bind parameter (no SQL
+// injection, Rule B); operator fragments are fixed SQL.
 func (s *Store) SearchMessages(ctx context.Context, channelID int64, query string, limit int) ([]Message, error) {
-	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
-	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
+	f := parseSearchQuery(query)
+	conds := []string{"m.channel_id = $1", "m.deleted_at IS NULL"}
+	args := []any{channelID}
+	add := func(v any) string {
+		args = append(args, v)
+		return "$" + strconv.Itoa(len(args))
+	}
+	if f.text != "" {
+		esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.text)
+		conds = append(conds, "m.body ILIKE '%' || "+add(esc)+" || '%'")
+	}
+	if f.from != "" {
+		conds = append(conds, "lower(u.username) = lower("+add(f.from)+")")
+	}
+	if f.hasLink {
+		conds = append(conds, "m.body ~* 'https?://'")
+	}
+	if f.hasImage {
+		conds = append(conds, "EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'image/%')")
+	}
+	if f.hasFile {
+		conds = append(conds, "EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type NOT LIKE 'image/%')")
+	}
+	sql := `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
 		   FROM messages m JOIN users u ON u.id = m.user_id
-		  WHERE m.channel_id = $1 AND m.deleted_at IS NULL
-		    AND m.body ILIKE '%' || $2 || '%'
-		  ORDER BY m.id DESC LIMIT $3`, channelID, esc, limit)
+		  WHERE ` + strings.Join(conds, " AND ") + `
+		  ORDER BY m.id DESC LIMIT ` + add(limit)
+	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
