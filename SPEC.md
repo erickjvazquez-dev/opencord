@@ -1205,3 +1205,28 @@ scoping unchanged — search still only returns messages from a channel you can 
 
 **Follow-ups:** `in:#channel` (cross-channel search), `before:`/`after:` date filters,
 `has:video`, combining with the planned global search.
+
+## Invite expiry (security hygiene, iter 101)
+
+**Goal:** invites currently never expire — a leaked code works forever. New invites now
+auto-expire after 7 days (Discord's default), enforced at redeem. Hardening of an existing
+surface; complete + testable, no UI churn.
+
+**Schema:** `ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
+(nullable). Existing invites have NULL → stay permanent (backward-compatible); new ones
+get `now() + 7 days`.
+
+**Create:** `CreateInvite` stamps `expires_at = now() + inviteTTL` (7d). No API/UI change.
+
+**Redeem:** `RedeemInvite` looks up the invite incl. `expires_at`; a not-found code →
+`ErrInvalidInvite` (404, unchanged), an existing-but-expired code → `ErrInviteExpired`
+(404 with "this invite has expired"). The expiry is checked server-side, atomically with
+the lookup — a stale client can't bypass it (Rule B/C).
+
+**Threat model (Rule B/15 — tested):** an expired invite is rejected (store: stamp the
+row's expires_at into the past → redeem → ErrInviteExpired; router: 404 + message); a
+valid (within-window) invite still admits; the not-found path is unchanged.
+
+**Follow-ups (need a small invite-options form, deferred):** customizable expiry
+(`0 = never`), **max-uses** (`uses`/`max_uses` columns, atomic check-and-increment at
+redeem, already designed), invite links + revoke-invite UI.

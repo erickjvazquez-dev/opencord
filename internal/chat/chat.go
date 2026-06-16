@@ -35,6 +35,8 @@ var (
 	ErrServerNotFound = errors.New("server not found")
 	// ErrInvalidInvite is returned when an invite code doesn't exist.
 	ErrInvalidInvite = errors.New("invalid invite code")
+	// ErrInviteExpired is returned when an invite code exists but has expired.
+	ErrInviteExpired = errors.New("invite has expired")
 	// ErrInvalidRole is returned when a role is not one that can be assigned.
 	ErrInvalidRole = errors.New("invalid role")
 	// ErrInvalidPolicy is returned when a channel posting policy is not valid.
@@ -1200,15 +1202,20 @@ func inviteCode() (string, error) {
 
 // CreateInvite mints a unique invite code for serverID created by userID. The
 // caller must verify membership. Retries on the (astronomically rare) collision.
+// inviteTTL is how long a new invite stays valid (Discord's default). Enforced at
+// redeem; legacy invites with a NULL expires_at never expire.
+const inviteTTL = 7 * 24 * time.Hour
+
 func (s *Store) CreateInvite(ctx context.Context, serverID, userID int64) (string, error) {
+	expiresAt := time.Now().Add(inviteTTL)
 	for attempt := 0; attempt < 5; attempt++ {
 		code, err := inviteCode()
 		if err != nil {
 			return "", err
 		}
 		_, err = s.pool.Exec(ctx,
-			`INSERT INTO server_invites (code, server_id, created_by) VALUES ($1, $2, $3)`,
-			code, serverID, userID)
+			`INSERT INTO server_invites (code, server_id, created_by, expires_at) VALUES ($1, $2, $3, $4)`,
+			code, serverID, userID, expiresAt)
 		if err == nil {
 			return code, nil
 		}
@@ -1225,15 +1232,20 @@ func (s *Store) CreateInvite(ctx context.Context, serverID, userID int64) (strin
 // server. ErrInvalidInvite if the code is unknown.
 func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Server, error) {
 	var srv Server
+	var expiresAt *time.Time
 	err := s.pool.QueryRow(ctx,
-		`SELECT s.id, s.name, s.owner_id, s.created_at
+		`SELECT s.id, s.name, s.owner_id, s.created_at, i.expires_at
 		   FROM server_invites i JOIN servers s ON s.id = i.server_id
-		  WHERE i.code = $1`, code).Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt)
+		  WHERE i.code = $1`, code).Scan(&srv.ID, &srv.Name, &srv.OwnerID, &srv.CreatedAt, &expiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Server{}, ErrInvalidInvite
 	}
 	if err != nil {
 		return Server{}, err
+	}
+	// Expiry is enforced server-side (a stale client can't bypass it). NULL = never.
+	if expiresAt != nil && time.Now().After(*expiresAt) {
+		return Server{}, ErrInviteExpired
 	}
 	if err := s.AddServerMember(ctx, srv.ID, userID); err != nil {
 		return Server{}, err

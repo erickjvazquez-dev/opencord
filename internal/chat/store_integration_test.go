@@ -514,6 +514,25 @@ func TestServerInvitesIntegration(t *testing.T) {
 	if _, err := store.RedeemInvite(ctx, code, outsider.ID); err != nil {
 		t.Fatalf("re-redeem should be idempotent: %v", err)
 	}
+
+	// Expiry (Rule 15): a fresh invite carries a future expiry and works; once expired it
+	// is rejected. Force the expiry into the past to simulate the 7-day window elapsing.
+	stranger := regUser(t, pool)
+	expCode, err := store.CreateInvite(ctx, srv.ID, owner.ID)
+	if err != nil {
+		t.Fatalf("create invite to expire: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE server_invites SET expires_at = now() - interval '1 hour' WHERE code = $1`, expCode); err != nil {
+		t.Fatalf("force-expire: %v", err)
+	}
+	if _, err := store.RedeemInvite(ctx, expCode, stranger.ID); !errors.Is(err, chat.ErrInviteExpired) {
+		t.Fatalf("redeem expired invite err = %v, want ErrInviteExpired", err)
+	}
+	// The stranger must NOT have been admitted by the expired invite.
+	if ok, _ := store.IsServerMember(ctx, srv.ID, stranger.ID); ok {
+		t.Fatal("an expired invite must not admit the user")
+	}
 }
 
 func TestSearchMessagesIntegration(t *testing.T) {

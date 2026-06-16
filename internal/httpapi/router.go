@@ -599,6 +599,10 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			http.Error(w, `{"error":"invalid invite code"}`, http.StatusNotFound)
 			return
 		}
+		if errors.Is(err, chat.ErrInviteExpired) {
+			http.Error(w, `{"error":"this invite has expired"}`, http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			http.Error(w, `{"error":"could not redeem invite"}`, http.StatusInternalServerError)
 			return

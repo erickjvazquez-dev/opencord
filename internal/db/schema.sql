@@ -154,3 +154,5 @@ CREATE TABLE IF NOT EXISTS server_invites (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS server_invites_server_id_idx ON server_invites (server_id);
+-- Invite expiry (v0.4): NULL = never (legacy invites); new invites get now()+7d.
+ALTER TABLE server_invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
