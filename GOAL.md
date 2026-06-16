@@ -217,7 +217,8 @@ item from here as the structural milestones above land.
 - [~] Mentions — `@user` chips (your own highlighted), plus `@everyone`/`@here`
   highlighted as all-mentions; **`@`-autocomplete** (typing `@`+partial offers
   channel-active usernames; ↑/↓ to move, Enter/Tab to accept, Esc to dismiss,
-  click-to-insert) — E2E + AI-vision verified. (@role, delivery/notifications,
+  click-to-insert) — E2E + AI-vision verified. **Mention notifications DONE** — unread
+  @mentions surface as a red count badge on the channel (see Notifications). (@role,
   threads still TODO)
 - [~] File / image attachments — DONE (composer 📎, multipart upload, local-disk
   store, access-gated serve, inline images + download chips; Rule-15 hardened +
@@ -226,7 +227,8 @@ item from here as the structural milestones above land.
 - [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
   WS update, and a "pins" panel listing all of a channel's pins; E2E + AI-vision
   verified. (**unread DONE** — sidebar unread dots, see Messaging "read state"; bookmarks
-  + mention-count badges TODO)
+  + **mention-count badges DONE** — red count badge for unread @mentions, see Notifications;
+  bookmarks TODO)
 - [ ] Message search (from/in/has/before/after) · polls · timestamp grouping
 
 ### Voice / Video
@@ -269,8 +271,10 @@ item from here as the structural milestones above land.
 - [x] Message moderation (admins delete others' messages) — shipped (v0.3)
 
 ### Notifications
-- [~] **Unread indicators DONE** (per-channel sidebar dots; see Messaging "read state").
-  Per-channel/server mute · @mention-count badges · DM notifications · web push TODO
+- [~] **Unread indicators + @mention-count badges DONE** (per-channel sidebar grey dots
+  for unread; red count badge for unread @mentions incl. @everyone/@here, server-side
+  match mirrors the client highlight; store+router+browser tested, AI-vision verified).
+  Per-channel/server mute · DM notifications · web push TODO
 
 ### Platform / Integrations
 - [ ] Bot/API + webhooks + slash commands · OAuth2 app authorization

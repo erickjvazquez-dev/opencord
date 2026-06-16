@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 96) — Red mention badges; match the server detector to the client renderer
+
+Shipped **mention-count badges** (red pill with a count), completing the iter-95
+notification story. **Component advanced: chat → parity (the signal users act on).**
+Clean extension of poll-based unread — `Unreads` now returns `{id, mentions}` per channel;
+no new architecture.
+
+**Highest-value lesson — when two layers must agree on a fuzzy rule, derive the
+server's rule FROM the client's, and test the disagreement cases.** The client highlights
+a mention as `@([A-Za-z0-9_]{2,32})` (case-insensitive) when the token equals your
+username. A naive server `LIKE '%@alice%'` would count `@alice2` as a mention of `alice`
+— the badge would disagree with what's highlighted in the message. I read the client's
+actual regex first, then built the server match (`@(name|everyone|here)([^a-z0-9_]|$)`,
+trailing boundary) to mirror it, and the store test pins the divergence cases explicitly:
+`@alice2` ∌ alice, `@everyone` ∈, own-message ∉. **A count feature is only correct if it
+counts the same things the UI shows** — so the test asserts the *boundary*, not just "> 0".
+
+Two safety angles closed by construction (and noted in the spec): usernames are validated
+`[a-zA-Z0-9_]{3,32}` → no regex metachars in the interpolated pattern; and the pattern is
+a bind parameter → no SQL injection. Either alone is enough; both = defense in depth.
+
+- **QA grown this tick:** the realtime suite now drives dot → **red badge** → clear (A
+  @mentions B while away). **Coverage gaps (carried):** still no offline-member render
+  test; and the mention test is store-level for the boundary — the *browser* test only
+  asserts "a badge with a count appears", not the exact number, so a count-off-by-one in
+  the UI mapping wouldn't be caught there (the store test guards the number).
+- **Notification story status:** unread dots + mention badges done. Remaining notification
+  parity (own follow-up ticks): per-channel/server **mute**, DM notifications, web push,
+  and the **instant** (push-based) unread upgrade — all now have their primitives in place.
+
 ## 2026-06-15 (tick 95) — Unread indicators; shipped the right MVP (poll) over the fancy one (push)
 
 Shipped **per-channel unread dots** — the most-requested Discord-parity gap, and the
