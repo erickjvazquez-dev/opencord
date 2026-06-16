@@ -190,8 +190,10 @@ item from here as the structural milestones above land.
 - [ ] Welcome screen + rules screening · server templates
 - [~] Server boosts / tiers (cosmetic) TODO · **member list DONE** — Discord-style
   right sidebar in server channels, grouped by role (Admins/Members) with avatars +
-  role badges, polled for join/leave/promote (live member-joined event is a follow-up;
-  per-member online/idle presence still TODO); hidden ≤900px. E2E + AI-vision verified.
+  role badges + **per-member online presence** (green dot on online members via
+  `Hub.OnlineUserIDs`, offline dimmed; -race tested + AI-vision verified), polled for
+  join/leave/promote (live member-joined + live presence broadcast are follow-ups;
+  idle/DnD states TODO); hidden ≤900px. E2E + AI-vision verified.
 - [ ] Audit log · scheduled events
 
 ### Channels
@@ -242,7 +244,8 @@ item from here as the structural milestones above land.
   via the Avatar component, header upload entry). Banners · custom status + activity
   ("playing X") still TODO
 - [ ] About me / pronouns / connections · per-server nicknames
-- [ ] Presence: online / idle / DnD / offline / invisible
+- [~] Presence: **online/offline DONE** (green dot in the member list, hub-backed; -race
+  tested + AI-vision verified) · idle / DnD / invisible TODO
 
 ### Roles & Permissions
 - [ ] Roles (hierarchy, colors, icons, mentionable)

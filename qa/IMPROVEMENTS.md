@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 92) — Per-member online presence; the hub-as-read-model pattern
+
+Shipped **per-member online presence** (green dot in the member list), closing the
+GOAL-flagged member-list follow-up. **Component advanced: chat/UI realtime →
+"polished, native-feeling."** The clean bit: a *second* read-only hub query
+(`OnlineUserIDs`, after iter-91's `EvictUserFromChannels`) confirmed the pattern —
+**the hub is the in-memory read-model for "who's connected," and the HTTP layer
+annotates store data from it on the hub goroutine** (no locks, reply-channel). Two
+ticks running, reaching into the hub from a REST handler has been the right shape.
+
+**Highest-value lesson — presence exposed an architecture limit worth naming.** The
+member list refreshes presence only on its 15s poll (or an action-triggered refetch),
+because Opencord uses **one WS socket per channel** — a client isn't subscribed to a
+"presence" or "all-channels" stream, so there's no push path for "user X came online"
+to reach observers in real time. iter-91's kick hit the same wall (kicked user can't
+be told live). Both point at the same missing primitive: a **per-user / instance-wide
+event channel** on the hub (broadcast to a user, or to "everyone who can see this
+server"). That's the right next infra investment and would unlock: live presence, live
+member-joined, live "you were removed," and cross-channel unread badges — all currently
+blocked by the per-channel-only fan-out. Filed as the recurring theme; worth a focused
+infra tick (with a spec) rather than bolting each on.
+
+- **QA grown this tick:** ws integration test for `OnlineUserIDs` (connect→online,
+  close→offline, -race); realtime browser QA asserts both connected users show
+  `data-online="1"` + a green dot renders. **Coverage gap to watch:** no test yet that
+  an *offline* member renders the grey/dimmed state (all QA users are connected); would
+  need a third user who connects then disconnects before the member-list assertion.
+
 ## 2026-06-15 (tick 91) — Kick a member; the feature exposed a latent realtime access leak
 
 Shipped **server kick** (Moderation parity) — owner/admin removes a member, full authz
