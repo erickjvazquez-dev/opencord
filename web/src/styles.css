@@ -1083,6 +1083,37 @@ button:disabled {
   opacity: 0.55;
 }
 
+/* Name + custom-status stacked (Discord-style): name on top, status dimmed below. */
+.member-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.member-id .author {
+  flex: 0 0 auto; /* override the row-level flex:1 — sizing lives on .member-id now */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.member-status {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Header "set status" / current-status button: don't let a long status blow up the bar. */
+.status-edit {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .search-results .message {
   margin-bottom: 14px;
 }

@@ -40,6 +40,7 @@ export interface ServerMember {
   username: string
   role: string
   online?: boolean
+  status?: string
 }
 
 export interface Reaction {

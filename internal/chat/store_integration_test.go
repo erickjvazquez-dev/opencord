@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -643,6 +644,59 @@ func TestServerRolesIntegration(t *testing.T) {
 	}
 	if sl, _ := store.ListServers(ctx, member.ID); len(sl) == 0 || sl[0].Role != "admin" {
 		t.Fatalf("ListServers should report the member's (promoted) role: %+v", sl)
+	}
+}
+
+func TestUserStatusIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+	srv, err := store.CreateServer(ctx, owner.ID, "Status Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	statusOf := func(uid int64) string {
+		ms, err := store.ListServerMembers(ctx, srv.ID)
+		if err != nil {
+			t.Fatalf("list members: %v", err)
+		}
+		for _, m := range ms {
+			if m.UserID == uid {
+				return m.Status
+			}
+		}
+		t.Fatalf("member %d not listed", uid)
+		return ""
+	}
+
+	// Default: no status.
+	if s := statusOf(member.ID); s != "" {
+		t.Fatalf("default status should be empty, got %q", s)
+	}
+	// Set → trimmed and reflected in the member list.
+	if err := store.SetUserStatus(ctx, member.ID, "  building Opencord  "); err != nil {
+		t.Fatalf("set status: %v", err)
+	}
+	if s := statusOf(member.ID); s != "building Opencord" {
+		t.Fatalf("status = %q, want trimmed 'building Opencord'", s)
+	}
+	// Over-long → capped to 128 runes (Rule B), never stored unbounded.
+	if err := store.SetUserStatus(ctx, member.ID, strings.Repeat("x", 500)); err != nil {
+		t.Fatalf("set long: %v", err)
+	}
+	if n := len([]rune(statusOf(member.ID))); n != 128 {
+		t.Fatalf("over-long status capped to %d runes, want 128", n)
+	}
+	// Whitespace clears it.
+	if err := store.SetUserStatus(ctx, member.ID, "   "); err != nil {
+		t.Fatalf("clear status: %v", err)
+	}
+	if s := statusOf(member.ID); s != "" {
+		t.Fatalf("status should be cleared, got %q", s)
 	}
 }
 

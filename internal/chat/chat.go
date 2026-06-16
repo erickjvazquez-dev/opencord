@@ -81,6 +81,8 @@ type ServerMember struct {
 	// Online is annotated by the HTTP layer from the hub's live-connection set
 	// (the store doesn't know about sockets). False = no active WS connection.
 	Online bool `json:"online"`
+	// Status is the member's custom status line ("" = none).
+	Status string `json:"status,omitempty"`
 }
 
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
@@ -1021,7 +1023,7 @@ func (s *Store) RemoveServerMember(ctx context.Context, serverID, actorID, targe
 // ListServerMembers returns a server's members with roles, owner/admin first.
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.user_id, u.username, m.role
+		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, '')
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
 		  ORDER BY (m.role = 'owner') DESC, (m.role = 'admin') DESC, u.username`, serverID)
@@ -1032,12 +1034,31 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// maxStatusLen bounds a user's custom status (Rule B).
+const maxStatusLen = 128
+
+// SetUserStatus sets userID's custom status: trimmed and capped to maxStatusLen
+// runes; an empty/whitespace value clears it (NULL). Only ever called for the
+// JWT-derived caller (Rule C) — there is no target-user parameter.
+func (s *Store) SetUserStatus(ctx context.Context, userID int64, status string) error {
+	status = strings.TrimSpace(status)
+	if r := []rune(status); len(r) > maxStatusLen {
+		status = string(r[:maxStatusLen])
+	}
+	var val *string
+	if status != "" {
+		val = &status
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE users SET status = $2 WHERE id = $1`, userID, val)
+	return err
 }
 
 // IsServerMember reports whether userID belongs to serverID.

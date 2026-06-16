@@ -461,6 +461,25 @@ async function main() {
   )
   await page.getByRole('button', { name: 'close' }).click()
 
+  // 7d2 — Custom status: set it via the header, see it render under your name in the
+  // member list, and reflected in the header button.
+  step('set a custom status → it shows in the member list + header')
+  const myStatus = 'shipping presence'
+  promptAnswer = myStatus
+  await page.getByRole('button', { name: /set status/ }).click()
+  await page
+    .locator('.member-list .member-status', { hasText: myStatus })
+    .waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.member-list .member-status', { hasText: myStatus }).isVisible(),
+    'custom status renders under the member name in the sidebar',
+  )
+  check(
+    ((await page.locator('.status-edit').textContent()) ?? '').includes(myStatus),
+    'header status button reflects the current status',
+  )
+  await shot('07d2-status.png')
+
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
   await page.getByRole('button', { name: 'make read-only' }).click()

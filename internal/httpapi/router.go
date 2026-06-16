@@ -51,6 +51,23 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 		r.Group(func(r chi.Router) {
 			r.Use(authsvc.Middleware)
 			r.Get("/auth/me", authsvc.HandleMe)
+			// Set the CALLER's own custom status (Rule C — derived from the JWT, no
+			// target id). Empty/whitespace clears it; the store trims + caps length.
+			r.Put("/me/status", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				var in struct {
+					Status string `json:"status"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				if err := store.SetUserStatus(r.Context(), me.ID, in.Status); err != nil {
+					http.Error(w, `{"error":"could not set status"}`, http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
 			r.Get("/channels", chat.HandleChannels(store))
 			r.Post("/channels", chat.HandleCreateChannel(store))
 			// Update a server channel — posting policy ('everyone'|'admins') and/or

@@ -26,6 +26,7 @@ import {
   setMessagePinned,
   setServerMemberRole,
   kickServerMember,
+  setMyStatus,
 } from '../api'
 import type {
   Channel,
@@ -155,6 +156,8 @@ export function Chat({
   )
   // Persistent right-hand member list (Discord-style) for the current server channel.
   const [memberList, setMemberList] = useState<ServerMember[]>([])
+  // The caller's own custom status (synced from whichever member list includes them).
+  const [myStatus, setMyStatus_] = useState('')
   // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
@@ -771,6 +774,22 @@ export function Chat({
       window.alert(err instanceof Error ? err.message : 'could not kick member')
     }
   }
+  const editMyStatus = async () => {
+    const next = window.prompt('Set your status (leave blank to clear):', myStatus)
+    if (next === null) return // cancelled
+    const trimmed = next.trim()
+    try {
+      await setMyStatus(token, trimmed)
+      setMyStatus_(trimmed)
+      // Refresh the active server's member list so the new status shows immediately.
+      if (activeServerId) {
+        const members = await fetchServerMembers(token, Number(activeServerId))
+        setMemberList(members)
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not set status')
+    }
+  }
 
   const addServerChannel = async (serverId: number) => {
     const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
@@ -898,6 +917,15 @@ export function Chat({
       clearInterval(timer)
     }
   }, [activeServerId, token])
+
+  // Keep my own status label in sync from whichever member list includes me.
+  useEffect(() => {
+    const mine =
+      memberList.find((m) => m.userId === user.id) ??
+      membersOf?.members.find((m) => m.userId === user.id)
+    if (mine && (mine.status ?? '') !== myStatus) setMyStatus_(mine.status ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberList, membersOf, user.id])
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -1165,6 +1193,13 @@ export function Chat({
                 bust={avatarVersion}
               />
               <span>{user.username}</span>
+            </button>
+            <button
+              className="link status-edit"
+              onClick={() => void editMyStatus()}
+              title="Set your status"
+            >
+              {myStatus ? `“${myStatus}”` : 'set status'}
             </button>
             <button className="link" onClick={onLogout}>
               log out
@@ -1441,7 +1476,14 @@ export function Chat({
                       title={mb.online ? 'online' : 'offline'}
                     />
                   </span>
-                  <span className="author">{mb.username}</span>
+                  <span className="member-id">
+                    <span className="author">{mb.username}</span>
+                    {mb.status && (
+                      <span className="member-status" title={mb.status}>
+                        {mb.status}
+                      </span>
+                    )}
+                  </span>
                   <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
                   {iAmServerOwner && mb.role !== 'owner' && (
                     <button
@@ -1821,7 +1863,14 @@ export function Chat({
                         title={mb.online ? 'online' : 'offline'}
                       />
                     </span>
-                    <span className="author">{mb.username}</span>
+                    <span className="member-id">
+                      <span className="author">{mb.username}</span>
+                      {mb.status && (
+                        <span className="member-status" title={mb.status}>
+                          {mb.status}
+                        </span>
+                      )}
+                    </span>
                     {mb.role !== 'member' && (
                       <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
                     )}

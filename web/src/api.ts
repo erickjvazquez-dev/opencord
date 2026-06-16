@@ -103,6 +103,19 @@ export async function setServerMemberRole(
   }
 }
 
+// Set the caller's own custom status ("" clears it). The server trims + caps it.
+export async function setMyStatus(token: string, status: string): Promise<void> {
+  const res = await fetch('/api/me/status', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not set status')
+  }
+}
+
 // Kick a member out of a server (owner/admin only; server enforces who may act).
 export async function kickServerMember(
   token: string,

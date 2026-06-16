@@ -207,6 +207,45 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterStatusIntegration covers PUT /me/status: auth required, the caller's own
+// status is set (Rule C — derived from the JWT), and it surfaces in the member list.
+func TestRouterStatusIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := hs.user(t)
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Status Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	membersPath := fmt.Sprintf("/api/servers/%d/members", srv.ID)
+
+	statusOf := func(uid int64) string {
+		w := hs.req(t, "GET", membersPath, ownerTok, "")
+		wantStatus(t, w, http.StatusOK, "list members")
+		var ms []chat.ServerMember
+		if err := json.Unmarshal(w.Body.Bytes(), &ms); err != nil {
+			t.Fatalf("decode members: %v", err)
+		}
+		for _, m := range ms {
+			if m.UserID == uid {
+				return m.Status
+			}
+		}
+		t.Fatalf("owner not listed")
+		return ""
+	}
+
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", "", `{"status":"hi"}`), http.StatusUnauthorized, "unauth set status")
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", ownerTok, `{"status":"  on a call  "}`), http.StatusNoContent, "owner sets status")
+	if s := statusOf(owner.ID); s != "on a call" {
+		t.Fatalf("member-list status = %q, want trimmed 'on a call'", s)
+	}
+	wantStatus(t, hs.req(t, "PUT", "/api/me/status", ownerTok, `{"status":""}`), http.StatusNoContent, "owner clears status")
+	if s := statusOf(owner.ID); s != "" {
+		t.Fatalf("status should be cleared, got %q", s)
+	}
+}
+
 // TestRouterKickMemberIntegration walks the kick endpoint (DELETE
 // /servers/{id}/members/{userId}) through the HTTP layer: unauth, the authz matrix,
 // malformed ids, and the success path — asserting the status the store→HTTP mapping

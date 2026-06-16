@@ -1013,3 +1013,30 @@ connected member. AI-vision confirms the dot is visible and not clipped.
 **Follow-ups:** live presence (broadcast online/offline on connect/disconnect so the
 list updates instantly, not on the 15s poll); idle/DnD/invisible states; presence dots
 on DM list + message avatars.
+
+## Custom status (user profile — parity, iter 93)
+
+**Goal:** a user sets a short **custom status** that shows by their name in the member
+list + members panel (Discord's status line). Advances Users/Profiles parity.
+
+**Storage:** `ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT` (nullable = none).
+Same idempotent pattern as the avatar columns; Migrate is hardened (lock_timeout +
+retry, regression-tested) against the ACCESS-EXCLUSIVE-on-users deadlock from iter-89.
+
+**Set (`PUT /api/me/status`, JSON `{status}`):** sets the CALLER's own status only
+(user from JWT, Rule C — you can't set someone else's). Trimmed, bounded ≤128 chars
+(Rule B); empty/whitespace clears it (NULL). Body capped with MaxBytesReader.
+
+**Read:** `ServerMember` gains `Status`; `ListServerMembers` selects `u.status`, so the
+existing members endpoint (+15s poll) carries it. No new read endpoint.
+
+**Client:** `ServerMember.status?`; the header shows your own status next to your name
+and clicking it opens a prompt to edit (pre-filled); each member row in the sidebar +
+panel renders the status as a dimmed, truncated line under the username.
+
+**Threat model (Rule B/15 — tested):** set only your own (no target id in the API);
+oversized status → 400/truncated, nothing huge stored; unauthenticated → 401; the
+status is rendered as text (React, no innerHTML) so a `<script>` status can't execute.
+
+**Follow-ups:** status emoji, presence-state statuses (idle/DnD), "playing X" activity,
+clearing-after-a-duration, live status broadcast (today it refreshes on the poll).

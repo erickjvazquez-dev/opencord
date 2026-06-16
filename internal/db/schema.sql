@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- avatar → the client falls back to deterministic initials.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_type TEXT;
+-- Custom status (v0.4): a short user-set status line shown by the name. NULL = none.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT;
 
 CREATE TABLE IF NOT EXISTS messages (
     id         BIGSERIAL PRIMARY KEY,
