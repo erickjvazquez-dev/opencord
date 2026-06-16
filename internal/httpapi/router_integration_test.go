@@ -461,6 +461,53 @@ func TestRouterLeaveServerIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterTransferOwnershipIntegration walks POST /servers/{id}/transfer through the
+// HTTP layer: unauth, the owner-only rule, an invalid target, and the success path
+// (after which the actor is demoted to admin and the target owns the server).
+func TestRouterTransferOwnershipIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, ownerTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Transfer Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := hs.store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	path := fmt.Sprintf("/api/servers/%d/transfer", srv.ID)
+	body := func(uid int64) string { return fmt.Sprintf(`{"userId":%d}`, uid) }
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, "", body(member.ID)), http.StatusUnauthorized, "unauth transfer")
+	})
+	t.Run("malformed id is 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", "/api/servers/abc/transfer", ownerTok, body(member.ID)), http.StatusBadRequest, "bad server id")
+	})
+	t.Run("non-owner can't transfer", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, memberTok, body(owner.ID)), http.StatusForbidden, "member transfers")
+		wantStatus(t, hs.req(t, "POST", path, strangerTok, body(member.ID)), http.StatusForbidden, "stranger transfers")
+	})
+	t.Run("transfer to a non-member is 404", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, ownerTok, body(owner.ID+99999)), http.StatusNotFound, "transfer to non-member")
+	})
+	t.Run("owner transfers to a member → 204 and roles swap", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", path, ownerTok, body(member.ID)), http.StatusNoContent, "owner transfers")
+		if r, _ := hs.store.ServerRole(ctx, srv.ID, member.ID); r != "owner" {
+			t.Fatalf("target should be owner, got %q", r)
+		}
+		if r, _ := hs.store.ServerRole(ctx, srv.ID, owner.ID); r != "admin" {
+			t.Fatalf("old owner should be admin, got %q", r)
+		}
+		// The ex-owner (now admin) can no longer transfer.
+		wantStatus(t, hs.req(t, "POST", path, ownerTok, body(owner.ID)), http.StatusForbidden, "ex-owner transfers")
+	})
+}
+
 // TestRouterServerSettingsIntegration walks the server rename (PATCH /servers/{id}) and
 // delete (DELETE /servers/{id}) endpoints through the HTTP layer: unauth, the authz
 // matrix (rename = admin+, delete = owner-only), body validation, malformed ids, and the

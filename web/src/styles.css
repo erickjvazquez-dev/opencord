@@ -1196,6 +1196,12 @@ button:disabled {
 .role-toggle {
   margin-left: auto;
 }
+/* Transfer ownership — a deliberate owner action, accent-tinted (not danger) so it
+   reads as significant but distinct from kick/ban. */
+.transfer-owner-btn {
+  color: var(--accent);
+  font-weight: 600;
+}
 
 /* Kick is destructive — tint it like other danger actions. */
 .kick-btn {

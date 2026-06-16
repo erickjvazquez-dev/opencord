@@ -31,6 +31,7 @@ import {
   voiceToken,
   setMessagePinned,
   setServerMemberRole,
+  transferServerOwnership,
   kickServerMember,
   banServerMember,
   unbanServerMember,
@@ -964,6 +965,28 @@ export function Chat({
       if (String(serverId) === activeServerId) setMemberList(members) // sidebar stays in sync
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not change role')
+    }
+  }
+  // Transfer ownership to another member (owner only). The old owner becomes an admin;
+  // re-fetch members + the server list so both roles update in place.
+  const transferOwnership = async (serverId: number, userId: number, username: string) => {
+    if (
+      !window.confirm(
+        `Make ${username} the owner of this server? You'll become an admin and can't undo this.`,
+      )
+    )
+      return
+    try {
+      await transferServerOwnership(token, serverId, userId)
+      const [members, srvs] = await Promise.all([
+        fetchServerMembers(token, serverId),
+        fetchServers(token),
+      ])
+      setMembersOf({ serverId, members })
+      setServers(srvs)
+      if (String(serverId) === activeServerId) setMemberList(members)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not transfer ownership')
     }
   }
   const kickMember = async (serverId: number, userId: number, username: string) => {
@@ -2007,6 +2030,18 @@ export function Chat({
                       }
                     >
                       {mb.role === 'admin' ? 'demote' : 'make admin'}
+                    </button>
+                  )}
+                  {/* Transfer ownership: only the owner may hand the server to another
+                      member; they then become an admin (server enforces it). */}
+                  {iAmServerOwner && mb.role !== 'owner' && mb.userId !== user.id && (
+                    <button
+                      className="link transfer-owner-btn"
+                      onClick={() =>
+                        void transferOwnership(membersOf.serverId, mb.userId, mb.username)
+                      }
+                    >
+                      make owner
                     </button>
                   )}
                   {/* Kick: owner may remove any non-owner; an admin may remove plain

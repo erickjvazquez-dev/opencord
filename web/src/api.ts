@@ -192,6 +192,23 @@ export async function setServerMemberRole(
   }
 }
 
+// Transfer server ownership to another member (owner only; server enforces it).
+export async function transferServerOwnership(
+  token: string,
+  serverId: number,
+  userId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ userId }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not transfer ownership')
+  }
+}
+
 // The caller's accessible channels that have unread messages, each with a count of
 // unread @-mentions (drives sidebar dots + the red mention badge).
 export async function fetchUnreads(token: string): Promise<ChannelUnread[]> {

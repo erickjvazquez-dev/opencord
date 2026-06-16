@@ -217,8 +217,12 @@ item from here as the structural milestones above land.
   DONE** (any non-owner member voluntarily leaves via `POST /servers/{id}/leave`; the owner
   can't — must delete/transfer; leaver's live sockets evicted; authz + access-loss tested at
   store+HTTP, realtime browser E2E: B rejoins → leaves → server drops from B's sidebar; the
-  panel shows "leave server" to non-owners, "delete server" to the owner) · server
-  description / icon / vanity URL / transfer-ownership TODO
+  panel shows "leave server" to non-owners, "delete server" to the owner) · **transfer-
+  ownership DONE** (owner hands the server to another member via `POST /servers/{id}/transfer`;
+  one tx promotes the target to owner, demotes the old owner to admin, updates `servers.owner_id`;
+  owner-only, can't transfer to self/non-member; "make owner" button on member rows; authz +
+  role-swap tested at store+HTTP, realtime browser E2E round-trip A→B→A) · server description /
+  icon / vanity URL TODO
 - [~] **Channel categories DONE** (collapsible groups; create + nest a channel + optional
   categoryId on channel create, Rule-B cross-server guard) · ordering/drag TODO
 - [~] Invites — code-join + **7-day expiry DONE** (enforced server-side at redeem;

@@ -1294,6 +1294,77 @@ func TestDeleteServerIntegration(t *testing.T) {
 	}
 }
 
+// TestTransferServerOwnershipIntegration proves only the owner may transfer, only to a
+// different existing member, and that a successful transfer swaps the roles (new owner,
+// old owner → admin) and updates servers.owner_id.
+func TestTransferServerOwnershipIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	admin := regUser(t, pool)
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Transfer Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member %d: %v", u.ID, err)
+		}
+	}
+	if err := store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+
+	// --- adversarial cases ---
+	for _, c := range []struct {
+		name          string
+		actor, target int64
+		want          error
+	}{
+		{"admin can't transfer", admin.ID, member.ID, chat.ErrForbidden},
+		{"member can't transfer", member.ID, admin.ID, chat.ErrForbidden},
+		{"non-member can't transfer", stranger.ID, member.ID, chat.ErrForbidden},
+		{"owner can't transfer to self", owner.ID, owner.ID, chat.ErrForbidden},
+		{"owner can't transfer to a non-member", owner.ID, stranger.ID, chat.ErrUserNotFound},
+	} {
+		if err := store.TransferServerOwnership(ctx, srv.ID, c.actor, c.target); !errors.Is(err, c.want) {
+			t.Fatalf("%s: err = %v, want %v", c.name, err, c.want)
+		}
+	}
+	// Guard: ownership unchanged after the rejected transfers.
+	if r, _ := store.ServerRole(ctx, srv.ID, owner.ID); r != "owner" {
+		t.Fatalf("owner should still be owner after rejected transfers, got %q", r)
+	}
+
+	// --- happy path: owner → member ---
+	if err := store.TransferServerOwnership(ctx, srv.ID, owner.ID, member.ID); err != nil {
+		t.Fatalf("transfer: %v", err)
+	}
+	if r, _ := store.ServerRole(ctx, srv.ID, member.ID); r != "owner" {
+		t.Fatalf("target should now be owner, got %q", r)
+	}
+	if r, _ := store.ServerRole(ctx, srv.ID, owner.ID); r != "admin" {
+		t.Fatalf("old owner should now be admin, got %q", r)
+	}
+	// servers.owner_id reflects the new owner (exposed as Server.OwnerID).
+	srvs, _ := store.ListServers(ctx, member.ID)
+	if len(srvs) != 1 || srvs[0].OwnerID != member.ID {
+		t.Fatalf("servers.owner_id should be the new owner: %+v", srvs)
+	}
+	// The old owner (now an admin) can no longer transfer; the new owner can transfer back.
+	if err := store.TransferServerOwnership(ctx, srv.ID, owner.ID, admin.ID); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("ex-owner (admin) should not be able to transfer, got %v", err)
+	}
+	if err := store.TransferServerOwnership(ctx, srv.ID, member.ID, owner.ID); err != nil {
+		t.Fatalf("new owner transferring back: %v", err)
+	}
+	if r, _ := store.ServerRole(ctx, srv.ID, owner.ID); r != "owner" {
+		t.Fatalf("ownership should have transferred back, got %q", r)
+	}
+}
+
 func TestMessageModerationIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

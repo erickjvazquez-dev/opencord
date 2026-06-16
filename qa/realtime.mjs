@@ -532,17 +532,55 @@ async function main() {
   )
   await a.screenshot({ path: join(SHOTS, 'rt-12-unbanned.png') })
 
-  // 9 — Leave server: B (now unbanned) rejoins via the still-valid invite, then
-  // voluntarily LEAVES from the members panel. A non-owner sees "leave server" (not the
-  // owner's "delete server"), and leaving drops the server from B's own sidebar.
-  step('B rejoins then leaves the server → it drops from B’s sidebar')
+  // 9 — B (now unbanned) rejoins via the still-valid invite, ready for the transfer +
+  // leave checks below.
+  step('B rejoins the server via the still-valid invite')
   ans.b = inviteCode
   await b.getByRole('button', { name: 'Join server' }).click()
   await b.locator('.server-group', { hasText: 'team ' + sfx }).waitFor({ timeout: 10000 })
+
+  // 9a — Transfer ownership (owner only): A hands the server to B → B becomes owner, A
+  // becomes admin; then B hands it back so A owns it again (round-trip restores state).
+  // Helper: open a window's members panel for the team server, wait for a fresh fetch.
+  const openMembers = async (pg) => {
+    await pg
+      .locator('.server-group', { hasText: 'team ' + sfx })
+      .getByRole('button', { name: 'members' })
+      .click()
+    await pg.locator('.member-row').first().waitFor({ timeout: 8000 })
+  }
+  // Wait (poll) until userName's row carries the expected role badge.
+  const waitRole = async (pg, userName, role) => {
+    const row = pg.locator('.member-row', { hasText: userName })
+    for (let i = 0; i < 20; i++) {
+      if ((await row.locator(`.role-badge.role-${role}`).count()) > 0) return true
+      await pg.waitForTimeout(300)
+    }
+    return false
+  }
+  step('A transfers ownership to B → B owner, A admin')
+  await openMembers(a)
+  await a
+    .locator('.member-row', { hasText: userB })
+    .getByRole('button', { name: 'make owner' })
+    .click() // confirm auto-accepts
+  check(await waitRole(a, userB, 'owner'), 'after transfer, B shows the owner badge in A’s panel')
+  check(await waitRole(a, userA, 'admin'), 'after transfer, A (old owner) shows the admin badge')
+  await a.screenshot({ path: join(SHOTS, 'rt-13-transfer.png') })
+
+  step('B (new owner) transfers ownership back to A')
+  await openMembers(b) // fresh fetch — B is now the owner and sees "make owner"
   await b
-    .locator('.server-group', { hasText: 'team ' + sfx })
-    .getByRole('button', { name: 'members' })
+    .locator('.member-row', { hasText: userA })
+    .getByRole('button', { name: 'make owner' })
     .click()
+  check(await waitRole(b, userA, 'owner'), 'after transfer-back, A shows the owner badge in B’s panel')
+  check(await waitRole(b, userB, 'admin'), 'after transfer-back, B is an admin again')
+
+  // 9b — Leave server: B (now an admin, a non-owner) voluntarily LEAVES from the panel.
+  // A non-owner sees "leave server" (not the owner's "delete server"); leaving drops the
+  // server from B's own sidebar. (B's panel is already open from the transfer-back.)
+  step('B (non-owner) leaves the server → it drops from B’s sidebar')
   await b.locator('.server-settings').waitFor({ timeout: 8000 })
   check(
     (await b.locator('.leave-server-btn').count()) > 0,

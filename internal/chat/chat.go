@@ -1086,6 +1086,52 @@ func (s *Store) SetServerRole(ctx context.Context, serverID, actorID, targetID i
 	return nil
 }
 
+// TransferServerOwnership hands serverID's ownership from the current owner (actorID) to
+// another member (targetID). Only the owner may transfer (ErrForbidden otherwise); the
+// target must be a different existing member (ErrForbidden if it's the actor, ErrUserNotFound
+// if not a member). In one transaction the target is promoted to 'owner', the old owner is
+// demoted to 'admin', and servers.owner_id is updated — so there's always exactly one owner
+// and the change can't half-apply.
+func (s *Store) TransferServerOwnership(ctx context.Context, serverID, actorID, targetID int64) error {
+	if targetID == actorID {
+		return ErrForbidden // already the owner; nothing to transfer
+	}
+	actorRole, err := s.ServerRole(ctx, serverID, actorID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" {
+		return ErrForbidden // only the owner may transfer ownership
+	}
+	targetRole, err := s.ServerRole(ctx, serverID, targetID)
+	if err != nil {
+		return err
+	}
+	if targetRole == "" {
+		return ErrUserNotFound // target isn't a member of this server
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx,
+		`UPDATE server_members SET role = 'owner' WHERE server_id = $1 AND user_id = $2`,
+		serverID, targetID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE server_members SET role = 'admin' WHERE server_id = $1 AND user_id = $2`,
+		serverID, actorID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE servers SET owner_id = $2 WHERE id = $1`, serverID, targetID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // RemoveServerMember kicks targetID out of serverID. The actor must be an owner or
 // admin of the server; nobody can kick the owner; the actor can't kick themselves;
 // and an admin can't kick a fellow admin (only the owner can). Returns ErrForbidden

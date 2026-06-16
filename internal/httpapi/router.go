@@ -767,6 +767,33 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			w.WriteHeader(http.StatusNoContent)
 		}
 	})
+	// Transfer server ownership to another member: {userId} in the body. Owner only;
+	// the target must be a different existing member. The old owner becomes an admin.
+	r.Post("/servers/{id}/transfer", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			UserID int64 `json:"userId"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		switch err := store.TransferServerOwnership(r.Context(), id, me.ID, in.UserID); {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"only the owner can transfer ownership"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not transfer ownership"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	// Kick a member out of a server: {userId} via the path. Owner/admin only; can't
 	// kick the owner or yourself; an admin can't kick a fellow admin (store enforces).
 	r.Delete("/servers/{id}/members/{userId}", func(w http.ResponseWriter, r *http.Request) {
