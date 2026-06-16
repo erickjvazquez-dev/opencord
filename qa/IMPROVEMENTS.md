@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 94) — Paid the infra debt: per-user push (Hub.SendToUser) + live kick-notice
+
+After flagging it 3 ticks, built the missing realtime primitive — **push to a user, not
+just a channel** — and proved it on its first real consumer (live kick-notice: the kicked
+user's client now drops the server + lands on #general instead of reconnect-looping on
+403). **Component advanced: infra/realtime → "scales / complete."** Chose the *bounded*
+consumer (kick-notice: target = one known user) over the tempting-but-complex ones
+(scoped presence needs a co-member observer set; unread needs read-state) — the primitive
+is the reusable part, and a small real consumer is enough to justify + test it (not
+speculative, per Karpathy/Rule-6).
+
+**Highest-value lesson — "notify then close" needed a concurrency fix, and the test had
+to encode the ordering, not just the outcome.** Naively `SendToUser(notice)` then
+`Evict(close)` could lose the notice: writePump's `select` could pick the Close frame
+ahead of a pending data frame. Fix: writePump now *drains queued frames before* sending
+Close. The ws test was strengthened to assert the kicked socket receives `server-removed`
+(carrying the right serverId) AND THEN closes — i.e. it verifies the *order*, run -race
+5x. An outcome-only test ("socket closed") would have passed even if the notice were
+dropped. When ordering is the contract, test the ordering.
+
+- **QA grown this tick:** realtime browser QA now drives the *kicked* side (B's sidebar
+  drops the server + B lands on #general live), not just the kicker's view. **Coverage
+  win:** the two-client suite now exercises a server→client *push* reaction, a pattern
+  it couldn't before.
+- **Debt retired / next up:** the per-user push unblocks the previously-stuck features.
+  Highest-value next consumer is **cross-channel unread/mention badges** (push "new msg
+  in channel Y" to a user on another channel) — a real flagship gap, now buildable; it
+  still needs read-state storage + badge UI, so it's its own spec-first tick. Live
+  presence (co-member-scoped) and live member-joined are the other two now-unblocked.
+
 ## 2026-06-15 (tick 93) — Custom status; chose the boring-clean feature over the risky infra
 
 Shipped **custom status** (status line by the name). **Component advanced: Profiles →

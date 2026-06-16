@@ -259,8 +259,10 @@ item from here as the structural milestones above land.
   (authz matrix tested). Security: the kicked user's live WS sockets are evicted
   (`Hub.EvictUserFromChannels`) so they stop receiving immediately — proven by a
   `-race` ws integration test + browser QA (online count drops on kick). Red kick
-  button in the members panel; two-user E2E + AI-vision verified. · ban / timeout ·
-  bulk delete · AutoMod (keyword/spam) · reporting TODO
+  button in the members panel; two-user E2E + AI-vision verified. **Live kick-notice
+  DONE** — `Hub.SendToUser` pushes a `server-removed` event so the kicked user's client
+  drops the server + falls back to #general live (no broken reconnect loop); E2E +
+  AI-vision verified. · ban / timeout · bulk delete · AutoMod (keyword/spam) · reporting TODO
 - [x] Message moderation (admins delete others' messages) — shipped (v0.3)
 
 ### Notifications
