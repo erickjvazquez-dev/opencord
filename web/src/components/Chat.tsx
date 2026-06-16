@@ -321,7 +321,23 @@ export function Chat({
         // Mesh-voice signaling (incl. screen-share start/stop) → the active call.
         void voiceRef.current?.handle(data)
         } else if (data.type === 'presence') setOnline(data.online ?? 0)
-        else if (data.type === 'error' && data.error) window.alert(data.error)
+        else if (data.type === 'server-removed' && data.serverId) {
+          // We were kicked: drop the server from the sidebar; if we're viewing one of
+          // its channels, fall back to #general. (The socket is also being evicted.)
+          const removedId = data.serverId
+          const wasViewing = (serverChannels[removedId] ?? []).some((c) => c.id === channelId)
+          setServers((cur) => cur.filter((s) => s.id !== removedId))
+          setServerChannels((cur) => {
+            const next = { ...cur }
+            delete next[removedId]
+            return next
+          })
+          if (wasViewing) {
+            const general = channels.find((c) => c.name === 'general') ?? channels[0]
+            if (general) setChannelId(general.id)
+          }
+          window.alert('You were removed from this server.')
+        } else if (data.type === 'error' && data.error) window.alert(data.error)
       }
     }
     connect()

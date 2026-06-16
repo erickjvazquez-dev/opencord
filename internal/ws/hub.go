@@ -29,6 +29,8 @@ type Event struct {
 	// On omitted (false) means the peer stopped sharing.
 	On       bool   `json:"on,omitempty"`
 	StreamID string `json:"streamId,omitempty"`
+	// ServerID scopes a user-targeted event to a server (e.g. "server-removed").
+	ServerID int64 `json:"serverId,omitempty"`
 }
 
 // targetedEvent is an Event addressed to a specific channel — used for events
@@ -51,6 +53,13 @@ type onlineReq struct {
 	reply chan map[int64]bool
 }
 
+// userMessage carries a pre-marshalled event addressed to every live socket of a
+// specific user (regardless of which channel each is on).
+type userMessage struct {
+	userID int64
+	data   []byte
+}
+
 // Hub owns the set of connected clients and serializes all mutations through a
 // single goroutine (Run), so the client map needs no locking.
 type Hub struct {
@@ -62,6 +71,7 @@ type Hub struct {
 	unregister chan *Client
 	evict      chan evictReq
 	online     chan onlineReq
+	toUser     chan userMessage
 }
 
 func NewHub(store *chat.Store) *Hub {
@@ -74,7 +84,20 @@ func NewHub(store *chat.Store) *Hub {
 		unregister: make(chan *Client),
 		evict:      make(chan evictReq),
 		online:     make(chan onlineReq),
+		toUser:     make(chan userMessage),
 	}
+}
+
+// SendToUser delivers e to every live socket belonging to userID, regardless of which
+// channel each is on. The push happens on the hub goroutine (no locks). Used for
+// per-user notifications that aren't tied to a channel (e.g. "you were removed from a
+// server"). Best-effort: a socket whose buffer is full is dropped (same as fan-out).
+func (h *Hub) SendToUser(userID int64, e Event) {
+	data, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
+	h.toUser <- userMessage{userID: userID, data: data}
 }
 
 // OnlineUserIDs returns the set of user IDs with ≥1 live WS connection (presence).
@@ -156,6 +179,19 @@ func (h *Hub) Run() {
 				set[c.user.ID] = true
 			}
 			req.reply <- set
+		case um := <-h.toUser:
+			for c := range h.clients {
+				if c.user.ID != um.userID {
+					continue
+				}
+				select {
+				case c.send <- um.data:
+				default:
+					// Stuck consumer: drop it (same policy as emitToChannel).
+					close(c.done)
+					delete(h.clients, c)
+				}
+			}
 		}
 	}
 }

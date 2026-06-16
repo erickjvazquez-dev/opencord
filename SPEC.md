@@ -1040,3 +1040,39 @@ status is rendered as text (React, no innerHTML) so a `<script>` status can't ex
 
 **Follow-ups:** status emoji, presence-state statuses (idle/DnD), "playing X" activity,
 clearing-after-a-duration, live status broadcast (today it refreshes on the poll).
+
+## Hub per-user push + live kick-notice (infra/realtime — iter 94)
+
+**Problem:** the gateway fans out only per-channel (a client subscribes to ONE channel),
+so there's no way to push an event to a *user* regardless of which channel they're on.
+Concretely (logged iters 91–93): a kicked-while-connected user's socket is force-closed
+(secure) but their client only sees an opaque close → it reconnect-loops on 403 instead
+of cleanly dropping the server. This is the first of several features blocked by the
+missing primitive (also: live presence, live member-joined, cross-channel unread).
+
+**Primitive — `Hub.SendToUser(userID, Event)`:** delivers an event to *every* live
+socket of userID (any channel). Runs on the hub goroutine (no locks); same send-or-drop
+as `emitToChannel`. Mirrors the existing `EvictUserFromChannels`/`OnlineUserIDs` hub-ops.
+
+**writePump drain-on-close:** so a *final* message reliably precedes the close frame,
+`writePump` now flushes any already-queued frames before sending the WS Close on `done`
+(previously a select could pick Close before a pending frame). Generally correct
+("flush then close"), and what makes "notify then evict" deterministic.
+
+**Live kick-notice:** the kick handler now, on success, `SendToUser(target,
+Event{Type:"server-removed", ServerID:id})` **then** evicts. Ordering is guaranteed
+(both hub-ops are serialized on the hub goroutine, SendToUser first), and drain-on-close
+delivers the notice before the socket closes. Event gains `ServerID int64`.
+
+**Client:** on `server-removed`, remove that server from `servers` + `serverChannels`
+state; if the active channel belonged to it, navigate to `#general`; show a notice. The
+user lands cleanly instead of looping. (Security is unchanged — eviction still closes
+the socket regardless of whether the client cooperates.)
+
+**Tests:** ws integration — kick → the kicked socket receives `server-removed` (carrying
+the serverId) and THEN closes (proves ordering + drain-on-close); existing eviction +
+"owner unaffected" still hold; -race clean. Browser QA — A kicks B → B drops the server
+and lands on `#general` live (no manual refresh).
+
+**Follow-ups this unlocks (separate ticks):** live presence (scoped to co-members),
+live member-joined, cross-channel unread/mention badges — all need exactly this push.

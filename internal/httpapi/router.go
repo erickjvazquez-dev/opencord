@@ -542,9 +542,13 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		case err != nil:
 			http.Error(w, `{"error":"could not remove member"}`, http.StatusInternalServerError)
 		default:
-			// Evict the kicked user's live sockets on this server's channels so they
-			// immediately stop receiving messages (WS access is otherwise only checked
-			// at connect). Best-effort — a channel-lookup error doesn't undo the kick.
+			// Tell the kicked user's client (any socket) it's been removed so it can
+			// drop the server cleanly, THEN evict its live sockets on this server's
+			// channels so it stops receiving (WS access is otherwise only checked at
+			// connect). Order matters — the notice is queued before the close so it's
+			// delivered (writePump flushes pending frames before closing). The notice
+			// is best-effort UX; eviction is the security guarantee.
+			hub.SendToUser(targetID, ws.Event{Type: "server-removed", ServerID: id})
 			if chans, err := store.ListServerChannels(r.Context(), id); err == nil {
 				ids := make([]int64, 0, len(chans))
 				for _, c := range chans {

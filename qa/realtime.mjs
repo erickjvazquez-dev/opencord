@@ -412,6 +412,22 @@ async function main() {
     'B is gone from the member-list sidebar after the kick',
   )
 
+  // 8b — B's client reacts live to the kick (server-removed push): the server drops
+  // out of B's sidebar and, since B was viewing it, B lands back on #general — no
+  // manual refresh, no broken reconnect loop.
+  step("B's client drops the server live and falls back to #general")
+  const bServerGroup = b.locator('.server-group', { hasText: 'team ' + sfx })
+  await bServerGroup.waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  check(
+    (await bServerGroup.count()) === 0,
+    'B’s sidebar drops the kicked server live (via the server-removed push)',
+  )
+  check(
+    ((await b.locator('.brand .channel').textContent()) ?? '').includes('general'),
+    'B is moved to #general after being kicked (no broken reconnect loop)',
+  )
+  await b.screenshot({ path: join(SHOTS, 'rt-11-b-kicked.png') })
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

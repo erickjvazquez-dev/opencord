@@ -595,20 +595,29 @@ func TestServeWSEvictOnKickIntegration(t *testing.T) {
 		t.Fatal("member should receive the owner's message BEFORE being kicked")
 	}
 
-	// Kick, then evict the kicked user's live sockets — exactly what the DELETE route does.
+	// Notify THEN evict — exactly what the DELETE route does. The notice must be
+	// delivered before the socket closes (writePump flushes pending frames on close).
 	if err := h.store.RemoveServerMember(ctx, srv.ID, owner.ID, member.ID); err != nil {
 		t.Fatalf("kick: %v", err)
 	}
+	h.hub.SendToUser(member.ID, ws.Event{Type: "server-removed", ServerID: srv.ID})
 	h.hub.EvictUserFromChannels(member.ID, []int64{ch.ID})
 
-	// The member's socket must be CLOSED by eviction. Read until an error; a close
-	// error proves eviction, a timeout would mean it stayed open (false positive guard).
+	// The member's socket must (a) receive the "server-removed" notice carrying the
+	// serverId, THEN (b) be CLOSED by eviction. Read frames: a close error proves
+	// eviction; a timeout would mean it stayed open (false-positive guard).
 	_ = memberConn.SetReadDeadline(time.Now().Add(4 * time.Second))
-	evicted := false
-	for i := 0; i < 30; i++ {
-		_, _, err := memberConn.ReadMessage()
+	gotNotice, evicted := false, false
+	for i := 0; i < 40; i++ {
+		_, data, err := memberConn.ReadMessage()
 		if err == nil {
-			continue // a leftover history/presence frame — keep reading
+			if strings.Contains(string(data), `"server-removed"`) {
+				gotNotice = true
+				if !strings.Contains(string(data), fmt.Sprintf(`"serverId":%d`, srv.ID)) {
+					t.Fatalf("server-removed notice missing serverId %d: %s", srv.ID, data)
+				}
+			}
+			continue // keep reading until the socket closes
 		}
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
@@ -616,6 +625,9 @@ func TestServeWSEvictOnKickIntegration(t *testing.T) {
 		}
 		evicted = true // a non-timeout read error = the server closed our socket
 		break
+	}
+	if !gotNotice {
+		t.Fatal("kicked member should receive a server-removed notice before the socket closes")
 	}
 	if !evicted {
 		t.Fatal("kicked member's socket should be closed by eviction, but it stayed open (leak)")

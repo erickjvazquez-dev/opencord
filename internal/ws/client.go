@@ -273,9 +273,22 @@ func (c *Client) writePump() {
 				return
 			}
 		case <-c.done: // hub dropped this client
-			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-			return
+			// Flush any already-queued frames (e.g. a final "server-removed" notice
+			// queued just before eviction) before sending the Close — otherwise the
+			// select above could pick Close ahead of a pending frame and lose it.
+			for {
+				select {
+				case data := <-c.send:
+					_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+					if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+						return
+					}
+				default:
+					_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+					_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+					return
+				}
+			}
 		case <-ticker.C:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {

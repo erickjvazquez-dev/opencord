@@ -98,6 +98,8 @@ export interface ServerEvent {
     | 'voice-leave'
     | 'voice-signal'
     | 'voice-screen'
+    // Per-user push: you were removed from a server (serverId).
+    | 'server-removed'
   message?: Message
   history?: Message[]
   username?: string
@@ -112,4 +114,6 @@ export interface ServerEvent {
   // MediaStream id, so its tracks are told apart from the mic); absent/false = stopped.
   on?: boolean
   streamId?: string
+  // server-removed: which server the user was removed from.
+  serverId?: number
 }
