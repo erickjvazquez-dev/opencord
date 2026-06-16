@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-15 (tick 95) — Unread indicators; shipped the right MVP (poll) over the fancy one (push)
+
+Shipped **per-channel unread dots** — the most-requested Discord-parity gap, and the
+feature the iter-94 per-user-push was meant to "unlock." **Component advanced: chat →
+instant/lossless realtime (a step; still poll-refreshed, not push).** The judgment call:
+I built **poll-based** unread, NOT the push-based instant version, even though I'd just
+built the push primitive for it. Why: push-based instant unread needs the *co-member
+observer set* per message (a DB query on the hot send path) — real complexity that
+risks a rushed, half-verified tick. Poll-based (a ~10s `GET /unreads`) delivers the
+whole user-visible value (dots appear/clear correctly, access-scoped) cleanly and fully
+tested. The push upgrade is a clean follow-up. **Ship the MVP that's completable +
+verifiable this tick; don't gold-plate just because you built the tool for the gold version.**
+
+**Highest-value lesson — correctness of unread is all about *when you mark read*, and
+the test had to pin the access-scoping.** Two subtle bugs avoided by design: (1) your
+*own* messages must not self-unread (handled in SQL: `msg.user_id <> $1`), and (2) the
+channel you're *viewing* must never show a dot AND must be marked read on *leave* (not
+just open), or the next poll re-flags messages you saw — handled by the render filter +
+WS-cleanup mark-read. The store test encodes the full lifecycle (unread→read→unread) and
+a hostile case: a server channel you can't access **must never** surface in `/unreads`
+(asserted), because an unread list is an information-disclosure surface (Rule B) — leaking
+"channel X has activity" for channels you can't see would be a real bug.
+
+- **QA grown this tick:** the realtime suite now drives a **poll-driven** cross-channel
+  flow (A posts while B is away → B's dot appears within the poll window → clears on
+  open) — the first QA that waits on a *background poll*, not a direct action. **Process
+  note:** this adds ~5–10s to the QA run (waiting out the 10s poll). Acceptable, but the
+  push-based follow-up would make it instant *and* faster to test — a nice alignment of
+  product + test speed. **Coverage gap (carried):** still no offline-member render test,
+  and no mention-count test (feature not built yet).
+
 ## 2026-06-15 (tick 94) — Paid the infra debt: per-user push (Hub.SendToUser) + live kick-notice
 
 After flagging it 3 ticks, built the missing realtime primitive — **push to a user, not

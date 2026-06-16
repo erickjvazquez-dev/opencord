@@ -74,7 +74,9 @@ tunnel, paid cloud only for 24/7 hosting.**
 
 - [x] Multiple channels — table, REST list + create, per-channel WS routing, sidebar UI (E2E + DB integration tests in CI)
 - [x] Message edit/delete (owner-only, live WS, soft delete)
-- [x] Typing indicators — read state still TODO
+- [x] Typing indicators · **read state DONE** — per-channel unread indicators (bold + pip
+  on global/server/DM channels; `channel_reads` table, access-scoped `UnreadChannelIDs`,
+  mark-read on open/leave, ~10s poll; store+router+browser tested, AI-vision verified)
 - [x] Profiles: initials avatars + **uploaded avatars** (local-disk, access-gated
   serve, Avatar component renders the image or falls back to initials everywhere;
   header click-to-upload; Rule-15 hardened + vision-verified). Banners/status TODO
@@ -223,7 +225,8 @@ item from here as the structural milestones above land.
   live, fetched with B's own token). Video transcode · link embeds + previews TODO
 - [~] Pinned messages — pin/unpin (admin-gated in server channels), 📌 badge, live
   WS update, and a "pins" panel listing all of a channel's pins; E2E + AI-vision
-  verified. (bookmarks, read state / unread / mention badges TODO)
+  verified. (**unread DONE** — sidebar unread dots, see Messaging "read state"; bookmarks
+  + mention-count badges TODO)
 - [ ] Message search (from/in/has/before/after) · polls · timestamp grouping
 
 ### Voice / Video
@@ -266,7 +269,8 @@ item from here as the structural milestones above land.
 - [x] Message moderation (admins delete others' messages) — shipped (v0.3)
 
 ### Notifications
-- [ ] Per-channel/server settings + mute · @mention + DM notifications · web push
+- [~] **Unread indicators DONE** (per-channel sidebar dots; see Messaging "read state").
+  Per-channel/server mute · @mention-count badges · DM notifications · web push TODO
 
 ### Platform / Integrations
 - [ ] Bot/API + webhooks + slash commands · OAuth2 app authorization
