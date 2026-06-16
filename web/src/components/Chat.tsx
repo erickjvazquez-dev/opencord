@@ -208,6 +208,8 @@ export function Chat({
   const [memberList, setMemberList] = useState<ServerMember[]>([])
   // The caller's own custom status (synced from whichever member list includes them).
   const [myStatus, setMyStatus_] = useState('')
+  // The caller's own status emoji (synced alongside myStatus).
+  const [myStatusEmoji, setMyStatusEmoji_] = useState('')
   // Unread channels → unread @-mention count (0 = unread, no mention). Sidebar dots +
   // red mention badges. Synced on load + a ~10s poll.
   const [unread, setUnread] = useState<Map<number, number>>(new Map())
@@ -1121,12 +1123,18 @@ export function Chat({
     }
   }
   const editMyStatus = async () => {
+    // Emoji first (optional), then the status line — two small prompts to match the
+    // app's existing prompt-driven affordances (channel topic, invites, etc.).
+    const emoji = window.prompt('Status emoji (optional, e.g. 🚀 — leave blank for none):', myStatusEmoji)
+    if (emoji === null) return // cancelled
     const next = window.prompt('Set your status (leave blank to clear):', myStatus)
     if (next === null) return // cancelled
     const trimmed = next.trim()
+    const trimmedEmoji = emoji.trim()
     try {
-      await setMyStatus(token, trimmed)
+      await setMyStatus(token, trimmed, trimmedEmoji)
       setMyStatus_(trimmed)
+      setMyStatusEmoji_(trimmedEmoji)
       // Refresh the active server's member list so the new status shows immediately.
       if (activeServerId) {
         const members = await fetchServerMembers(token, Number(activeServerId))
@@ -1323,12 +1331,14 @@ export function Chat({
     }
   }, [activeServerId, token])
 
-  // Keep my own status label in sync from whichever member list includes me.
+  // Keep my own status label + emoji in sync from whichever member list includes me.
   useEffect(() => {
     const mine =
       memberList.find((m) => m.userId === user.id) ??
       membersOf?.members.find((m) => m.userId === user.id)
-    if (mine && (mine.status ?? '') !== myStatus) setMyStatus_(mine.status ?? '')
+    if (!mine) return
+    if ((mine.status ?? '') !== myStatus) setMyStatus_(mine.status ?? '')
+    if ((mine.statusEmoji ?? '') !== myStatusEmoji) setMyStatusEmoji_(mine.statusEmoji ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberList, membersOf, user.id])
 
@@ -1670,7 +1680,8 @@ export function Chat({
               onClick={() => void editMyStatus()}
               title="Set your status"
             >
-              {myStatus ? `“${myStatus}”` : 'set status'}
+              {myStatusEmoji && <span className="status-emoji">{myStatusEmoji}</span>}
+              {myStatus ? `“${myStatus}”` : myStatusEmoji ? '' : 'set status'}
             </button>
             <button className="link" onClick={onLogout}>
               log out
@@ -2003,8 +2014,9 @@ export function Chat({
                   </span>
                   <span className="member-id">
                     <span className="author">{mb.username}</span>
-                    {mb.status && (
-                      <span className="member-status" title={mb.status}>
+                    {(mb.status || mb.statusEmoji) && (
+                      <span className="member-status" title={mb.status || ''}>
+                        {mb.statusEmoji && <span className="status-emoji">{mb.statusEmoji}</span>}
                         {mb.status}
                       </span>
                     )}
@@ -2534,8 +2546,9 @@ export function Chat({
                     </span>
                     <span className="member-id">
                       <span className="author">{mb.username}</span>
-                      {mb.status && (
-                        <span className="member-status" title={mb.status}>
+                      {(mb.status || mb.statusEmoji) && (
+                        <span className="member-status" title={mb.status || ''}>
+                          {mb.statusEmoji && <span className="status-emoji">{mb.statusEmoji}</span>}
                           {mb.status}
                         </span>
                       )}

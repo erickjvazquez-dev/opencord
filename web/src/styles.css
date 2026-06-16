@@ -1401,6 +1401,12 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* Status emoji shown before the status line (member list + header). Kept inline
+   with a hair of spacing so it reads as one unit with the text or stands alone. */
+.status-emoji {
+  margin-right: 4px;
+}
+
 /* Header "set status" / current-status button: don't let a long status blow up the bar. */
 .status-edit {
   max-width: 18ch;

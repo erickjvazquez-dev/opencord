@@ -1038,44 +1038,52 @@ func TestUserStatusIntegration(t *testing.T) {
 		t.Fatalf("add member: %v", err)
 	}
 
-	statusOf := func(uid int64) string {
+	memberOf := func(uid int64) chat.ServerMember {
 		ms, err := store.ListServerMembers(ctx, srv.ID)
 		if err != nil {
 			t.Fatalf("list members: %v", err)
 		}
 		for _, m := range ms {
 			if m.UserID == uid {
-				return m.Status
+				return m
 			}
 		}
 		t.Fatalf("member %d not listed", uid)
-		return ""
+		return chat.ServerMember{}
 	}
 
-	// Default: no status.
-	if s := statusOf(member.ID); s != "" {
-		t.Fatalf("default status should be empty, got %q", s)
+	// Default: no status, no emoji.
+	if m := memberOf(member.ID); m.Status != "" || m.StatusEmoji != "" {
+		t.Fatalf("default status/emoji should be empty, got %q / %q", m.Status, m.StatusEmoji)
 	}
-	// Set → trimmed and reflected in the member list.
-	if err := store.SetUserStatus(ctx, member.ID, "  building Opencord  "); err != nil {
+	// Set → trimmed and reflected in the member list (status + emoji).
+	if err := store.SetUserStatus(ctx, member.ID, "  building Opencord  ", "  🚀  "); err != nil {
 		t.Fatalf("set status: %v", err)
 	}
-	if s := statusOf(member.ID); s != "building Opencord" {
-		t.Fatalf("status = %q, want trimmed 'building Opencord'", s)
+	if m := memberOf(member.ID); m.Status != "building Opencord" || m.StatusEmoji != "🚀" {
+		t.Fatalf("status/emoji = %q / %q, want trimmed 'building Opencord' / '🚀'", m.Status, m.StatusEmoji)
 	}
-	// Over-long → capped to 128 runes (Rule B), never stored unbounded.
-	if err := store.SetUserStatus(ctx, member.ID, strings.Repeat("x", 500)); err != nil {
+	// Over-long → status capped to 128 runes, emoji capped to 16 runes (Rule B).
+	if err := store.SetUserStatus(ctx, member.ID, strings.Repeat("x", 500), strings.Repeat("😀", 99)); err != nil {
 		t.Fatalf("set long: %v", err)
 	}
-	if n := len([]rune(statusOf(member.ID))); n != 128 {
-		t.Fatalf("over-long status capped to %d runes, want 128", n)
+	if m := memberOf(member.ID); len([]rune(m.Status)) != 128 || len([]rune(m.StatusEmoji)) != 16 {
+		t.Fatalf("over-long capped to status=%d emoji=%d runes, want 128 / 16",
+			len([]rune(m.Status)), len([]rune(m.StatusEmoji)))
 	}
-	// Whitespace clears it.
-	if err := store.SetUserStatus(ctx, member.ID, "   "); err != nil {
+	// Emoji can be set alone (no status line).
+	if err := store.SetUserStatus(ctx, member.ID, "", "🎮"); err != nil {
+		t.Fatalf("set emoji only: %v", err)
+	}
+	if m := memberOf(member.ID); m.Status != "" || m.StatusEmoji != "🎮" {
+		t.Fatalf("emoji-only set => status %q emoji %q, want '' / '🎮'", m.Status, m.StatusEmoji)
+	}
+	// Whitespace clears both.
+	if err := store.SetUserStatus(ctx, member.ID, "   ", "   "); err != nil {
 		t.Fatalf("clear status: %v", err)
 	}
-	if s := statusOf(member.ID); s != "" {
-		t.Fatalf("status should be cleared, got %q", s)
+	if m := memberOf(member.ID); m.Status != "" || m.StatusEmoji != "" {
+		t.Fatalf("status/emoji should be cleared, got %q / %q", m.Status, m.StatusEmoji)
 	}
 }
 

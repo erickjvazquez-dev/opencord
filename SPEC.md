@@ -1498,3 +1498,29 @@ inert free text, that an injection (`after:'; DROP TABLE messages;--`) matches n
 leaves the table intact (all 3 messages still searchable afterward). Browser QA (`07c3`)
 drives `before:2099-01-01` (finds the recent message) / `after:2099-01-01` (finds nothing)
 through the real search box.
+
+## Status emoji (v0.4 profiles, 2026-06-16)
+
+Extends the existing custom-status feature (`PUT /me/status`) with an optional **status
+emoji** shown before the status line — closing the GOAL.md "Custom status DONE … status
+emoji TODO" item.
+
+**Storage:** `users.status_emoji TEXT` (idempotent `ALTER TABLE … ADD COLUMN IF NOT EXISTS`;
+NULL = none). `ServerMember` carries `statusEmoji`; `ListServerMembers` selects
+`COALESCE(u.status_emoji,'')`.
+
+**API:** `PUT /me/status` now accepts `{status, statusEmoji}`. `SetUserStatus(ctx, userID,
+status, emoji)` trims + caps each (status ≤128 runes, emoji ≤16 runes — generous enough for a
+ZWJ sequence, tiny enough to bound abuse, Rule B); an empty/whitespace value clears that
+field (NULL). Identity is the JWT-derived caller only (Rule C) — no target-user param.
+
+**Web:** the header "set status" affordance prompts for an emoji (optional) then the status
+text; the emoji renders (React element — escaped, no innerHTML) before the status line in the
+header button and in both member-list panels via a `.status-emoji` span. An emoji can be set
+alone (no text).
+
+**Threat model (Rule B/C — tested):** `TestUserStatusIntegration` proves set/clear, the
+128-rune status cap AND the 16-rune emoji cap on over-long input, and emoji-only set. Browser
+QA `07d2` sets `🚀` + a status line and asserts the emoji renders before the text in the
+member list AND the header. The value is bounded server-side and React-escaped on render, so a
+hostile "emoji" string can neither overflow storage nor inject markup.

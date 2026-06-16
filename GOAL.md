@@ -308,7 +308,10 @@ item from here as the structural milestones above land.
   via the Avatar component, header upload entry). **Custom status DONE** — a short
   status line by the name (member list + panel + header; set via `PUT /me/status`,
   Rule-C/own-only, trimmed+capped 128, React-escaped; store+router+browser tested,
-  AI-vision verified). Banners · status emoji · activity ("playing X") still TODO
+  AI-vision verified). **Status emoji DONE** — an optional emoji shown before the status
+  (`users.status_emoji`, capped 16 runes, same `PUT /me/status` payload, React-escaped;
+  renders in header + both member panels; store+browser tested, AI-vision verified — `🚀`
+  before the line). Banners · activity ("playing X") still TODO
 - [ ] About me / pronouns / connections · per-server nicknames
 - [~] Presence: **online/offline DONE** (green dot in the member list, hub-backed; -race
   tested + AI-vision verified) · idle / DnD / invisible TODO

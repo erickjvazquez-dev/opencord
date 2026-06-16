@@ -57,13 +57,14 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Put("/me/status", func(w http.ResponseWriter, r *http.Request) {
 				me, _ := auth.UserFrom(r.Context())
 				var in struct {
-					Status string `json:"status"`
+					Status      string `json:"status"`
+					StatusEmoji string `json:"statusEmoji"`
 				}
 				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
 					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 					return
 				}
-				if err := store.SetUserStatus(r.Context(), me.ID, in.Status); err != nil {
+				if err := store.SetUserStatus(r.Context(), me.ID, in.Status, in.StatusEmoji); err != nil {
 					http.Error(w, `{"error":"could not set status"}`, http.StatusInternalServerError)
 					return
 				}

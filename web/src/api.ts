@@ -226,12 +226,13 @@ export async function markChannelRead(token: string, channelId: number): Promise
   }).catch(() => {})
 }
 
-// Set the caller's own custom status ("" clears it). The server trims + caps it.
-export async function setMyStatus(token: string, status: string): Promise<void> {
+// Set the caller's own custom status + optional emoji ("" clears each). The server
+// trims + caps both.
+export async function setMyStatus(token: string, status: string, statusEmoji = ''): Promise<void> {
   const res = await fetch('/api/me/status', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, statusEmoji }),
   })
   if (!res.ok && res.status !== 204) {
     const data = await res.json().catch(() => ({}))

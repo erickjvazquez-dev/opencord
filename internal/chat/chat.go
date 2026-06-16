@@ -93,6 +93,8 @@ type ServerMember struct {
 	Online bool `json:"online"`
 	// Status is the member's custom status line ("" = none).
 	Status string `json:"status,omitempty"`
+	// StatusEmoji is an optional short emoji shown before the status ("" = none).
+	StatusEmoji string `json:"statusEmoji,omitempty"`
 	// TimeoutUntil is set while the member is timed out (muted); nil/past = not muted.
 	TimeoutUntil *time.Time `json:"timeoutUntil,omitempty"`
 }
@@ -1489,7 +1491,7 @@ func (s *Store) DeleteServer(ctx context.Context, serverID, actorID int64) error
 // ListServerMembers returns a server's members with roles, owner/admin first.
 func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]ServerMember, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, ''),
+		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, ''), COALESCE(u.status_emoji, ''),
 		        CASE WHEN m.timeout_until > now() THEN m.timeout_until END
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
@@ -1501,7 +1503,7 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.TimeoutUntil); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.TimeoutUntil); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -1512,19 +1514,33 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 // maxStatusLen bounds a user's custom status (Rule B).
 const maxStatusLen = 128
 
-// SetUserStatus sets userID's custom status: trimmed and capped to maxStatusLen
-// runes; an empty/whitespace value clears it (NULL). Only ever called for the
+// maxStatusEmojiLen bounds the status emoji (Rule B). 16 runes is generous enough
+// for a ZWJ emoji sequence (e.g. a multi-person family) while staying tiny; the
+// value is React-escaped on render, never validated as a "real" emoji.
+const maxStatusEmojiLen = 16
+
+// SetUserStatus sets userID's custom status line + optional status emoji: each is
+// trimmed and capped (status to maxStatusLen, emoji to maxStatusEmojiLen runes);
+// an empty/whitespace value clears that field (NULL). Only ever called for the
 // JWT-derived caller (Rule C) — there is no target-user parameter.
-func (s *Store) SetUserStatus(ctx context.Context, userID int64, status string) error {
+func (s *Store) SetUserStatus(ctx context.Context, userID int64, status, emoji string) error {
 	status = strings.TrimSpace(status)
 	if r := []rune(status); len(r) > maxStatusLen {
 		status = string(r[:maxStatusLen])
 	}
-	var val *string
-	if status != "" {
-		val = &status
+	emoji = strings.TrimSpace(emoji)
+	if r := []rune(emoji); len(r) > maxStatusEmojiLen {
+		emoji = string(r[:maxStatusEmojiLen])
 	}
-	_, err := s.pool.Exec(ctx, `UPDATE users SET status = $2 WHERE id = $1`, userID, val)
+	var sVal, eVal *string
+	if status != "" {
+		sVal = &status
+	}
+	if emoji != "" {
+		eVal = &emoji
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE users SET status = $2, status_emoji = $3 WHERE id = $1`, userID, sVal, eVal)
 	return err
 }
 

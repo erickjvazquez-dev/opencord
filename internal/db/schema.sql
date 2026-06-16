@@ -27,6 +27,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_type TEXT;
 -- Custom status (v0.4): a short user-set status line shown by the name. NULL = none.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT;
+-- Status emoji (v0.4): an optional short emoji shown before the status line. NULL = none.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status_emoji TEXT;
 
 CREATE TABLE IF NOT EXISTS messages (
     id         BIGSERIAL PRIMARY KEY,

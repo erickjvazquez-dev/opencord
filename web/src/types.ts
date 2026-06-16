@@ -51,6 +51,8 @@ export interface ServerMember {
   role: string
   online?: boolean
   status?: string
+  // Optional short emoji shown before the status line; absent = none.
+  statusEmoji?: string
   // Set (ISO timestamp) while the member is timed out (muted); absent = not muted.
   timeoutUntil?: string
 }

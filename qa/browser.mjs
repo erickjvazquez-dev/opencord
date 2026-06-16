@@ -44,10 +44,17 @@ async function main() {
   // Auto-answer window.prompt with whatever the current step expects, and accept
   // window.confirm (delete). Set `promptAnswer` before an action that prompts.
   let promptAnswer = chanName
+  let statusEmojiAnswer = '' // answer specifically for the "Status emoji" prompt
   let lastPromptDefault = '' // capture a prompt's pre-filled value (e.g. an invite code)
   page.on('dialog', (d) => {
-    if (d.type() === 'prompt') lastPromptDefault = d.defaultValue()
-    d.accept(d.type() === 'prompt' ? promptAnswer : undefined)
+    if (d.type() !== 'prompt') {
+      d.accept(undefined)
+      return
+    }
+    lastPromptDefault = d.defaultValue()
+    // The status flow asks for an emoji first, then the text — answer the emoji
+    // prompt from its own variable so it doesn't collide with promptAnswer.
+    d.accept(/emoji/i.test(d.message()) ? statusEmojiAnswer : promptAnswer)
   })
   const shot = (name) => page.screenshot({ path: join(SHOTS, name) })
 
@@ -627,10 +634,12 @@ async function main() {
 
   await page.getByRole('button', { name: 'close' }).click()
 
-  // 7d2 — Custom status: set it via the header, see it render under your name in the
-  // member list, and reflected in the header button.
-  step('set a custom status → it shows in the member list + header')
+  // 7d2 — Custom status + emoji: set both via the header, see them render under your
+  // name in the member list, and reflected in the header button.
+  step('set a custom status + emoji → both show in the member list + header')
   const myStatus = 'shipping presence'
+  const myStatusEmoji = '🚀'
+  statusEmojiAnswer = myStatusEmoji
   promptAnswer = myStatus
   await page.getByRole('button', { name: /set status/ }).click()
   await page
@@ -641,10 +650,21 @@ async function main() {
     'custom status renders under the member name in the sidebar',
   )
   check(
+    ((await page.locator('.member-list .member-status .status-emoji').first().textContent()) ?? '').includes(
+      myStatusEmoji,
+    ),
+    'status emoji renders before the status line in the member list',
+  )
+  check(
     ((await page.locator('.status-edit').textContent()) ?? '').includes(myStatus),
     'header status button reflects the current status',
   )
+  check(
+    ((await page.locator('.status-edit .status-emoji').textContent()) ?? '').includes(myStatusEmoji),
+    'header status button shows the status emoji',
+  )
   await shot('07d2-status.png')
+  statusEmojiAnswer = '' // reset so later prompt-driven steps are unaffected
 
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
