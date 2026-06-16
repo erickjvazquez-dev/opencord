@@ -2085,3 +2085,47 @@ frontend updates `serverCategories` + clears the affected channels' `categoryId`
 
 **Follow-ups still open for categories:** rename, reorder/drag, move-an-existing-channel
 between categories, "keep active channel visible under a collapsed category".
+
+---
+
+## 2026-06-16 — tick 108: invite management (list + revoke)
+
+**Shipped:** the members panel (admin) gained an **Invites** section — lists a server's
+active codes (expiry + creator), a **+ New invite** mint, **copy**, and **revoke** (kills
+a leaked code so it stops redeeming immediately). Backend: `ListInvites` + `RevokeInvite`
+(DELETE scoped by `server_id`, Rule-B cross-server guard) + admin-gated `GET`/`DELETE
+/servers/{id}/invites[/{code}]`. Adversarial integration test (admin-gating, cross-server
+revoke blocked, revoked code → 404, re-revoke → 404) + browser E2E + AI-vision verified.
+
+**Highest-value lesson (loop-process) — a new UI element must NOT borrow an existing
+element's CSS class; shared classes are also QA + behavioural selectors, and reuse
+collides silently.** I styled the invite rows/header by reusing `member-row` and
+`bans-head`. Both passed `go test` + `tsc` + `vite` green, then **failed the browser QA
+twice in a row**, each time in a DIFFERENT, invite-unrelated place:
+1. `.member-row` reuse → the realtime QA's `locator('.member-row', {hasText: userA})`
+   (member-by-name lookup) ALSO matched the invite row whose creator label says
+   "by <userA>" → strict-mode crash at the ban step.
+2. `.bans-head` reuse → the realtime QA waits on `.bans-head` as the signal that "the ban
+   refreshed the panel"; my always-present "Invites" header also matched it, so the wait
+   resolved *before* the ban and three ban assertions raced ahead and failed.
+
+Root cause both times: an invite row/header **masquerading** as a member/ban row. Fix:
+dedicated classes throughout (`invite-row`, `invites-head`, `invite-info`, `invite-by`,
+`invites-empty`) with the borrowed styling replicated in CSS. **The full browser QA (real
+two-client mount) caught what the unit tests + type-check could not** — exactly its job.
+
+**Rule to carry:** when adding UI that *looks like* an existing component, give it its own
+classes and replicate the styles; never reuse a class that a `.locator()`/`getByRole`
+anywhere (QA or app) selects on. Grep the new classes against `qa/*.mjs` before shipping.
+A green `tsc`/`vite` build proves types, not that the rendered DOM keeps existing selectors
+unambiguous (Rule 14).
+
+**Also fixed (separate commit):** a *pre-existing* flaky realtime selector —
+`getByRole('button', {name: /userA/})` for the DM-open matched both the DM `.channel-item`
+and a `.reply-context` "jump to userA's message" button (a render race since tick 105).
+Scoped it to `.channel-item`. Surfaced by this tick's full QA timing, not caused by it.
+
+**Next QA growth / follow-ups:** invite **max-uses** + a uses counter is the clean next
+slice (schema `max_uses`/`uses` + atomic redeem guard + a column in the panel). A QA
+assertion that greps new CSS classes against `qa/*.mjs` would have caught both collisions
+pre-run — worth a tiny lint step in `qa/run.sh`.
