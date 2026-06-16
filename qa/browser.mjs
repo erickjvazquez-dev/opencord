@@ -557,6 +557,37 @@ async function main() {
     await page.locator('.member-row .role-badge.role-owner').first().isVisible(),
     'members panel shows the owner role',
   )
+
+  // 7d3 — Invites management (admin): the section lists the active code, a freshly
+  // created invite appears, and revoking one removes it. The QA bot is the owner (admin),
+  // so the admin-only Invites section renders. The dialog handler auto-accepts the revoke
+  // confirm + any copy-fallback prompt.
+  step('invites section: list, create, revoke')
+  const invitesHead = page.locator('.invites-head')
+  await invitesHead.waitFor({ timeout: 8000 })
+  check(await invitesHead.isVisible(), 'admin sees the Invites section in the members panel')
+  const invitesBefore = await page.locator('.invite-row').count()
+  check(invitesBefore >= 1, 'the previously-minted invite is listed')
+  await page.locator('.new-invite-btn').click()
+  await page.waitForFunction(
+    (n) => document.querySelectorAll('.invite-row').length > n,
+    invitesBefore,
+    { timeout: 8000 },
+  )
+  const invitesAfterCreate = await page.locator('.invite-row').count()
+  check(invitesAfterCreate > invitesBefore, 'creating an invite adds it to the list')
+  await shot('07d3-invites.png')
+  await page.locator('.invite-row .revoke-invite-btn').first().click()
+  await page.waitForFunction(
+    (n) => document.querySelectorAll('.invite-row').length < n,
+    invitesAfterCreate,
+    { timeout: 8000 },
+  )
+  check(
+    (await page.locator('.invite-row').count()) < invitesAfterCreate,
+    'revoking an invite removes it from the list',
+  )
+
   await page.getByRole('button', { name: 'close' }).click()
 
   // 7d2 — Custom status: set it via the header, see it render under your name in the

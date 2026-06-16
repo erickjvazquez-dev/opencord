@@ -32,6 +32,8 @@ import {
   banServerMember,
   unbanServerMember,
   fetchServerBans,
+  fetchServerInvites,
+  revokeServerInvite,
   timeoutServerMember,
   clearMemberTimeout,
   setMyStatus,
@@ -42,6 +44,7 @@ import type {
   Channel,
   ChannelCategory,
   DMChannel,
+  Invite,
   Message,
   Reaction,
   Server,
@@ -60,6 +63,19 @@ import { SfuSession } from '../sfu'
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
 // Local key for "the viewer reacted with this emoji on this message".
 const rkey = (msgId: number, emoji: string) => `${msgId}:${emoji}`
+
+// Human-readable remaining lifetime for an invite (admin invites list). Absent = a
+// legacy never-expire code.
+function inviteExpiryLabel(expiresAt?: string): string {
+  if (!expiresAt) return 'never expires'
+  const ms = new Date(expiresAt).getTime() - Date.now()
+  if (ms <= 0) return 'expired'
+  const days = Math.floor(ms / 86_400_000)
+  if (days > 0) return `expires in ${days}d`
+  const hours = Math.floor(ms / 3_600_000)
+  if (hours > 0) return `expires in ${hours}h`
+  return 'expires soon'
+}
 
 // ── Push-to-talk global hotkey ──────────────────────────────────────────────
 // The bound key is stored by its physical `KeyboardEvent.code` (layout-independent)
@@ -176,6 +192,8 @@ export function Chat({
   )
   // Banned users for the server whose members panel is open (admin-only; null until loaded).
   const [bans, setBans] = useState<ServerBan[] | null>(null)
+  // Active invites for the server whose members panel is open (admin-only; null until loaded).
+  const [serverInvites, setServerInvites] = useState<Invite[] | null>(null)
   // Persistent right-hand member list (Discord-style) for the current server channel.
   const [memberList, setMemberList] = useState<ServerMember[]>([])
   // The caller's own custom status (synced from whichever member list includes them).
@@ -837,15 +855,65 @@ export function Chat({
     }
   }
 
+  // Load a server's active invites into the panel — admin-only, so swallow a 403
+  // (non-admins simply see no invites section). Mirrors loadBans.
+  const loadInvites = async (serverId: number, role?: string) => {
+    if (role !== 'owner' && role !== 'admin') {
+      setServerInvites(null)
+      return
+    }
+    try {
+      setServerInvites(await fetchServerInvites(token, serverId))
+    } catch {
+      setServerInvites(null)
+    }
+  }
+
   const openMembers = async (serverId: number) => {
     try {
       setPins(null)
       const members = await fetchServerMembers(token, serverId)
       setMembersOf({ serverId, members })
       if (String(serverId) === activeServerId) setMemberList(members) // keep the sidebar in sync
-      void loadBans(serverId, members.find((m) => m.userId === user.id)?.role)
+      const myRole = members.find((m) => m.userId === user.id)?.role
+      void loadBans(serverId, myRole)
+      void loadInvites(serverId, myRole)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not load members')
+    }
+  }
+
+  // Mint a new invite from the management panel (admin) and refresh the list so it
+  // appears immediately. Also surfaces the fresh code so the admin can copy it.
+  const createPanelInvite = async (serverId: number) => {
+    try {
+      const code = await createInvite(token, serverId)
+      await loadInvites(serverId, 'admin')
+      void copyInvite(code)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not create invite')
+    }
+  }
+
+  // Revoke an invite code (admin) so it can no longer be redeemed, then refresh the list.
+  const revokeInvite = async (serverId: number, code: string) => {
+    if (!window.confirm(`Revoke this invite? Anyone who hasn't joined yet can no longer use it.`))
+      return
+    try {
+      await revokeServerInvite(token, serverId, code)
+      await loadInvites(serverId, 'admin')
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not revoke invite')
+    }
+  }
+
+  // Copy an invite code to the clipboard (best-effort; falls back to a prompt the user
+  // can copy from if the Clipboard API is unavailable, e.g. a non-secure context).
+  const copyInvite = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code)
+    } catch {
+      window.prompt('Copy this invite code:', code)
     }
   }
 
@@ -1748,6 +1816,7 @@ export function Chat({
                   onClick={() => {
                     setMembersOf(null)
                     setBans(null)
+                    setServerInvites(null)
                   }}
                 >
                   ✕ close
@@ -1839,6 +1908,50 @@ export function Chat({
                     )}
                 </div>
               ))}
+              {/* Active invites (admin view): mint a new code or revoke a leaked one.
+                  Dedicated classes throughout (NOT .bans-head / .member-row / .member-id):
+                  those are QA + behavioural selectors elsewhere and an invite row must
+                  never masquerade as a member/ban row. */}
+              {serverInvites !== null && (
+                <>
+                  <div className="invites-head">
+                    <span>Invites ({serverInvites.length})</span>
+                    <button
+                      className="link new-invite-btn"
+                      onClick={() => void createPanelInvite(membersOf.serverId)}
+                    >
+                      + New invite
+                    </button>
+                  </div>
+                  {serverInvites.length === 0 && (
+                    <div className="invites-empty">
+                      No active invites — create one to let people join.
+                    </div>
+                  )}
+                  {serverInvites.map((iv) => (
+                    <div key={iv.code} className="invite-row">
+                      <code className="invite-code" title="invite code">
+                        {iv.code}
+                      </code>
+                      <span className="invite-info">
+                        <span className="invite-meta">{inviteExpiryLabel(iv.expiresAt)}</span>
+                        <span className="invite-by" title={`created by ${iv.creatorName}`}>
+                          by {iv.creatorName}
+                        </span>
+                      </span>
+                      <button className="link copy-invite-btn" onClick={() => void copyInvite(iv.code)}>
+                        copy
+                      </button>
+                      <button
+                        className="link revoke-invite-btn"
+                        onClick={() => void revokeInvite(membersOf.serverId, iv.code)}
+                      >
+                        revoke
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
               {/* Banned users (admin view): unban restores their ability to rejoin. */}
               {bans !== null && bans.length > 0 && (
                 <>

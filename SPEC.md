@@ -1358,3 +1358,39 @@ to create a channel inside it. `fetchChannelCategories` / `createChannelCategory
 create/list (admin to create, member to list; stranger → 403). A channel can't be
 attached to a category from another server (`ErrCategoryNotFound`). Category name is
 bounded; empty/whitespace rejected.
+
+---
+
+## Invite management — list active invites + revoke (v0.4)
+
+**Why:** invites were write-only — a member minted a code via a prompt and that was it.
+A leaked/oversharing code stayed valid for its full 7-day TTL with no way to kill it, and
+nobody could see how many codes a server had outstanding. This adds the "revoke UI"
+backlog item: admins can list a server's active invites and revoke a leaked one
+immediately. (max-uses is a clean follow-up; this tick is list + revoke.)
+
+**Store (`internal/chat`):**
+- `Invite{Code, CreatedBy, CreatorName, CreatedAt, ExpiresAt *time.Time}`.
+- `ListInvites(serverID)` — active (unexpired) invites joined with the creator's
+  username, newest first. Expired invites are filtered out (they're dead anyway and
+  pruning them is a separate concern).
+- `RevokeInvite(serverID, code)` — `DELETE ... WHERE code=$1 AND server_id=$2` (Rule B
+  cross-server guard: a code from another server can't be revoked via this server's path);
+  `ErrInvalidInvite` when no row matched.
+
+**REST (`internal/httpapi`):** `GET /servers/{id}/invites` (admin-gated, like bans — a
+non-admin gets 403, not the list) and `DELETE /servers/{id}/invites/{code}` (admin-gated).
+`POST /servers/{id}/invites` (mint) stays members-only, unchanged.
+
+**Web:** the **members panel** (already the admin management surface, next to Bans) gains
+an **Invites** section for admins: each active invite shows its code, expiry ("expires in
+Nd" / "never"), creator, a **copy** button, and a **revoke** button; a **+ New invite**
+button mints one and refreshes the list. Loaded via `loadInvites` (mirrors `loadBans`,
+swallows 403 for non-admins). A plain member's `invite` sidebar button keeps the existing
+quick-mint prompt; an admin's opens the members panel. `Invite` type + `fetchServerInvites`
+/ `revokeServerInvite` in `api.ts`.
+
+**Threat model (Rule B/15 — tested):** list + revoke require admin (stranger/member →
+403). Revoke is scoped by `server_id`, so an admin of server A can't revoke server B's
+code via A's path (cross-server guard). Revoking an unknown/already-gone code → 404. A
+revoked code no longer redeems (404).

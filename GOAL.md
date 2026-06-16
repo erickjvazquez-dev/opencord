@@ -206,8 +206,12 @@ item from here as the structural milestones above land.
 - [~] **Channel categories DONE** (collapsible groups; create + nest a channel + optional
   categoryId on channel create, Rule-B cross-server guard) · ordering/drag TODO
 - [~] Invites — code-join + **7-day expiry DONE** (enforced server-side at redeem;
-  expired → 404, adversarially tested; legacy invites stay permanent). max-uses ·
-  invite links · temporary membership · revoke UI TODO
+  expired → 404, adversarially tested; legacy invites stay permanent) + **list + revoke
+  DONE** (admin-gated Invites section in the members panel: lists active codes with
+  expiry/creator, a + New invite mint, copy, and a revoke that kills a leaked code so it
+  stops redeeming immediately; `GET`/`DELETE /servers/{id}/invites[/{code}]`, revoke
+  scoped by `server_id` so no cross-server revoke — Rule B; adversarial integration test +
+  browser E2E + AI-vision). max-uses · invite links · temporary membership TODO
 - [ ] Server discovery / community servers · vanity invite URLs
 - [ ] Welcome screen + rules screening · server templates
 - [~] Server boosts / tiers (cosmetic) TODO · **member list DONE** — Discord-style

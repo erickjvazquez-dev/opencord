@@ -1571,6 +1571,57 @@ func (s *Store) RedeemInvite(ctx context.Context, code string, userID int64) (Se
 	return srv, nil
 }
 
+// Invite describes an active (unexpired) invite for management/listing. CreatorName is
+// the joined username of whoever minted it; ExpiresAt is nil for legacy never-expire codes.
+type Invite struct {
+	Code        string     `json:"code"`
+	CreatedBy   int64      `json:"createdBy"`
+	CreatorName string     `json:"creatorName"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	ExpiresAt   *time.Time `json:"expiresAt,omitempty"`
+}
+
+// ListInvites returns a server's active (unexpired) invite codes, newest first, joined
+// with the creator's username. Expired codes are filtered out — they're already dead at
+// redeem; this is the admin-facing "what can someone join with right now" view. The caller
+// must verify the viewer is an admin (mirrors ListServerBans).
+func (s *Store) ListInvites(ctx context.Context, serverID int64) ([]Invite, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT i.code, i.created_by, u.username, i.created_at, i.expires_at
+		   FROM server_invites i JOIN users u ON u.id = i.created_by
+		  WHERE i.server_id = $1 AND (i.expires_at IS NULL OR i.expires_at > now())
+		  ORDER BY i.created_at DESC`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Invite, 0)
+	for rows.Next() {
+		var iv Invite
+		if err := rows.Scan(&iv.Code, &iv.CreatedBy, &iv.CreatorName, &iv.CreatedAt, &iv.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out = append(out, iv)
+	}
+	return out, rows.Err()
+}
+
+// RevokeInvite deletes one invite code from serverID so it can no longer be redeemed.
+// The `AND server_id = $2` is the Rule-B cross-server guard: an admin of server A cannot
+// revoke server B's code via A's path. ErrInvalidInvite when no matching row exists
+// (unknown code, already revoked, or a code from another server). The caller verifies admin.
+func (s *Store) RevokeInvite(ctx context.Context, serverID int64, code string) error {
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM server_invites WHERE code = $1 AND server_id = $2`, code, serverID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrInvalidInvite
+	}
+	return nil
+}
+
 // Recent returns up to limit messages from the given channel in chronological
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {

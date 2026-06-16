@@ -446,6 +446,51 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 		writeJSON(w, http.StatusCreated, map[string]string{"code": code})
 	})
+	// List a server's active invite codes (admin-gated, like bans — a non-admin gets 403,
+	// not the list). This is the "what can someone join with right now" management view.
+	r.Get("/servers/{id}/invites", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil {
+			http.Error(w, `{"error":"could not list invites"}`, http.StatusInternalServerError)
+			return
+		} else if !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		invites, err := store.ListInvites(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not list invites"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, invites)
+	})
+	// Revoke an invite code so it can no longer be redeemed (admin-gated). The code is in
+	// the path; the store scopes the delete by server_id (Rule B — no cross-server revoke).
+	r.Delete("/servers/{id}/invites/{code}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		switch err := store.RevokeInvite(r.Context(), id, chi.URLParam(r, "code")); {
+		case errors.Is(err, chat.ErrInvalidInvite):
+			http.Error(w, `{"error":"invite not found"}`, http.StatusNotFound)
+		case err != nil:
+			http.Error(w, `{"error":"could not revoke invite"}`, http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	r.Get("/servers/{id}/channels", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
 		id, err := serverIDParam(r)

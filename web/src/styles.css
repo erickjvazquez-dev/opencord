@@ -1219,6 +1219,78 @@ button:disabled {
   color: #c98a1b;
 }
 
+/* Active-invites section in the members panel (admin-only): list + revoke + mint.
+   Dedicated classes — NOT .bans-head / .member-row / .member-id — because those are QA
+   and behavioural selectors elsewhere (e.g. realtime QA waits on .bans-head as the
+   "ban refreshed the panel" signal); a reused class silently collided twice. */
+.invites-head {
+  /* Section-header look (matches .bans-head) + a right-aligned mint button. */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 4px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.new-invite-btn {
+  color: var(--link);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.invites-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+/* Invite rows are deliberately NOT .member-row: a .member-row filter (e.g. the QA's
+   member-by-name lookup) must never match an invite row whose creator label shares a name. */
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.invite-row .invite-code {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  user-select: all;
+}
+.invite-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.invite-meta {
+  font-size: 12px;
+  color: var(--text);
+}
+.invite-by {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copy-invite-btn {
+  color: var(--link);
+}
+.revoke-invite-btn {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /* Per-member online presence: a status dot on the avatar's corner (Discord-style). */
 .avatar-presence {
   position: relative;

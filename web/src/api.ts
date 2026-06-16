@@ -3,6 +3,7 @@ import type {
   ChannelCategory,
   ChannelUnread,
   DMChannel,
+  Invite,
   Message,
   Server,
   ServerBan,
@@ -86,6 +87,34 @@ export async function redeemInvite(token: string, code: string): Promise<Server>
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not redeem invite')
   return data as Server
+}
+
+// List a server's active invite codes (admin-gated; a non-admin gets 403).
+export async function fetchServerInvites(token: string, serverId: number): Promise<Invite[]> {
+  const res = await fetch(`/api/servers/${serverId}/invites`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not load invites')
+  }
+  return res.json()
+}
+
+// Revoke an invite code so it can no longer be redeemed (admin-gated).
+export async function revokeServerInvite(
+  token: string,
+  serverId: number,
+  code: string,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/invites/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not revoke invite')
+  }
 }
 
 export async function fetchServerMembers(token: string, serverId: number): Promise<ServerMember[]> {

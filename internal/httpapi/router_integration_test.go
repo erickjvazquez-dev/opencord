@@ -499,6 +499,98 @@ func TestRouterBanMemberIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterInviteManagementIntegration walks the invite list/revoke endpoints through
+// the HTTP layer: listing + revoking are admin-gated (a stranger/member gets 403, not the
+// list and not a revoke), revoke is scoped by server_id so an admin of one server can't
+// revoke another server's code (Rule B cross-server guard), a revoked code no longer
+// redeems (404), and re-revoking an unknown code is 404. Minting stays members-only.
+func TestRouterInviteManagementIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+
+	owner, _ := hs.user(t)
+	admin, adminTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, joinerTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+
+	srv, err := hs.store.CreateServer(ctx, owner.ID, "Invite Router Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	for _, u := range []auth.User{admin, member} {
+		if err := hs.store.AddServerMember(ctx, srv.ID, u.ID); err != nil {
+			t.Fatalf("add member: %v", err)
+		}
+	}
+	if err := hs.store.SetServerRole(ctx, srv.ID, owner.ID, admin.ID, "admin"); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	invitesPath := fmt.Sprintf("/api/servers/%d/invites", srv.ID)
+
+	t.Run("listing is admin-gated", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "GET", invitesPath, "", ""), http.StatusUnauthorized, "unauth list")
+		wantStatus(t, hs.req(t, "GET", invitesPath, strangerTok, ""), http.StatusForbidden, "stranger lists")
+		wantStatus(t, hs.req(t, "GET", invitesPath, memberTok, ""), http.StatusForbidden, "member lists")
+		wantStatus(t, hs.req(t, "GET", invitesPath, adminTok, ""), http.StatusOK, "admin lists")
+	})
+
+	// A plain member can still mint (members-only POST is unchanged); the new code
+	// shows up in the admin list. Grab the code for the revoke checks below.
+	mint := hs.req(t, "POST", invitesPath, memberTok, "")
+	wantStatus(t, mint, http.StatusCreated, "member mints invite")
+	var minted struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(mint.Body.Bytes(), &minted); err != nil || minted.Code == "" {
+		t.Fatalf("mint returned no code: %v (body %s)", err, mint.Body.String())
+	}
+
+	t.Run("minted code appears in the admin list", func(t *testing.T) {
+		list := hs.req(t, "GET", invitesPath, adminTok, "")
+		wantStatus(t, list, http.StatusOK, "admin lists after mint")
+		if !strings.Contains(list.Body.String(), fmt.Sprintf(`"code":%q`, minted.Code)) {
+			t.Fatalf("invites list should contain the minted code; got %s", list.Body.String())
+		}
+	})
+
+	revokePath := fmt.Sprintf("%s/%s", invitesPath, minted.Code)
+	t.Run("revoke is admin-gated", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", revokePath, "", ""), http.StatusUnauthorized, "unauth revoke")
+		wantStatus(t, hs.req(t, "DELETE", revokePath, strangerTok, ""), http.StatusForbidden, "stranger revokes")
+		wantStatus(t, hs.req(t, "DELETE", revokePath, memberTok, ""), http.StatusForbidden, "member revokes")
+	})
+
+	t.Run("cross-server revoke is blocked (Rule B) and the foreign code still works", func(t *testing.T) {
+		// A second server owned by the same owner, with its own invite code.
+		srvB, err := hs.store.CreateServer(ctx, owner.ID, "Other Guild")
+		if err != nil {
+			t.Fatalf("create server B: %v", err)
+		}
+		codeB, err := hs.store.CreateInvite(ctx, srvB.ID, owner.ID)
+		if err != nil {
+			t.Fatalf("invite B: %v", err)
+		}
+		// Admin of A tries to revoke B's code via A's path → 404 (scoped by server_id).
+		crossPath := fmt.Sprintf("/api/servers/%d/invites/%s", srv.ID, codeB)
+		wantStatus(t, hs.req(t, "DELETE", crossPath, adminTok, ""), http.StatusNotFound, "cross-server revoke")
+		// Proof it wasn't deleted: the code still admits a joiner to server B.
+		wantStatus(t, hs.req(t, "POST", fmt.Sprintf("/api/invites/%s", codeB), joinerTok, ""), http.StatusOK, "B's code still redeems")
+	})
+
+	t.Run("admin revokes → 204, code stops redeeming, re-revoke is 404", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "DELETE", revokePath, adminTok, ""), http.StatusNoContent, "admin revokes")
+		// The revoked code no longer admits anyone.
+		wantStatus(t, hs.req(t, "POST", fmt.Sprintf("/api/invites/%s", minted.Code), joinerTok, ""), http.StatusNotFound, "revoked code redeem")
+		// It's gone from the list, and revoking it again is 404.
+		list := hs.req(t, "GET", invitesPath, adminTok, "")
+		if strings.Contains(list.Body.String(), fmt.Sprintf(`"code":%q`, minted.Code)) {
+			t.Fatalf("revoked code should be gone from the list; got %s", list.Body.String())
+		}
+		wantStatus(t, hs.req(t, "DELETE", revokePath, adminTok, ""), http.StatusNotFound, "re-revoke unknown")
+	})
+}
+
 // TestRouterTimeoutMemberIntegration walks the timeout/clear endpoints through the HTTP
 // layer (authz matrix mirrors ban) and proves the user-visible guarantee: a timed-out
 // member's post is rejected server-side (ErrTimedOut) until the timeout is cleared, and
