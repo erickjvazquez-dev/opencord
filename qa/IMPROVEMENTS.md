@@ -2191,3 +2191,38 @@ Rule 10 anti-churn). Deploys are for app changes; a test isn't one.
 **Next QA growth / follow-ups:** still open — a 2-client UI exhaustion test (panel-mint a
 1-use code → a second browser joins → the code disappears from the admin list); invite-links
 / temporary-membership remain the Discord invite gaps.
+
+---
+
+## 2026-06-16 — tick 113: server settings (rename + delete) + a vision-found polish gap
+
+**Shipped:** the two missing "Server Settings" actions. `RenameServer` (owner/admin,
+live `server-renamed` sidebar relabel) and `DeleteServer` (owner-only; one tx deletes the
+server's messages — `messages.channel_id` has no `ON DELETE CASCADE` — then drops the
+server, cascading members/channels/invites/categories/bans; global `#general` survives;
+members live-evicted via the existing `server-removed` path). UI: a ⚙ Server settings
+section atop the members panel. Verified end-to-end on the live Railway deploy: the new
+CSS bundle serves `.delete-server-btn`, and a prod API round-trip returned PATCH 200 /
+DELETE 204 / GET `[]` / re-DELETE 404 / blank-name 400.
+
+**QA grown:** new store + HTTP authz-matrix tests (rename admin+, delete owner-only;
+member/admin/stranger 403; unknown 404) + a cascade test (messages/members/channels gone,
+`#general` intact), and a browser E2E flow (create → rename → delete a throwaway server,
+vision-checked).
+
+**Highest-value improvement found (this is the reflection):** the AI-vision pass on the
+new screenshots surfaced a *pre-existing* polish gap the feature didn't cause but exposed —
+`.server-name` has no `text-overflow: ellipsis` / `min-width: 0`, so a long server name
+(my 19-char "qa settings renamed") overflows the fixed 220px sidebar. Every prior browser
+QA only ever created the 9-char "qa server", so the truncation path was never exercised —
+a coverage blind spot. Logged as a GOAL.md polish item (truncate + `title` tooltip; extend
+QA to create a long-named server and vision-check the row stays one line). Did NOT fix it
+in this commit (Rule 10 — unrelated to the feature; it gets its own repro + test next).
+
+**Loop-process note:** QA fixtures should deliberately use *boundary-sized* inputs (long
+names, long status, long topic), not just convenient short ones — a short happy-path string
+hides every truncation/overflow bug. Carry this: "did my fixture stress the width, or just
+the behaviour?" (cf. tick-110's "did I test the property the design exists for?").
+
+**Deploy note:** real app change → committed, pushed origin, `railway up` deployed, live
+rollout confirmed by fetching the served bundle (not just `/healthz`).
