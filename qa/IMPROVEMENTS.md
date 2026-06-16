@@ -2510,3 +2510,30 @@ isn't "nothing to do" — it's "encode the bound as a regression."** A correct-b
 silently regresses (a future refactor bumps `1<<12` and no test notices). The deliverable of a
 clean security audit is the test that pins the bound, not just the green probe. Component
 rotation: advanced **security / hostile-input-proof** this tick.
+
+---
+
+## 2026-06-16 (tick 125) — Doc-sync: README front door was stale vs the shipped product (Rule 14)
+
+After 3 test/QA ticks, did a **docs-sync** pass (Rule 14). The README — the open-source project's
+front door — had drifted hard: the "Working today" list omitted presence states (idle/DnD/
+invisible) + custom status, the whole **roles / moderation (kick·ban·timeout) / invites / channel
+categories / pinned messages / read-state + @mention badges** feature set, and the **API surface
+table listed 16 of the now-51 endpoints** (missing `PUT /me/status` + `/me/presence`, kick/ban/
+timeout, leave/transfer, server rename/delete, invite list/revoke, categories, pins, unreads,
+voice/token). The Configuration table was missing the shipped STUN/TURN vars.
+
+Fixed all three sections. **Verified accuracy, not vibes:** wrote a Python cross-check that parses
+every `r.{Get,Post,…}("…")` decl from the router and every README table row, normalizes both to
+`METHOD path`, and asserts the sets are EQUAL — `actual 51 == readme 51`, zero invented endpoints,
+zero missing. Also verified each documented payload (`{maxUses}`, `{userId,durationSeconds}`,
+`{userId,reason}`, `{userId}`, `{postPolicy?,topic?,slowmodeSeconds?}`) against the real handler
+structs rather than guessing field names. Docs-only → push origin, no redeploy (README isn't served).
+
+**Highest-value lesson — docs drift silently and fastest on the highest-traffic surface.** The
+README accumulated ~35 endpoints and several feature families of drift while every tick shipped
+"the feature" without the doc delta. The fix is a **machine-checkable invariant**: a route-vs-README
+diff is cheap and could be a CI guard so the API table can never silently fall behind again (logged
+as a follow-up QA idea). Carry: when a tick adds/renames an endpoint or user-facing flow, the README
+delta ships in the same push (Rule 14) — and a doc table that enumerates code should be diff-verified
+against the code, not eyeballed.
