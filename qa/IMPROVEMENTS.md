@@ -2159,3 +2159,35 @@ greps newly-added `className` literals in `web/src` against hardcoded selectors 
 `qa/*.mjs` would have caught both tick-108 collisions before the 3-min boot — worth it if
 the false-positive rate on intentionally-shared classes (`link`, `message`) can be kept low.
 (3) invite-links / temporary-membership are the remaining Discord invite gaps.
+
+---
+
+## 2026-06-16 — tick 110: prove max-uses is race-safe (Track-0 hardening)
+
+**Shipped (test-only):** a store-level concurrency test for invite max-uses — 25 goroutines
+released simultaneously redeem a maxUses=5 code; asserts EXACTLY 5 succeed, 20 get
+ErrInviteExhausted, the stored `uses` counter is exactly 5 (no overshoot), and exactly 5
+members were admitted. PASS x3 under `-race` (clean). ~2.4s without -race, so the gate
+(`go test ./...`, no -race) barely notices it.
+
+**Why this tick (not a 3rd feature):** tick 109's max-uses used a guarded
+`UPDATE ... WHERE uses < max_uses` inside a tx *specifically* to be race-safe, but the
+integration test only redeemed sequentially — it asserted the feature works, never that the
+safety property it was built for actually holds under contention. A claimed invariant with
+no test that can fail when it's violated is an unguarded invariant. After two back-to-back
+features, the highest-value move was to *prove* the safety claim rather than pile on more
+surface area — and to do it as a pure test (no product/UI change), the lowest-risk way to
+keep advancing in a deep session.
+
+**Loop-process note:** when a change's whole justification is a concurrency/atomicity
+property (tx, CAS, guarded UPDATE, lock), the same PR should add a test that actually races
+it — a sequential test passes whether or not the guard exists. Carry this: "did I test the
+property the design exists for, or just the happy path?"
+
+**Deploy note:** test-only change → committed + pushed to origin, but NO `railway up` (the
+served binary + web bundle are byte-identical; deploying would rebuild the same artifact —
+Rule 10 anti-churn). Deploys are for app changes; a test isn't one.
+
+**Next QA growth / follow-ups:** still open — a 2-client UI exhaustion test (panel-mint a
+1-use code → a second browser joins → the code disappears from the admin list); invite-links
+/ temporary-membership remain the Discord invite gaps.
