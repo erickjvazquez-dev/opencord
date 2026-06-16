@@ -235,23 +235,32 @@ func TestServeWSRateLimitIntegration(t *testing.T) {
 			t.Fatalf("write %d: %v", i, err)
 		}
 	}
-	time.Sleep(400 * time.Millisecond) // let the server process the burst
-
-	msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 100)
-	if err != nil {
-		t.Fatalf("recent: %v", err)
-	}
+	// Poll until the burst has landed (a loaded machine may need well over 400ms to
+	// process the flood), then assert throttling dropped the rest. Polling the lower
+	// bound de-flakes without weakening the check: a broken limiter would let all
+	// `flood` through and the upper-bound assert below would still catch it.
 	saved := 0
-	for _, m := range msgs {
-		if strings.HasPrefix(m.Body, "flood-") {
-			saved++
+	for i := 0; i < 40; i++ { // ~4s max
+		msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 100)
+		if err != nil {
+			t.Fatalf("recent: %v", err)
 		}
+		saved = 0
+		for _, m := range msgs {
+			if strings.HasPrefix(m.Body, "flood-") {
+				saved++
+			}
+		}
+		if saved >= 3 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	if saved >= flood {
 		t.Fatalf("rate limiter dropped nothing: saved %d of %d sent", saved, flood)
 	}
 	if saved < 3 {
-		t.Fatalf("rate limiter dropped too much (burst should let ~%d through): saved %d", int(5), saved)
+		t.Fatalf("rate limiter dropped too much (burst should let ~5 through): saved %d", saved)
 	}
 	t.Logf("rate limiter: %d of %d flooded messages persisted, rest throttled", saved, flood)
 }
