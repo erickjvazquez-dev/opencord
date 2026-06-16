@@ -2129,3 +2129,33 @@ Scoped it to `.channel-item`. Surfaced by this tick's full QA timing, not caused
 slice (schema `max_uses`/`uses` + atomic redeem guard + a column in the panel). A QA
 assertion that greps new CSS classes against `qa/*.mjs` would have caught both collisions
 pre-run — worth a tiny lint step in `qa/run.sh`.
+
+---
+
+## 2026-06-16 — tick 109: invite max-uses (cap a code's joins)
+
+**Shipped:** invites can now carry an optional max-uses cap (1–1000; blank = unlimited).
+`server_invites.max_uses`/`uses`; `RedeemInvite` enforces + counts the cap in ONE
+transaction (guarded `UPDATE ... WHERE uses < max_uses` then the member INSERT, so a
+failed join rolls back the use and concurrent redeems of the last slot can't overshoot),
+and short-circuits an existing member so a re-redeem burns no use. Panel shows `N/M uses`.
+Adversarial integration test (3 subtests) + browser E2E (creates unlimited + a 0/5 cap) +
+AI-vision. `CreateInvite` kept as the unlimited shorthand → zero churn to its 8 callers.
+
+**Highest-value note — last tick's lesson held: dedicated CSS classes from the start →
+a clean first-try QA (browser=0 realtime=0 voice=0), zero collisions.** Tick 108 burned
+two QA iterations on `.member-row` / `.bans-head` reuse; this tick I used `invite-*`
+classes throughout and added the new assertions before running, so the full suite passed
+on the first attempt. The discipline (new UI element ⇒ its own classes; grow the QA in the
+same change) is paying off. Also pre-empted the harness collision the new flow could cause:
+the panel's "+ New invite" now opens a `window.prompt` for the cap, so the browser QA sets
+`promptAnswer` ('' then '5') before each click — a feature that adds a prompt MUST update
+the QA's dialog handling in the same change, or the auto-answer feeds garbage to validation.
+
+**Next QA growth / follow-ups:** (1) a two-client browser test that actually **exhausts** a
+maxUses=1 invite through the UI (A mints a 1-use code → B joins → C's redeem is refused),
+not just the HTTP-layer exhaustion already covered. (2) A small `qa/run.sh` pre-flight that
+greps newly-added `className` literals in `web/src` against hardcoded selectors in
+`qa/*.mjs` would have caught both tick-108 collisions before the 3-min boot — worth it if
+the false-positive rate on intentionally-shared classes (`link`, `message`) can be kept low.
+(3) invite-links / temporary-membership are the remaining Discord invite gaps.
