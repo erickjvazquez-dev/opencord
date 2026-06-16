@@ -241,7 +241,9 @@ item from here as the structural milestones above land.
   verified. (**unread DONE** — sidebar unread dots, see Messaging "read state"; bookmarks
   + **mention-count badges DONE** — red count badge for unread @mentions, see Notifications;
   bookmarks TODO)
-- [ ] Message search (from/in/has/before/after) · polls · timestamp grouping
+- [~] Message search — **operators DONE** (`from:<user>`, `has:link`, `has:image`,
+  `has:file` + free text; parameterized dynamic SQL, store+browser tested, injection-inert).
+  `in:#channel` / `before:`/`after:` · polls · timestamp grouping TODO
 
 ### Voice / Video
 - [~] Voice channels — mesh WebRTC audio for small calls (2–4): join/leave, live

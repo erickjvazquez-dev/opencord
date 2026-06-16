@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (tick 100) — Search operators; a placeholder change caught the QA's brittle locator
+
+Milestone tick 100. Shipped **search operators** (`from:`, `has:link/image/file`) on top
+of the existing search — clean, no schema, dynamic-but-parameterized SQL. **Component:
+chat → parity.**
+
+**Highest-value lesson — UI-string changes are a silent QA-breaker; locate by structure,
+not by copy.** Adding the operator *hint* meant changing the search placeholder from
+"Search this channel…" to "Search… (try from:user has:link)". The browser QA located the
+box via `getByPlaceholder('Search this channel')` — a substring match that the new copy no
+longer satisfies, so the QA would have broken on a purely cosmetic edit. Fixed by switching
+to the **`.search-input` class locator** (structure, stable across copy changes). General
+rule applied: QA selectors should key on roles/test-ids/classes, not on display copy that
+product iteration will churn. (Audit candidate: other `getByPlaceholder`/`getByText` on
+churn-prone copy.)
+
+**Security note (Rule B, done right):** the dynamic WHERE is assembled from fixed operator
+fragments + bind-parameter *values* only — the store test encodes an injection in `from:`
+(`from:' OR '1'='1`) and asserts it matches nothing. Dynamic SQL is fine when the *shape*
+is fixed and only *values* vary through parameters.
+
+- **Coverage:** the `has:image`/`has:file` distinction is store-tested (via
+  `SaveWithAttachments` with image vs non-image content types); the browser test exercises
+  `from:` (attachments aren't in that channel). Adequate split.
+- **Milestone reflexion (90→100):** 11 ticks, every one verified end-to-end + deployed,
+  spanning UI, security, chat realtime (kick/presence/status/unread/mentions/search), infra
+  (per-user push), and audio (TURN) — plus two health/de-flake ticks. Furthest-from-north-
+  star still: **built-in secure tunneling** (North-Star feature, untouched — needs a
+  dedicated spec + relay-tech decision, likely multi-tick) and **audio mesh→SFU at true
+  scale**. Those are the next big rocks.
+
 ## 2026-06-15 (tick 99) — Rotated to the most-neglected component (audio); shipped TURN config
 
 After a chat/security/QA run (ticks 91–98), deliberately rotated to **audio** — the
