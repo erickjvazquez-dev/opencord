@@ -262,7 +262,12 @@ async function main() {
 
   step('B reloads, opens the DM from the sidebar, and reads the private message')
   await b.reload({ waitUntil: 'domcontentloaded' })
-  await b.getByRole('button', { name: new RegExp(userA) }).click()
+  // Target the DM's sidebar channel button specifically. `getByRole('button', {name:
+  // /userA/})` is too loose — once #general renders a reply whose preview is labelled
+  // "jump to <userA>'s message", that reply-context button also matches userA's name and
+  // strict mode sees two buttons (a render race). A reply-context button is not a
+  // .channel-item, so scoping to .channel-item resolves to exactly the DM.
+  await b.locator('.channel-item', { hasText: userA }).first().click()
   await b.getByText(dmBody).waitFor({ timeout: 8000 })
   await b.screenshot({ path: join(SHOTS, 'rt-05-bob-dm.png') })
   check(await b.getByText(dmBody).isVisible(), 'B opens the DM and reads the private message')
