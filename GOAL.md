@@ -199,7 +199,9 @@ item from here as the structural milestones above land.
 ### Servers / Guilds
 - [ ] Create/join servers (guilds) + server settings
 - [ ] Channel categories + ordering
-- [ ] Invites (links, max-uses, expiry, temporary membership)
+- [~] Invites — code-join + **7-day expiry DONE** (enforced server-side at redeem;
+  expired → 404, adversarially tested; legacy invites stay permanent). max-uses ·
+  invite links · temporary membership · revoke UI TODO
 - [ ] Server discovery / community servers · vanity invite URLs
 - [ ] Welcome screen + rules screening · server templates
 - [~] Server boosts / tiers (cosmetic) TODO · **member list DONE** — Discord-style

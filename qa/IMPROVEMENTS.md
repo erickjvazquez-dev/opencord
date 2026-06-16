@@ -3,6 +3,35 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (tick 101) — Invite expiry; chose the clean-default over the prompt-churn version
+
+Shipped **invite expiry** (7-day default, enforced at redeem). **Component: security/servers
+→ hostile-input-proof.** Spent most of the thinking on *scoping* — the cohesive feature is
+"expiry + max-uses + customizable", but the only good UX for the customizable parts is a
+small invite-options *form*, and bolting it on as window.prompt(s) would have churned the
+two-dialog invite flow the browser QA reads codes from. Chose the **clean, complete,
+zero-UI-churn slice**: a sensible default (auto-expire, like Discord) enforced server-side,
+with customization + max-uses explicitly deferred to a form-based tick.
+
+**Highest-value lesson — when the clean UX needs more UI than the tick affords, ship the
+safe *default* and defer the *controls*, rather than ship the controls as prompt-clutter.**
+A forced 7-day expiry is a real hygiene win on its own (a leaked code stops working) and
+doesn't regress the common case (instant redeem). The alternative (prompt for expiry/max-
+uses) would have added fragile two-dialog QA coupling for marginal extra value this tick.
+Defaults are a legitimate, often-best first slice of a configurable feature.
+
+**Backward-compat by design:** the new `expires_at` is nullable; legacy invites (NULL) stay
+permanent, only new ones expire — the migration can't break existing invites. Worth stating
+in the commit so a reviewer doesn't fear a mass-expiry.
+
+- **Verification-boundary note (Rule 14):** the expired-rejection is integration-tested
+  (force `expires_at` into the past), not reproducible on the live deploy in-context (can't
+  age an invite 7 days). The live check is happy-path mint+redeem + healthz; a backend-only
+  change with no instantly-observable new surface limits the live rollout signal — stated,
+  not hidden.
+- **Next:** the deferred invite-options form (expiry choice + max-uses) is a small UI tick;
+  the bigger rocks remain built-in tunneling + audio mesh→SFU scale.
+
 ## 2026-06-16 (tick 100) — Search operators; a placeholder change caught the QA's brittle locator
 
 Milestone tick 100. Shipped **search operators** (`from:`, `has:link/image/file`) on top
