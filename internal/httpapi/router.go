@@ -70,15 +70,16 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			})
 			r.Get("/channels", chat.HandleChannels(store))
 			r.Post("/channels", chat.HandleCreateChannel(store))
-			// Unread indicators: the caller's accessible channels with unread messages.
+			// Unread indicators: the caller's accessible channels with unread messages,
+			// each with a count of unread messages that @-mention them (red badge).
 			r.Get("/unreads", func(w http.ResponseWriter, r *http.Request) {
 				me, _ := auth.UserFrom(r.Context())
-				ids, err := store.UnreadChannelIDs(r.Context(), me.ID)
+				chans, err := store.Unreads(r.Context(), me.ID, me.Username)
 				if err != nil {
 					http.Error(w, `{"error":"could not load unreads"}`, http.StatusInternalServerError)
 					return
 				}
-				writeJSON(w, http.StatusOK, map[string]any{"channelIds": ids})
+				writeJSON(w, http.StatusOK, map[string]any{"channels": chans})
 			})
 			// Mark a channel read up to its latest message (access-gated, Rule C).
 			r.Post("/channels/{id}/read", func(w http.ResponseWriter, r *http.Request) {

@@ -230,25 +230,26 @@ func TestRouterUnreadIntegration(t *testing.T) {
 		t.Fatalf("create public channel: %v", err)
 	}
 
-	unreadIDs := func() []int64 {
+	unreadChannels := func() []chat.ChannelUnread {
 		w := hs.req(t, "GET", "/api/unreads", myTok, "")
 		wantStatus(t, w, http.StatusOK, "GET unreads")
 		var resp struct {
-			ChannelIDs []int64 `json:"channelIds"`
+			Channels []chat.ChannelUnread `json:"channels"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode unreads: %v", err)
 		}
-		return resp.ChannelIDs
+		return resp.Channels
 	}
-	has := func(ids []int64, id int64) bool {
-		for _, x := range ids {
-			if x == id {
+	has := func(_ []int64, id int64) bool {
+		for _, c := range unreadChannels() {
+			if c.ChannelID == id {
 				return true
 			}
 		}
 		return false
 	}
+	unreadIDs := func() []int64 { return nil } // legacy no-op; has() recomputes
 
 	wantStatus(t, hs.req(t, "GET", "/api/unreads", "", ""), http.StatusUnauthorized, "unauth GET unreads")
 

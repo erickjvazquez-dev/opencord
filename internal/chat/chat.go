@@ -753,14 +753,36 @@ func (s *Store) MarkChannelRead(ctx context.Context, channelID, userID int64) er
 	return err
 }
 
-// UnreadChannelIDs returns the ids of channels userID can access that hold a non-deleted
-// message newer than their read marker, authored by someone else (your own sends never
-// self-unread). Access is scoped exactly like CanAccessChannel (public-global OR
-// server-member OR dm-member), so unread never leaks a channel you can't see.
-func (s *Store) UnreadChannelIDs(ctx context.Context, userID int64) ([]int64, error) {
+// ChannelUnread is one channel's unread state for a user: the channel is unread (it's
+// only returned when it has unread messages) and Mentions counts the unread messages
+// that @-mention the user (incl. @everyone/@here) — drives the red mention badge.
+type ChannelUnread struct {
+	ChannelID int64 `json:"id"`
+	Mentions  int   `json:"mentions"`
+}
+
+// Unreads returns, for each channel userID can access that holds a non-deleted message
+// newer than their read marker authored by someone else (your own sends never
+// self-unread), the channel id and how many of those unread messages mention the user.
+// Access is scoped exactly like CanAccessChannel (public-global OR server-member OR
+// dm-member), so unread never leaks a channel you can't see.
+//
+// Mention match (mirrors the client's `@([A-Za-z0-9_]{2,32})` highlight, case-insensitive,
+// with @everyone/@here): `@(username|everyone|here)` followed by a non-word char or end —
+// the trailing boundary stops `@alice` from matching `@alice2`. Usernames are validated
+// `[a-zA-Z0-9_]{3,32}` so the pattern has no regex metachars, and it's passed as a bind
+// parameter (no SQL injection) — Rule B, double safety.
+func (s *Store) Unreads(ctx context.Context, userID int64, username string) ([]ChannelUnread, error) {
+	pattern := `@(` + username + `|everyone|here)([^a-z0-9_]|$)`
 	rows, err := s.pool.Query(ctx,
-		`SELECT c.id
+		`SELECT c.id, COUNT(*) FILTER (WHERE msg.body ~* $2) AS mentions
 		   FROM channels c
+		   JOIN messages msg ON msg.channel_id = c.id
+		    AND msg.deleted_at IS NULL
+		    AND msg.user_id <> $1
+		    AND msg.id > COALESCE(
+		          (SELECT last_read_id FROM channel_reads cr
+		            WHERE cr.channel_id = c.id AND cr.user_id = $1), 0)
 		  WHERE (
 		          (c.kind <> 'dm' AND c.server_id IS NULL)
 		          OR (c.server_id IS NOT NULL AND EXISTS (
@@ -770,25 +792,18 @@ func (s *Store) UnreadChannelIDs(ctx context.Context, userID int64) ([]int64, er
 		                SELECT 1 FROM channel_members m
 		                 WHERE m.channel_id = c.id AND m.user_id = $1))
 		        )
-		    AND EXISTS (
-		          SELECT 1 FROM messages msg
-		           WHERE msg.channel_id = c.id
-		             AND msg.deleted_at IS NULL
-		             AND msg.user_id <> $1
-		             AND msg.id > COALESCE(
-		                   (SELECT last_read_id FROM channel_reads cr
-		                     WHERE cr.channel_id = c.id AND cr.user_id = $1), 0))`, userID)
+		  GROUP BY c.id`, userID, pattern)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := make([]int64, 0)
+	out := make([]ChannelUnread, 0)
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var u ChannelUnread
+		if err := rows.Scan(&u.ChannelID, &u.Mentions); err != nil {
 			return nil, err
 		}
-		out = append(out, id)
+		out = append(out, u)
 	}
 	return out, rows.Err()
 }

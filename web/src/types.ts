@@ -43,6 +43,12 @@ export interface ServerMember {
   status?: string
 }
 
+// A channel with unread messages; `mentions` counts unread @-mentions of you (red badge).
+export interface ChannelUnread {
+  id: number
+  mentions: number
+}
+
 export interface Reaction {
   emoji: string
   count: number

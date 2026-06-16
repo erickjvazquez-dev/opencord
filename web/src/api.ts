@@ -1,4 +1,12 @@
-import type { Channel, DMChannel, Message, Server, ServerMember, User } from './types'
+import type {
+  Channel,
+  ChannelUnread,
+  DMChannel,
+  Message,
+  Server,
+  ServerMember,
+  User,
+} from './types'
 
 interface AuthResponse {
   token: string
@@ -103,12 +111,13 @@ export async function setServerMemberRole(
   }
 }
 
-// The caller's accessible channels that have unread messages (drives sidebar dots).
-export async function fetchUnreads(token: string): Promise<number[]> {
+// The caller's accessible channels that have unread messages, each with a count of
+// unread @-mentions (drives sidebar dots + the red mention badge).
+export async function fetchUnreads(token: string): Promise<ChannelUnread[]> {
   const res = await fetch('/api/unreads', { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) return []
-  const data = (await res.json()) as { channelIds?: number[] }
-  return data.channelIds ?? []
+  const data = (await res.json()) as { channels?: ChannelUnread[] }
+  return data.channels ?? []
 }
 
 // Mark a channel read up to its latest message (fire-and-forget).

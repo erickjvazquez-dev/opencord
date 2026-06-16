@@ -395,12 +395,30 @@ async function main() {
   }
   check(gotUnread, 'B sees an unread dot on the server channel after A posts while B is away')
   await b.screenshot({ path: join(SHOTS, 'rt-12-unread.png') })
+
+  // 7c — Mention: A @mentions B → B's indicator becomes a red mention badge (count).
+  await a.getByPlaceholder(new RegExp('Message #' + srvChan)).fill('@' + userB + ' ping you')
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.getByText('ping you').waitFor({ timeout: 8000 })
+  let gotMention = false
+  for (let i = 0; i < 28 && !gotMention; i++) {
+    if ((await bSrvChanBtn.locator('.mention-badge').count()) > 0) gotMention = true
+    else await b.waitForTimeout(500)
+  }
+  check(gotMention, 'B sees a red mention badge after A @mentions them while away')
+  check(
+    ((await bSrvChanBtn.locator('.mention-badge').textContent()) ?? '').trim().length > 0,
+    'the mention badge shows a count',
+  )
+  await b.screenshot({ path: join(SHOTS, 'rt-12b-mention.png') })
+
   await bSrvChanBtn.click()
   await b.getByText(unreadPing).waitFor({ timeout: 8000 })
   await b.waitForTimeout(600)
   check(
-    (await bSrvChanBtn.locator('.unread-dot').count()) === 0,
-    'opening the channel clears its unread dot (active channel is never unread)',
+    (await bSrvChanBtn.locator('.unread-dot').count()) === 0 &&
+      (await bSrvChanBtn.locator('.mention-badge').count()) === 0,
+    'opening the channel clears both the unread dot and the mention badge',
   )
 
   // 8 — Kick (moderation): A (owner) removes B from the server. B disappears from A's

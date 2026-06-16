@@ -160,8 +160,9 @@ export function Chat({
   const [memberList, setMemberList] = useState<ServerMember[]>([])
   // The caller's own custom status (synced from whichever member list includes them).
   const [myStatus, setMyStatus_] = useState('')
-  // Channel ids with unread messages (sidebar dots). Synced on load + a ~10s poll.
-  const [unread, setUnread] = useState<Set<number>>(new Set())
+  // Unread channels → unread @-mention count (0 = unread, no mention). Sidebar dots +
+  // red mention badges. Synced on load + a ~10s poll.
+  const [unread, setUnread] = useState<Map<number, number>>(new Map())
   // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
@@ -373,7 +374,7 @@ export function Chat({
         void markChannelRead(token, channelId)
         setUnread((prev) => {
           if (!prev.has(channelId)) return prev
-          const next = new Set(prev)
+          const next = new Map(prev)
           next.delete(channelId)
           return next
         })
@@ -965,7 +966,7 @@ export function Chat({
     let live = true
     const load = () =>
       fetchUnreads(token)
-        .then((ids) => live && setUnread(new Set(ids)))
+        .then((cs) => live && setUnread(new Map(cs.map((c) => [c.id, c.mentions]))))
         .catch(() => {})
     void load()
     const timer = setInterval(load, 10000)
@@ -975,8 +976,16 @@ export function Chat({
     }
   }, [token])
 
-  // Helper: does a channel show an unread indicator? (Never the one you're viewing.)
+  // Sidebar indicators (never for the channel you're viewing): a channel is unread if in
+  // the map; mentionCount > 0 shows the red badge instead of the plain dot.
   const isUnread = (id: number) => id !== channelId && unread.has(id)
+  const mentionCount = (id: number) => (id !== channelId ? (unread.get(id) ?? 0) : 0)
+  const unreadIndicator = (id: number) => {
+    const m = mentionCount(id)
+    if (m > 0) return <span className="mention-badge">{m > 9 ? '9+' : m}</span>
+    if (isUnread(id)) return <span className="unread-dot" aria-label="unread" />
+    return null
+  }
 
   // Pick a channel and (on mobile) close the drawer so the chat is visible.
   const selectChannel = (id: number) => {
@@ -1079,7 +1088,7 @@ export function Chat({
             >
               <span className="hash">#</span>
               {c.name}
-              {isUnread(c.id) && <span className="unread-dot" aria-label="unread" />}
+              {unreadIndicator(c.id)}
             </button>
           ))}
         </nav>
@@ -1097,7 +1106,7 @@ export function Chat({
             >
               <Avatar token={token} userId={d.user.id} username={d.user.username} className="dm-avatar" />
               {d.user.username}
-              {isUnread(d.id) && <span className="unread-dot" aria-label="unread" />}
+              {unreadIndicator(d.id)}
             </button>
           ))}
         </nav>
@@ -1120,7 +1129,7 @@ export function Chat({
                 >
                   <span className="hash">#</span>
                   {c.name}
-                  {isUnread(c.id) && <span className="unread-dot" aria-label="unread" />}
+                  {unreadIndicator(c.id)}
                 </button>
               ))}
               <div className="server-group-actions">

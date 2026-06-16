@@ -1111,3 +1111,36 @@ results are access-scoped (you never learn a channel exists via unread).
 **Follow-ups:** mention **counts** (red badge — scan unread bodies for @you/@everyone/
 @here); **instant** unread via the iter-94 per-user push (push channel-activity to
 co-members so dots appear without waiting for the poll); per-channel/server mute.
+
+## Mention-count badges (parity, iter 96)
+
+**Goal:** complete the notification story from iter-95 — a channel with **unread mentions**
+shows Discord's red badge with a count, alongside the plain unread dot. The signal users
+act on most.
+
+**Detection (server-side, matches the client's mention rendering):** the client highlights
+`@([A-Za-z0-9_]{2,32})` case-insensitively as a mention-of-you when the token equals your
+username, plus `@everyone`/`@here`. Server-side, a message mentions user U if
+`body ~* '@(U|everyone|here)([^a-z0-9_]|$)'`: the trailing boundary stops `@alice` from
+matching `@alice2` (the client captures the longer token too). Usernames are validated
+`[a-zA-Z0-9_]{3,32}`, so the interpolated regex has no metacharacters; the pattern is also
+passed as a **bind parameter** (no SQL injection) — double safety (Rule B).
+
+**Store:** `UnreadChannelIDs` → `Unreads(user, username) []ChannelUnread{ChannelID,
+Mentions}`. One query: INNER JOIN accessible channels to their unread, non-deleted,
+not-mine messages (id > last_read), `GROUP BY` channel, with `Mentions = COUNT(*) FILTER
+(WHERE body ~* pattern)`. A channel in the result is unread; Mentions ≥ 1 means it has
+mention(s).
+
+**REST:** `GET /api/unreads` now returns `{channels:[{id, mentions}]}` (was `{channelIds}`).
+
+**Client:** the unread state becomes `Map<channelId, mentionCount>`. The sidebar shows, for
+a non-active channel: a **red mention badge** with the count (capped "9+") when mentions > 0,
+else the grey unread dot. Mark-read on leave clears both.
+
+**Threat model (Rule B/15 — tested):** `@alice2` does not count as a mention of `alice`;
+`@everyone`/`@here` do; your *own* message mentioning someone doesn't badge you; deleted
+messages don't count; mentions in an inaccessible channel never surface (access scoping).
+
+**Follow-ups:** code-span exclusion (``@you`` in inline code shouldn't count — rare),
+@role mentions, a global mention inbox.

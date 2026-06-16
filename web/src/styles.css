@@ -211,6 +211,22 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* Red mention badge with a count — Discord's "you were pinged" pill. */
+.mention-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
 .channel-item .hash {
   color: var(--text-muted);
 }

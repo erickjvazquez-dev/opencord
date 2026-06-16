@@ -652,21 +652,31 @@ func TestUnreadChannelsIntegration(t *testing.T) {
 	ctx := context.Background()
 	other := regUser(t, pool)
 
-	has := func(ids []int64, id int64) bool {
-		for _, x := range ids {
-			if x == id {
+	// helpers over Unreads: is a channel unread, and how many mentions it has for `me`.
+	unreads := func() []chat.ChannelUnread {
+		u, err := store.Unreads(ctx, me.ID, me.Username)
+		if err != nil {
+			t.Fatalf("Unreads: %v", err)
+		}
+		return u
+	}
+	has := func(_ []int64, id int64) bool { // signature kept; ids arg ignored
+		for _, u := range unreads() {
+			if u.ChannelID == id {
 				return true
 			}
 		}
 		return false
 	}
-	unread := func() []int64 {
-		ids, err := store.UnreadChannelIDs(ctx, me.ID)
-		if err != nil {
-			t.Fatalf("UnreadChannelIDs: %v", err)
+	mentions := func(id int64) int {
+		for _, u := range unreads() {
+			if u.ChannelID == id {
+				return u.Mentions
+			}
 		}
-		return ids
+		return -1 // not unread
 	}
+	unread := func() []int64 { return nil } // legacy no-op (has() recomputes)
 
 	ch, err := store.CreateChannel(ctx, uniqueChannel())
 	if err != nil {
@@ -721,6 +731,38 @@ func TestUnreadChannelsIntegration(t *testing.T) {
 	}
 	if has(unread(), sch.ID) {
 		t.Fatal("a server channel I can't access must never surface as unread (access scoping)")
+	}
+
+	// Mention counting (red badge). Fresh channel; mark it read so only new posts count.
+	mc, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create mention channel: %v", err)
+	}
+	if err := store.MarkChannelRead(ctx, mc.ID, me.ID); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	post := func(body string) {
+		if _, err := store.Save(ctx, mc.ID, other.ID, other.Username, body); err != nil {
+			t.Fatalf("post %q: %v", body, err)
+		}
+	}
+	post("hello @" + me.Username + " how are you")      // a real mention of me
+	post("hey @" + me.Username + "extra not a match")   // @me+extra → different token, NOT me
+	post("ping @everyone please")                        // @everyone counts
+	post("just a normal message with no ping")           // no mention
+	if got := mentions(mc.ID); got != 2 {
+		t.Fatalf("mention count = %d, want 2 (one @me + one @everyone; @me+suffix excluded)", got)
+	}
+	// My OWN message mentioning someone doesn't badge me.
+	mc2, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create mention channel 2: %v", err)
+	}
+	if _, err := store.Save(ctx, mc2.ID, me.ID, me.Username, "@everyone from me"); err != nil {
+		t.Fatalf("self mention post: %v", err)
+	}
+	if mentions(mc2.ID) != -1 {
+		t.Fatal("my own @everyone must not badge me (channel shouldn't even be unread for me)")
 	}
 }
 
