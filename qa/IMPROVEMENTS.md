@@ -2397,3 +2397,23 @@ bug HTTP/unit tests miss. Fixed the second spot, re-ran, green.
 2. **This is why browser QA runs before commit, not after.** A backend-correct, unit-green
    change can still render wrong; only driving the real UI + AI-vision catches it. The gate
    worked — keep it mandatory for every UI-touching tick.
+
+---
+
+## 2026-06-16 — responsive QA for new header controls (caught a real overflow)
+
+**Lean tick (context-hygiene):** after 3 feature ticks, advanced the QA PROCESS instead of a
+4th feature. Added browser QA `08b`: at 390px the always-shown user controls (presence picker
++ status + log out) must be reachable AND the header must have zero horizontal overflow.
+
+**It immediately caught a real bug:** 149px of horizontal overflow on mobile — the `.meta`
+control row is a `nowrap` flex group, and the presence picker added last tick pushed it past
+the viewport. It was latent because only the DESKTOP header was overflow-checked (false
+confidence). Fixed: `.meta` wraps onto multiple lines at ≤640px + a tighter status max-width →
+0px overflow, AI-vision verified the controls wrap cleanly. Shipped + live-verified.
+
+**Carry this (QA-process rule): any new always-visible header/toolbar control gets a
+mobile-width (≤640px) no-overflow assertion in the SAME tick it's added — not a tick later.**
+A desktop-only layout check passes while the mobile layout silently overflows; the two are
+independent and both must be guarded when a persistent control is added. Component/dimension
+rotation: advanced the **responsive** QA dimension (Step 4b-ii) this tick.
