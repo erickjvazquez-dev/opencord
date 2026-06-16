@@ -1490,6 +1490,19 @@ button:disabled {
     align-items: center;
   }
 
+  /* The user-controls row (avatar + presence picker + status + log out) is a
+     nowrap flex group anchored right; on a phone the group can be wider than the
+     viewport, so let it wrap onto multiple lines instead of overflowing the
+     header horizontally. Individual items already ellipsis-truncate. */
+  .meta {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+  .status-edit {
+    max-width: 12ch;
+  }
+
   /* Sidebar becomes an off-canvas drawer that slides in over the chat. */
   .sidebar {
     position: fixed;

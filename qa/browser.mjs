@@ -831,6 +831,19 @@ async function main() {
     'selecting a channel closes the drawer',
   )
 
+  // 8b — Mobile header controls: the always-shown user controls (presence picker +
+  // status + log out) must stay reachable and NOT cause horizontal overflow at phone
+  // width. Guards the responsive correctness of the presence picker added this cycle.
+  step('phone-width header: presence picker reachable, no horizontal overflow')
+  await page.waitForTimeout(350) // let the drawer's slide-out transition settle for a clean shot
+  check(await page.locator('.presence-select').isVisible(), 'presence picker is reachable on mobile')
+  check(await page.getByRole('button', { name: 'log out' }).isVisible(), 'log out is reachable on mobile')
+  const mHeaderOverflow = await page
+    .locator('.chat-header')
+    .evaluate((h) => h.scrollWidth - h.clientWidth)
+  check(mHeaderOverflow <= 1, `mobile header has no horizontal overflow (got ${mHeaderOverflow}px)`)
+  await shot('08b-mobile-header.png')
+
   await browser.close()
   console.log(
     `\nbrowser QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +
