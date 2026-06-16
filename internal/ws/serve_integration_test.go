@@ -428,9 +428,19 @@ func TestServeWSVoiceFloodGuard(t *testing.T) {
 	// buffer) must be relayed IN FULL: the guard must not false-drop real ICE.
 	const legit = 25
 	send(legit, true)
-	time.Sleep(400 * time.Millisecond)
-	if got := atomic.LoadInt64(&received); got < legit {
-		t.Fatalf("voice guard throttled a legitimate burst: relayed %d of %d", got, legit)
+	// Poll until the legit burst is fully relayed (a loaded machine may need >400ms to
+	// process it) — the guard must not false-drop real ICE. Same de-flake as the
+	// rate-limit test: a fixed sleep here false-reds the gate under concurrent load.
+	relayed := int64(0)
+	for i := 0; i < 40; i++ {
+		relayed = atomic.LoadInt64(&received)
+		if relayed >= legit {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if relayed < legit {
+		t.Fatalf("voice guard throttled a legitimate burst: relayed %d of %d", relayed, legit)
 	}
 	atomic.StoreInt64(&received, 0)
 
@@ -507,13 +517,23 @@ func TestServeWSHostileFrameHandling(t *testing.T) {
 	// Final legit message: if it lands, the connection survived the whole battery.
 	send(`{"body":"final-legit"}`)
 
-	msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 200)
-	if err != nil {
-		t.Fatalf("recent: %v", err)
-	}
+	// Poll for the final legit message to persist (under load the last frame may take a
+	// moment) — once it's there, every earlier frame's fate is settled too, since it was
+	// the last thing sent. Avoids a fixed-wait false-red in the gate.
 	byBody := map[string]chat.Message{}
-	for _, m := range msgs {
-		byBody[m.Body] = m
+	for i := 0; i < 40; i++ {
+		msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 200)
+		if err != nil {
+			t.Fatalf("recent: %v", err)
+		}
+		byBody = map[string]chat.Message{}
+		for _, m := range msgs {
+			byBody[m.Body] = m
+		}
+		if _, ok := byBody["final-legit"]; ok {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	// 1. Connection survived the battery → the final legit message landed.
