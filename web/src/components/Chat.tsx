@@ -1433,8 +1433,14 @@ export function Chat({
                 </button>
               </div>
               {membersOf.members.map((mb) => (
-                <div key={mb.userId} className="member-row">
-                  <Avatar token={token} userId={mb.userId} username={mb.username} />
+                <div key={mb.userId} className={`member-row${mb.online ? '' : ' offline'}`}>
+                  <span className="avatar-presence">
+                    <Avatar token={token} userId={mb.userId} username={mb.username} />
+                    <span
+                      className={`presence-dot ${mb.online ? 'online' : 'offline'}`}
+                      title={mb.online ? 'online' : 'offline'}
+                    />
+                  </span>
                   <span className="author">{mb.username}</span>
                   <span className={`role-badge role-${mb.role}`}>{mb.role}</span>
                   {iAmServerOwner && mb.role !== 'owner' && (
@@ -1802,8 +1808,19 @@ export function Chat({
                   {label} — {group.length}
                 </div>
                 {group.map((mb) => (
-                  <div key={mb.userId} className="member-list-row" data-member={mb.userId}>
-                    <Avatar token={token} userId={mb.userId} username={mb.username} />
+                  <div
+                    key={mb.userId}
+                    className={`member-list-row${mb.online ? '' : ' offline'}`}
+                    data-member={mb.userId}
+                    data-online={mb.online ? '1' : '0'}
+                  >
+                    <span className="avatar-presence">
+                      <Avatar token={token} userId={mb.userId} username={mb.username} />
+                      <span
+                        className={`presence-dot ${mb.online ? 'online' : 'offline'}`}
+                        title={mb.online ? 'online' : 'offline'}
+                      />
+                    </span>
                     <span className="author">{mb.username}</span>
                     {mb.role !== 'member' && (
                       <span className={`role-badge role-${mb.role}`}>{mb.role}</span>

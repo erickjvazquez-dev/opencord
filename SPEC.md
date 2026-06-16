@@ -983,3 +983,33 @@ it stops receiving a subsequently-posted message)** and a fresh WS connect 403s.
 **Follow-ups (out of slice):** ban (kick + invite blocklist), timeout/mute, a live "you
 were removed" toast + auto-drop of the server from the kicked user's sidebar (needs a
 targeted WS user-event; today it updates on next refresh).
+
+## Per-member online presence (member list — parity, iter 92)
+
+**Goal:** the Discord-style member list (and members panel) shows who's **online** —
+a green status dot on online members, grey + dimmed for offline. Closes the GOAL
+member-list follow-up ("per-member online/idle presence still TODO").
+
+**Source of truth:** a user is "online" if they hold ≥1 live WS socket on ANY channel
+(instance-wide), which the hub already knows. New read-only hub query
+`Hub.OnlineUserIDs() map[int64]bool` runs on the hub goroutine (no locks, mirrors the
+evict plumbing): it collects the distinct `user.ID` of all connected clients and
+returns the set via a reply channel.
+
+**Wiring:** `ServerMember` gains `Online bool`. The members endpoint
+(`GET /servers/{id}/members`) annotates each member from the hub set after
+`ListServerMembers`. No new endpoint; the existing 15s member-list poll refreshes
+presence (a live presence broadcast is a follow-up — see below).
+
+**Client:** `ServerMember.online?: boolean`; the member-list sidebar + members panel
+render a `.presence` dot (`online`/`offline`) on each row and dim offline rows. Role
+grouping is unchanged (Discord also groups by role); a separate "Offline" group is a
+later refinement.
+
+**Tests:** ws integration — connect a socket, assert `OnlineUserIDs` contains the user;
+disconnect, assert it's gone. Browser QA asserts the presence dot renders for a
+connected member. AI-vision confirms the dot is visible and not clipped.
+
+**Follow-ups:** live presence (broadcast online/offline on connect/disconnect so the
+list updates instantly, not on the 15s poll); idle/DnD/invisible states; presence dots
+on DM list + message avatars.

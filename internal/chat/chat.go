@@ -78,6 +78,9 @@ type ServerMember struct {
 	UserID   int64  `json:"userId"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	// Online is annotated by the HTTP layer from the hub's live-connection set
+	// (the store doesn't know about sockets). False = no active WS connection.
+	Online bool `json:"online"`
 }
 
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).

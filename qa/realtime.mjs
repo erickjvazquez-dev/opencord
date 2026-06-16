@@ -356,6 +356,24 @@ async function main() {
     'member list includes B',
   )
   check((await ml.locator('.member-group-head').count()) > 0, 'members are grouped by role')
+  // Presence: both A and B hold live sockets, so the member list shows them online
+  // (green dot, data-online="1"). The list was last refreshed by the promote action
+  // while both were connected.
+  const bMlRow = ml.locator('.member-list-row', { hasText: userB })
+  let bOnline = false
+  for (let i = 0; i < 20 && !bOnline; i++) {
+    bOnline = (await bMlRow.getAttribute('data-online')) === '1'
+    if (!bOnline) await a.waitForTimeout(300)
+  }
+  check(bOnline, 'member list marks B online (presence dot) while B is connected')
+  check(
+    (await ml.locator('.member-list-row', { hasText: userA }).getAttribute('data-online')) === '1',
+    'member list marks the owner (A) online while connected',
+  )
+  check(
+    (await ml.locator('.presence-dot.online').count()) > 0,
+    'an online presence dot renders in the member list',
+  )
   await a.screenshot({ path: join(SHOTS, 'rt-09-member-list.png') })
 
   // 8 — Kick (moderation): A (owner) removes B from the server. B disappears from A's

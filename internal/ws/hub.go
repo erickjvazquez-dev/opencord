@@ -46,6 +46,11 @@ type evictReq struct {
 	channels map[int64]bool
 }
 
+// onlineReq asks the hub for the set of currently-connected user IDs (presence).
+type onlineReq struct {
+	reply chan map[int64]bool
+}
+
 // Hub owns the set of connected clients and serializes all mutations through a
 // single goroutine (Run), so the client map needs no locking.
 type Hub struct {
@@ -56,6 +61,7 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	evict      chan evictReq
+	online     chan onlineReq
 }
 
 func NewHub(store *chat.Store) *Hub {
@@ -67,7 +73,16 @@ func NewHub(store *chat.Store) *Hub {
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		evict:      make(chan evictReq),
+		online:     make(chan onlineReq),
 	}
+}
+
+// OnlineUserIDs returns the set of user IDs with ≥1 live WS connection (presence).
+// Read-only; the set is built on the hub goroutine so the client map needs no lock.
+func (h *Hub) OnlineUserIDs() map[int64]bool {
+	reply := make(chan map[int64]bool, 1)
+	h.online <- onlineReq{reply: reply}
+	return <-reply
 }
 
 // EvictUserFromChannels disconnects every live socket belonging to userID that is
@@ -135,6 +150,12 @@ func (h *Hub) Run() {
 					h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
 				}
 			}
+		case req := <-h.online:
+			set := make(map[int64]bool, len(h.clients))
+			for c := range h.clients {
+				set[c.user.ID] = true
+			}
+			req.reply <- set
 		}
 	}
 }

@@ -466,6 +466,12 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			http.Error(w, `{"error":"could not load members"}`, http.StatusInternalServerError)
 			return
 		}
+		// Annotate presence from the hub's live-connection set (the store doesn't
+		// know about sockets). A member is online if they hold ≥1 WS connection.
+		online := hub.OnlineUserIDs()
+		for i := range members {
+			members[i].Online = online[members[i].UserID]
+		}
 		writeJSON(w, http.StatusOK, members)
 	})
 	// Promote/demote a member (owner only): {userId, role:'admin'|'member'}.

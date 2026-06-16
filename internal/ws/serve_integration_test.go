@@ -630,3 +630,52 @@ func TestServeWSEvictOnKickIntegration(t *testing.T) {
 	}
 	t.Log("kick eviction: member's live socket closed; owner unaffected")
 }
+
+// TestHubOnlineUserIDsIntegration proves the presence query: a user is reported
+// online iff they hold a live WS connection. Drives a real dial/close and polls the
+// hub set (register/unregister land asynchronously on the hub goroutine).
+func TestHubOnlineUserIDsIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := h.user(t)
+	srv, err := h.store.CreateServer(ctx, owner.ID, "Presence Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := h.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+
+	// Offline before connecting.
+	if h.hub.OnlineUserIDs()[owner.ID] {
+		t.Fatal("user should be offline before connecting")
+	}
+
+	conn, _ := h.dial(t, fmt.Sprintf("?channel=%d&token=%s", ch.ID, ownerTok))
+	if conn == nil {
+		t.Fatal("dial failed")
+	}
+	online := false
+	for i := 0; i < 40 && !online; i++ {
+		online = h.hub.OnlineUserIDs()[owner.ID]
+		if !online {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if !online {
+		t.Fatal("user should be online after connecting")
+	}
+
+	_ = conn.Close()
+	offline := false
+	for i := 0; i < 60 && !offline; i++ {
+		offline = !h.hub.OnlineUserIDs()[owner.ID]
+		if !offline {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if !offline {
+		t.Fatal("user should be offline after disconnecting")
+	}
+}

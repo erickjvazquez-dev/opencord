@@ -1053,6 +1053,36 @@ button:disabled {
   color: var(--danger);
 }
 
+/* Per-member online presence: a status dot on the avatar's corner (Discord-style). */
+.avatar-presence {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.presence-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  /* Ring separates the dot from the avatar; --bg reads on both the member-list
+     sidebar and the members panel. */
+  border: 2px solid var(--bg);
+  box-sizing: border-box;
+}
+.presence-dot.online {
+  background: var(--online);
+}
+.presence-dot.offline {
+  background: var(--text-muted);
+}
+/* Dim offline members so online ones stand out (the dot still reads when dimmed). */
+.member-list-row.offline,
+.member-row.offline {
+  opacity: 0.55;
+}
+
 .search-results .message {
   margin-bottom: 14px;
 }

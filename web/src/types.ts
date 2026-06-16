@@ -39,6 +39,7 @@ export interface ServerMember {
   userId: number
   username: string
   role: string
+  online?: boolean
 }
 
 export interface Reaction {
