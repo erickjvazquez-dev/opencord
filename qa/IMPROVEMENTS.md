@@ -2316,3 +2316,31 @@ control rendering from ticks 113/115 holds under a role change.
 
 **Deploy note:** real app change → committed, pushed origin, `railway up`; live rollout to
 be confirmed by fetching the served bundle for `.transfer-owner-btn`.
+
+---
+
+## 2026-06-16 — search `before:`/`after:` date operators
+
+**Shipped:** day-exclusive `before:<YYYY-MM-DD>` / `after:<YYYY-MM-DD>` message-search
+operators (combine into a window, compose with `from:`/`has:`/free text); strict UTC parse
+so a malformed/hostile date falls through to inert free text; bind-param SQL (Rule B).
+Integration test + browser QA `07c3` + SPEC note. Pushed origin + `railway up`; live rollout
+verified (served bundle carries the new `before:2024-01-31` placeholder).
+
+**Highest-value learning (reflection): verify a query/filter feature on prod by asserting it
+*discriminates* against existing channel history — never by post-then-find.** This tick's
+first live probe tried to register → POST a probe message → search for it, and hit HTTP 400:
+`POST /api/messages` is the **attachment-upload** path (requires ≥1 file); plain text messages
+only travel over the **WS gateway**, so there is no one-line REST way to seed a text message
+for a live smoke. The probe that actually proved the feature instead **counted #general's
+existing 7 messages across four date bounds** (`before:2099`→7, `before:2000`→0,
+`after:2099`→0, `after:2000`→7) — no posting needed, deterministic on whatever history exists,
+and it proves the bound genuinely filters. Plus malformed/injection dates → HTTP 200 (inert),
+the Rule-15 assertion, live.
+
+**Carry this (loop-process improvement):** for any future search/filter/sort operator, the
+Step-5b live check should be a **read-only discrimination probe** (same query family, two
+bounds that must return different counts against current data) rather than a write-then-read
+flow — it sidesteps the WS-only message path and can't be defeated by an empty fixture.
+*Actionable follow-up (GOAL):* a tiny `qa/search-smoke.sh` (register → 4 bounded searches on
+#general → assert counts strictly decrease as the window tightens) the loop can run post-deploy.

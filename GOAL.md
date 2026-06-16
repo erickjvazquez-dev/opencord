@@ -356,6 +356,13 @@ item from here as the structural milestones above land.
   guarded). Keyboard-nav · screen-reader · i18n · theme (dark/light) still TODO
 - [ ] Desktop + mobile clients (PWA first)
 
+### QA / loop tooling
+- [ ] `qa/search-smoke.sh` — read-only post-deploy search smoke (register → bounded
+  `before:`/`after:` searches on `#general` → assert counts strictly shrink as the window
+  tightens). Verifies query/filter features on prod by **discrimination against existing
+  history**, not write-then-find (plain text posts go via WS, not REST — see
+  `qa/IMPROVEMENTS.md` 2026-06-16).
+
 ---
 
 ## Non-negotiables (carry every milestone)
