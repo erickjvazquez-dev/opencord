@@ -63,7 +63,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
-import { dayLabel, shortTime } from '../dates'
+import { dayLabel, shortTime, messageTimestamp } from '../dates'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
 import { Settings } from './Settings'
@@ -2419,7 +2419,7 @@ export function Chat({
                   <div className="message-content">
                     <div className="message-head">
                       <span className="author">{m.username}</span>
-                      <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                      <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
                     <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}</div>
                   </div>
@@ -2449,7 +2449,7 @@ export function Chat({
                   <div className="message-content">
                     <div className="message-head">
                       <span className="author">{m.username}</span>
-                      <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                      <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
                     <div className="body">
                       {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}
@@ -2515,7 +2515,7 @@ export function Chat({
                       >
                         {m.username}
                       </button>
-                      <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
+                      <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                       {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
                     </div>
                   )}

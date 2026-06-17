@@ -17,3 +17,10 @@ export function dayLabel(d: Date, now: Date = new Date()): string {
 export function shortTime(d: Date): string {
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
+
+// Full message-header timestamp, Discord-style: "Today at 9:41 AM" / "Yesterday at
+// 9:41 AM" / "June 15, 2026 at 9:41 AM" — no seconds (the old toLocaleTimeString()
+// showed "9:41:30 AM", which Discord never does).
+export function messageTimestamp(d: Date, now: Date = new Date()): string {
+  return `${dayLabel(d, now)} at ${shortTime(d)}`
+}

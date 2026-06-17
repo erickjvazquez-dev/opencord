@@ -1872,3 +1872,16 @@ line was sent. Discord reveals a compact timestamp in the gutter on hover. Clien
 - **QA:** browser asserts the gutter time exists, reads HH:MM (no seconds), and reveals on hover
   (computed opacity 0 → 1); AI-vision verified the revealed "8:53 AM" gutter time.
 - **Verify:** tsc + vitest (29/29) + full QA green + AI-vision; ship + `railway up` + rollout-verify.
+
+## Discord-style message header timestamp (v0.5 — messaging parity)
+
+**Why:** message headers showed the raw `toLocaleTimeString()` ("8:53:23 AM") — Discord never shows
+seconds; it shows "Today at 8:53 AM". Now consistent with the compact gutter `shortTime`.
+
+- **`dates.ts`:** `messageTimestamp(d, now=new Date())` = `${dayLabel} at ${shortTime}` → "Today at
+  9:41 AM" / "Yesterday at 9:41 AM" / "June 15, 2026 at 9:41 AM". Unit-tested (relative-day prefix,
+  no seconds).
+- **`Chat.tsx`:** the three message-header `.time` spans (main list, search results, pins) use it; the
+  timeout-deadline string is left as-is (different semantic).
+- **QA:** browser asserts the header reads `^Today at H:MM` with no `H:MM:SS`; AI-vision verified.
+- **Verify:** tsc + vitest (31/31) + full QA green + AI-vision; ship + `railway up` + rollout-verify.

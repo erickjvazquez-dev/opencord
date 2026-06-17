@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayLabel, shortTime } from './dates'
+import { dayLabel, shortTime, messageTimestamp } from './dates'
 
 describe('dayLabel (Discord-style day divider)', () => {
   const now = new Date('2026-06-17T15:00:00')
@@ -36,5 +36,17 @@ describe('shortTime (gutter hover timestamp)', () => {
   it('renders a non-empty string for midnight and noon', () => {
     expect(shortTime(new Date('2026-06-17T00:00:00')).length).toBeGreaterThan(0)
     expect(shortTime(new Date('2026-06-17T12:00:00')).length).toBeGreaterThan(0)
+  })
+})
+
+describe('messageTimestamp (Discord-style message header time)', () => {
+  const now = new Date('2026-06-17T15:00:00')
+  it('prefixes the relative day and joins with "at", no seconds', () => {
+    expect(messageTimestamp(new Date('2026-06-17T09:41:30'), now)).toMatch(/^Today at \d{1,2}:\d{2}/)
+    expect(messageTimestamp(new Date('2026-06-16T09:41:00'), now)).toMatch(/^Yesterday at /)
+    expect(messageTimestamp(new Date('2026-06-15T09:41:00'), now)).toMatch(/^June 15, 2026 at /)
+  })
+  it('never includes seconds', () => {
+    expect(messageTimestamp(new Date('2026-06-17T09:41:30'), now)).not.toContain(':30')
   })
 })

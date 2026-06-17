@@ -118,6 +118,13 @@ async function main() {
     ((await divider.textContent()) ?? '').trim() === 'Today',
     `today's divider reads "Today" (got "${((await divider.textContent()) ?? '').trim()}")`,
   )
+  // The message header time is Discord-style "Today at H:MM" (relative day + compact
+  // time, no seconds) — not the old "8:53:23 AM".
+  const headTime = ((await page.locator('.message .time').first().textContent()) ?? '').trim()
+  check(
+    /^Today at \d{1,2}:\d{2}/.test(headTime) && !/:\d{2}:\d{2}/.test(headTime),
+    `header time is "Today at H:MM" with no seconds (got "${headTime}")`,
+  )
 
   // 3a — A second message from the same author groups (no repeated avatar/name).
   step('send a second message → it groups under the first')
