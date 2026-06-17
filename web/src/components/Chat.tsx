@@ -47,6 +47,7 @@ import {
   markChannelRead,
   fetchMutedChannels,
   setChannelMuted,
+  fetchUserProfile,
 } from '../api'
 import type {
   Channel,
@@ -1210,6 +1211,13 @@ export function Chat({
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not set profile')
     }
+  }
+
+  // Open the profile card for a user by id — fetch their public profile (works anywhere,
+  // incl. #general/DMs where there's no member list to read from). Used by message clicks.
+  const openUserProfile = async (userId: number) => {
+    const p = await fetchUserProfile(token, userId)
+    if (p) setProfileMember(p)
   }
 
   // Change my presence (online|idle|dnd|invisible). Optimistically update the picker,
@@ -2472,12 +2480,26 @@ export function Chat({
                 {grouped ? (
                   <div className="avatar-spacer" aria-hidden />
                 ) : (
-                  <Avatar token={token} userId={m.userId} username={m.username} />
+                  <button
+                    type="button"
+                    className="avatar-link"
+                    title={`View ${m.username}'s profile`}
+                    aria-label={`View ${m.username}'s profile`}
+                    onClick={() => void openUserProfile(m.userId)}
+                  >
+                    <Avatar token={token} userId={m.userId} username={m.username} />
+                  </button>
                 )}
                 <div className="message-content">
                   {!grouped && (
                     <div className="message-head">
-                      <span className="author">{m.username}</span>
+                      <button
+                        type="button"
+                        className="author author-link"
+                        onClick={() => void openUserProfile(m.userId)}
+                      >
+                        {m.username}
+                      </button>
                       <span className="time">{new Date(m.createdAt).toLocaleTimeString()}</span>
                       {m.editedAt && !m.deleted && <span className="edited">(edited)</span>}
                     </div>

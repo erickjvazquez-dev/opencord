@@ -1624,6 +1624,37 @@ func (s *Store) SetUserProfile(ctx context.Context, userID int64, about, pronoun
 	return err
 }
 
+// UserProfile is a user's PUBLIC profile, shown on the profile card (clicked from a
+// message or the member list). Strictly public fields — no password hash, no internal
+// data ever joins this. PresenceState is internal (the HTTP layer derives the effective
+// Presence from it + the live-connection set, like the member list).
+type UserProfile struct {
+	UserID        int64  `json:"userId"`
+	Username      string `json:"username"`
+	About         string `json:"about,omitempty"`
+	Pronouns      string `json:"pronouns,omitempty"`
+	Status        string `json:"status,omitempty"`
+	StatusEmoji   string `json:"statusEmoji,omitempty"`
+	PresenceState string `json:"-"`
+	Presence      string `json:"presence,omitempty"`
+	Online        bool   `json:"online"`
+}
+
+// GetUserProfile returns userID's public profile, or ErrUserNotFound if no such user.
+// Selects ONLY public columns (Rule 15 — a profile read can never leak the password hash).
+func (s *Store) GetUserProfile(ctx context.Context, userID int64) (UserProfile, error) {
+	var p UserProfile
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, username, COALESCE(about, ''), COALESCE(pronouns, ''),
+		        COALESCE(status, ''), COALESCE(status_emoji, ''), COALESCE(presence_state, 'online')
+		   FROM users WHERE id = $1`, userID).
+		Scan(&p.UserID, &p.Username, &p.About, &p.Pronouns, &p.Status, &p.StatusEmoji, &p.PresenceState)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UserProfile{}, ErrUserNotFound
+	}
+	return p, err
+}
+
 // NormalizePresence coerces a raw presence value to a known state, defaulting any
 // empty/unknown input to "online" (so a NULL column or a hostile body is inert).
 func NormalizePresence(s string) string {

@@ -1151,6 +1151,23 @@ func TestUserProfileIntegration(t *testing.T) {
 	if a, p := memberAbout(); a != "" || p != "" {
 		t.Fatalf("after clear = (%q,%q), want empty", a, p)
 	}
+
+	// GetUserProfile (the public profile fetch behind the profile card): returns the set
+	// values, and a missing user is ErrUserNotFound (so the endpoint 404s, not 500s).
+	if err := store.SetUserProfile(ctx, owner.ID, "hello world", "she/her"); err != nil {
+		t.Fatalf("SetUserProfile: %v", err)
+	}
+	prof, err := store.GetUserProfile(ctx, owner.ID)
+	if err != nil {
+		t.Fatalf("GetUserProfile: %v", err)
+	}
+	if prof.UserID != owner.ID || prof.Username != owner.Username ||
+		prof.About != "hello world" || prof.Pronouns != "she/her" {
+		t.Fatalf("GetUserProfile = %+v, want owner's public profile", prof)
+	}
+	if _, err := store.GetUserProfile(ctx, 999_999_999); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("GetUserProfile(missing) err = %v, want ErrUserNotFound", err)
+	}
 }
 
 func TestUserStatusIntegration(t *testing.T) {

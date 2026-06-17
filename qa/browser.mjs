@@ -891,9 +891,11 @@ async function main() {
   )
 
   // 7d6 — Profile: set About Me + pronouns in settings, then click my member row to open
-  // the profile card and confirm both render on it.
-  step('settings → set About Me + pronouns → click my member row → profile card shows them')
-  const myAbout = 'building opencord ' + chanName
+  // the profile card. About Me carries an XSS payload to prove the card renders it INERT
+  // (React-escaped — no element/script injection) — Rule 15.
+  step('settings → set About Me (with XSS payload) + pronouns → member row → card shows them, inert')
+  const xssMarker = 'pwn' + chanName
+  const myAbout = `<img src=x onerror="window.__ocXss='${xssMarker}'">building opencord ${chanName}`
   const myPron = 'they/them'
   await page.getByRole('button', { name: 'user settings' }).click()
   await page.locator('.settings-modal').waitFor({ timeout: 8000 })
@@ -908,7 +910,13 @@ async function main() {
   await page.locator('.profile-card').waitFor({ timeout: 8000 })
   check(
     ((await page.locator('.profile-about').textContent()) ?? '').includes(myAbout),
-    'the profile card shows the About Me text',
+    'the profile card shows the About Me text verbatim (escaped, not parsed as HTML)',
+  )
+  // Rule 15: the <img onerror> must NOT have executed (React escaped it to text).
+  check(
+    (await page.evaluate(() => window.__ocXss)) !== xssMarker &&
+      (await page.locator('.profile-about img').count()) === 0,
+    'the About Me XSS payload is INERT (no element injected, no script ran)',
   )
   check(
     ((await page.locator('.profile-pronouns').textContent()) ?? '').includes(myPron),
@@ -922,6 +930,31 @@ async function main() {
   await page.keyboard.press('Escape')
   await page.locator('.profile-card').waitFor({ state: 'detached', timeout: 4000 })
   check((await page.locator('.profile-card').count()) === 0, 'Esc closes the profile card')
+
+  // 7d7 — Profile from a message author: in #general (no member list), clicking a message
+  // author's name fetches their public profile and opens the card (the GET /users/{id}/profile
+  // path). Proves the card works outside server channels.
+  step('#general → click a message author → profile card opens (fetched profile)')
+  await page.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await page.getByPlaceholder('Message #general').waitFor({ timeout: 8000 })
+  // The qa bot posted in #general earlier; click their author name in the message list.
+  await page.locator('.message .author-link', { hasText: user }).first().click()
+  await page.locator('.profile-card').waitFor({ timeout: 8000 })
+  check(
+    ((await page.locator('.profile-name').textContent()) ?? '').includes(user),
+    'clicking a message author opens that user’s profile card',
+  )
+  check(
+    ((await page.locator('.profile-pronouns').textContent()) ?? '').includes(myPron),
+    'the fetched profile card carries the pronouns',
+  )
+  await shot('07d7-profile-from-message.png')
+  await page.keyboard.press('Escape')
+  await page.locator('.profile-card').waitFor({ state: 'detached', timeout: 4000 })
+  // Navigate BACK to the server channel so the downstream server-channel steps (read-only,
+  // pins, etc.) have their expected context (iter-130 lesson: a detour must restore context).
+  await page.getByRole('button', { name: new RegExp(srvChan) }).click()
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).waitFor({ timeout: 8000 })
 
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')

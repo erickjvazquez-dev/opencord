@@ -398,8 +398,13 @@ item from here as the structural milestones above land.
   `ListServerMembers` selects them) and shown on a **profile card** — click a member → a centered card
   overlay (Esc/overlay close) with avatar + presence pip, name, pronouns, custom status, and the About
   Me bio (all React-escaped). Store integration test (set/trim/cap/clear + surfaces via members) +
-  browser QA (set in settings → click my row → card shows them) + AI-vision verified. Connections ·
-  per-server nicknames · profile card from a message author (currently member-list only) TODO
+  browser QA (set in settings → click my row → card shows them) + AI-vision verified. **Profile card
+  from a message author DONE (iter 141)** — clicking a message's avatar/name fetches the author's
+  public profile (`GET /users/{id}/profile`, any authed user, public fields only, effective presence,
+  404 for missing — Rule 15) and opens the same card, so it works in #general / DMs (no member list).
+  Store test (GetUserProfile + not-found) + browser QA (click a message author → card) + **a Rule-15
+  XSS-inert assertion** (an `<img onerror>` in About Me renders as literal text, no element/script
+  injected — AI-vision-confirmed). Connections · per-server nicknames TODO
 - [~] Presence: **online/offline + idle/DnD/invisible DONE** — manual presence picker
   (header `<select>`); `users.presence_state`, effective-presence rule (others see
   invisible/disconnected as offline, you see your own true state — pure unit-tested),

@@ -179,6 +179,35 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				writeJSON(w, http.StatusOK, map[string]any{"channels": ids})
 			})
+			// A user's PUBLIC profile (About Me, pronouns, status, presence) — for the profile
+			// card. Any authed user can view any user's public profile (Discord-style); the store
+			// selects only public fields (Rule 15). 404 for a missing user.
+			r.Get("/users/{id}/profile", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+					return
+				}
+				p, err := store.GetUserProfile(r.Context(), id)
+				if errors.Is(err, chat.ErrUserNotFound) {
+					http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+					return
+				}
+				if err != nil {
+					http.Error(w, `{"error":"server error"}`, http.StatusInternalServerError)
+					return
+				}
+				// Effective presence: the viewer sees their OWN true state; others see an
+				// invisible/disconnected user as offline (mirrors the member list).
+				connected := hub.OnlineUserIDs()[p.UserID]
+				if p.UserID == me.ID {
+					p.Online, p.Presence = connected, chat.NormalizePresence(p.PresenceState)
+				} else {
+					p.Online, p.Presence = chat.EffectivePresence(connected, p.PresenceState)
+				}
+				writeJSON(w, http.StatusOK, p)
+			})
 			// Update a server channel — posting policy ('everyone'|'admins') and/or
 			// topic. Admins only. Fields are optional (pointers): each is applied only
 			// when present, so old {postPolicy} clients keep working.

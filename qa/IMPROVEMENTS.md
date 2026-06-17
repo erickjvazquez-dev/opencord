@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 141) — Profile card from messages + Rule-15 XSS proof; the iter-130 "detour must restore context" lesson bit, the iter-139 grep saved a step
+
+Shipped the **message-author profile card** (a public `GET /users/{id}/profile`) and, importantly,
+ENCODED a Rule-15 guarantee: the QA now sets an `<img onerror>` in About Me and asserts the card
+renders it as **literal inert text** (no element injected, `window.__ocXss` unset) — AI-vision shows the
+raw `<img …>` as text. **Lesson — when a feature renders user-controlled text in a NEW place, the
+adversarial test belongs in the SAME tick: a one-line XSS payload + an "is it inert?" assertion turns
+"React escapes it, probably" into a regression-guarded fact.** This is cheap (reuse the existing render
+test, just make the input hostile) and it's the Rule-15 step-5 "encode the exploit so it can't silently
+return."
+
+Two prior lessons showed up again — one caught, one bit:
+- **iter-139 grep (CAUGHT):** before running QA I grepped for selector collisions with my new
+  `.author-link` button (now username-named). The grep showed all QA username selectors are
+  class-scoped (`.member-row` etc.), so no `getByRole(name:user)` clash — confirmed safe in 2s, no crash.
+- **iter-130 "a detour must restore context" (BIT):** my new `07d7` step navigated to `#general` to test
+  the message trigger and didn't navigate back, so the next server-channel step (`make read-only`)
+  timed out 30s later. Same shape as iter-130. Fix: navigate back to the server channel at the step's
+  end. **Meta-lesson — the "navigate-back" rule needs to fire at WRITE time for ANY step that switches
+  channel/server/panel, not just reloads; I keep re-learning it per-trigger-type. Treat ANY
+  `.click()` that changes the active channel/server as owing a restore-context line before the step
+  ends.**
+
+**Process tweak applied:** added "navigating away (channel/server/panel switch, not just reload) → the
+step must restore the prior context before it ends" to the running QA-authoring checklist alongside the
+label-collision grep.
+
 ## 2026-06-17 (iter 140) — Profile card; the iter-139 "grep before run" guardrail WORKED (caught a Save collision pre-run)
 
 Shipped **About Me + pronouns + a profile card** (full stack). **Component: profiles.** The headline is

@@ -1791,3 +1791,23 @@ trigger is a follow-up.
 - **QA:** store/integration (SetUserProfile caps + clears; ListServerMembers returns them) + browser
   (settings → set about/pronouns → click my member row → the card shows them) + AI-vision the card.
 - **Verify:** go test + full QA green, ship + railway up + rollout-verify.
+
+## Profile card from message authors (v0.5 — profiles, slice 2)
+
+**Why:** the iter-140 profile card only opened from the member-list (server channels only). You usually
+want to click someone IN the chat. Slice 2: clicking a message's avatar/name opens the card anywhere
+(incl. #general / DMs) by fetching the author's public profile.
+
+- **Store:** `GetUserProfile(userID) → UserProfile{UserID, Username, About, Pronouns, Status,
+  StatusEmoji, PresenceState}`; `ErrUserNotFound` for a missing id.
+- **Router:** `GET /users/{id}/profile` (authed group): returns ONLY public fields (no hash/email —
+  none exist anyway, but assert the shape); annotates presence via `EffectivePresence` (others see
+  invisible/disconnected as offline; you see your own true state) using `hub.OnlineUserIDs()`. 404 for
+  a missing user. **Rule 15:** any authed user can view any user's PUBLIC profile (like Discord) — never
+  more than the card needs.
+- **Web:** `api.ts` `fetchUserProfile` (→ `ServerMember`-shaped); `Chat.tsx` `openUserProfile(id)` fetches
+  + opens the existing `ProfileCard`; the main message list's avatar + author become clickable.
+- **QA:** browser (click a message author in #general → card shows their profile) + **Rule-15 XSS-inert**
+  (set `about`/`pronouns` to `<img onerror>` / `<script>` → the card renders the LITERAL text, no exec)
+  + integration test (`GET /users/{id}/profile` returns public fields, 404 for missing, auth-required).
+- **Verify:** go test + full QA green, ship + railway up + rollout-verify.

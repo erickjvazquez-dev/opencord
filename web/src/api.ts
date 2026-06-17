@@ -256,6 +256,17 @@ export async function setMyStatus(token: string, status: string, statusEmoji = '
   }
 }
 
+// Fetch a user's PUBLIC profile (about, pronouns, status, presence) for the profile card.
+// Returns null if not found / on error so the caller can no-op. The shape matches the
+// fields ProfileCard reads (a ServerMember-compatible subset).
+export async function fetchUserProfile(token: string, userId: number): Promise<ServerMember | null> {
+  const res = await fetch(`/api/users/${userId}/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return null
+  return (await res.json()) as ServerMember
+}
+
 // Set the caller's own profile: About Me + pronouns ("" clears each). Capped server-side.
 export async function setMyProfile(token: string, about: string, pronouns: string): Promise<void> {
   const res = await fetch('/api/me/profile', {
