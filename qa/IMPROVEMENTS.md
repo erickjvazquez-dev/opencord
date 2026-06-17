@@ -3200,3 +3200,27 @@ over video slice 2 unless the owner wants coexist. Also viable: role colors in m
 
 **Context:** running on the 1M-context model — 14 ticks is well within budget (the <20% auto-clear
 hasn't fired because there's huge headroom). Earlier "heavy context" worry was overblown; continuing.
+
+## 2026-06-17 (tick 155) — caught + fixed a 4-tick-old P1: emoji images never loaded; shipped reactions
+
+Set out to ship custom-emoji reactions (done). While AI-visioning, my nagging "is that a broken image?"
+doubt led me to ADD a `naturalWidth>0` QA assertion — which FAILED: the inline emoji image never
+actually loaded. Root cause: raw `<img src="/api/emoji/{id}">` against an AUTH-GATED endpoint → 401
+(img tags can't send the bearer token) → broken image, across the whole emoji feature for 4 ticks.
+Fixed via a new `EmojiImg` fetch+blob component (mirrors `Avatar.tsx`, the established pattern), wired
+into every emoji render site. naturalWidth>0 now PASSES; AI-vision shows the emoji as a visible image
+(was broken). Shipped fix + reactions together; prod rollout verified.
+
+**THE BIG QA LESSON (highest-value carry):** element-existence + src-attribute checks + ambiguous
+AI-vision of tiny fixtures MISSED a total render failure for FOUR ticks. The product-level truth is
+"does the image DECODE" — `naturalWidth>0`. Generalize: every auth-gated image the QA renders must be
+LOAD-checked, and the client must use fetch+blob (not `<img src>`) for token-auth'd images.
+
+**Highest-value NEXT (find the bug CLASS, not just the instance):** AUDIT every other auth-gated image
+surface for the SAME 401-on-img-src bug — especially **message ATTACHMENTS** (inline images via
+`/api/attachments/{id}`): does `AttachmentList` use raw `<img src>` (BROKEN) or fetch+blob? Add a
+`naturalWidth>0` assertion to the attachment QA step; if broken, fix with the same EmojiImg/Avatar
+pattern. Avatars are already fine (Avatar.tsx always used fetch+blob — which is why ONLY emoji broke).
+
+**Process note:** trusting the "that looks off" instinct + converting it into an assertion (not a guess)
+is exactly how the loop should self-correct. Don't sign off "renders fine" on an image without a decode check.
