@@ -6,6 +6,7 @@
 
 const IN_KEY = 'opencord.voice.inputDeviceId'
 const OUT_KEY = 'opencord.voice.outputDeviceId'
+const CAM_KEY = 'opencord.voice.cameraDeviceId'
 const NS_KEY = 'opencord.voice.noiseSuppression'
 const EC_KEY = 'opencord.voice.echoCancellation'
 const AGC_KEY = 'opencord.voice.autoGainControl'
@@ -49,6 +50,12 @@ export function getOutputDeviceId(): string {
 }
 export function setOutputDeviceId(id: string): void {
   write(OUT_KEY, id)
+}
+export function getCameraDeviceId(): string {
+  return read(CAM_KEY) ?? ''
+}
+export function setCameraDeviceId(id: string): void {
+  write(CAM_KEY, id)
 }
 
 export function getAudioProcessing(): AudioProcessing {

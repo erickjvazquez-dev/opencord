@@ -725,13 +725,20 @@ async function main() {
   await shot('07d3-voice-settings.png')
   const nsStored = await page.evaluate(() => localStorage.getItem('opencord.voice.noiseSuppression'))
   check(nsStored === '0', `unchecking noise suppression persists to localStorage (got ${nsStored})`)
-  // Mic test: start → the meter fill width should climb above 0 from the fake tone.
+  // Mic test: start → the meter fill should climb above 0 from the fake tone. Chromium's
+  // fake mic PULSES (beeps), so a single instantaneous read can land in a silent gap —
+  // poll for the PEAK over a window and break as soon as we see movement.
   await page.getByRole('button', { name: "Let's Check" }).click()
-  await page.waitForTimeout(1200) // let the tone drive a few meter samples
-  const micLevel = await page
-    .locator('.mic-meter-fill')
-    .evaluate((el) => parseFloat(el.getAttribute('data-level') || '0'))
-  check(micLevel > 0, `mic-test meter responds to the fake mic tone (level=${micLevel})`)
+  let micPeak = 0
+  for (let i = 0; i < 45; i++) {
+    const lv = await page
+      .locator('.mic-meter-fill')
+      .evaluate((el) => parseFloat(el.getAttribute('data-level') || '0'))
+    if (lv > micPeak) micPeak = lv
+    if (micPeak > 0) break
+    await page.waitForTimeout(100)
+  }
+  check(micPeak > 0, `mic-test meter responds to the fake mic tone (peak=${micPeak})`)
   await shot('07d3b-mic-test.png')
   await page.getByRole('button', { name: 'Stop Testing' }).click()
   // Close + reopen the modal (Settings remounts → re-reads getAudioProcessing()).
@@ -745,8 +752,40 @@ async function main() {
     !(await page.getByLabel('noise suppression').isChecked()),
     'the noise-suppression toggle stayed OFF after a modal remount (localStorage re-read)',
   )
-  // Restore the default (on) so later voice QA captures with full DSP, then close.
+  // Restore the default (on) so later voice QA captures with full DSP.
   await page.getByLabel('noise suppression').check()
+
+  // 7d3c — Camera (slice 3b): the camera picker renders and "Test Camera" opens a live
+  // preview. Chromium's fake video device supplies frames, so the <video> decodes
+  // (videoWidth > 0) and the preview container goes .live.
+  step('settings → Voice & Video → Test Camera → live preview decodes frames')
+  check(
+    await page.getByLabel('camera', { exact: true }).isVisible(),
+    'camera device picker renders',
+  )
+  await page.getByRole('button', { name: 'Test Camera' }).click()
+  const camVideo = page.locator('.cam-preview-video')
+  await page.waitForFunction(
+    () => {
+      const v = document.querySelector('.cam-preview-video')
+      return v && v.videoWidth > 0
+    },
+    { timeout: 8000 },
+  )
+  check(
+    await camVideo.evaluate((v) => v.videoWidth > 0 && v.videoHeight > 0),
+    'camera preview <video> decodes the fake-device frames (videoWidth > 0)',
+  )
+  check(
+    (await page.locator('.cam-preview.live').count()) === 1,
+    'the preview container is marked live while testing',
+  )
+  await shot('07d3c-camera-preview.png')
+  await page.getByRole('button', { name: 'Stop Camera' }).click()
+  check(
+    (await page.locator('.cam-preview.live').count()) === 0,
+    'stopping the camera tears the preview down',
+  )
   await page.getByRole('button', { name: 'close settings' }).click()
   await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
 

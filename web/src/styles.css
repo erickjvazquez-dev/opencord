@@ -2194,6 +2194,32 @@ button:disabled {
   border-radius: 6px;
   transition: width 60ms linear;
 }
+.cam-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 10px 0;
+  display: grid;
+  place-items: center;
+}
+.cam-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+  /* Mirror the preview like Discord/most webcam UIs (you see yourself as in a mirror). */
+  transform: scaleX(-1);
+}
+.cam-preview.live .cam-preview-video {
+  display: block;
+}
+.cam-preview-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
 
 @media (max-width: 640px) {
   .settings-modal {

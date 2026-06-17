@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Avatar } from './Avatar'
 import type { User } from '../types'
-import { getAudioProcessing, setAudioProcessing, type AudioProcessing } from '../voiceSettings'
+import {
+  getAudioProcessing,
+  setAudioProcessing,
+  getCameraDeviceId,
+  setCameraDeviceId,
+  type AudioProcessing,
+} from '../voiceSettings'
 
 type Tab = 'account' | 'voice'
 
@@ -65,6 +71,14 @@ export function Settings({
   const micCtxRef = useRef<AudioContext | null>(null)
   const micTimerRef = useRef<number | null>(null)
 
+  // Camera: a videoinput picker (enumerated locally — video isn't in the voice
+  // pipeline yet) + a live preview. The chosen camera persists in localStorage.
+  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>([])
+  const [camera, setCamera] = useState(() => getCameraDeviceId())
+  const [camTesting, setCamTesting] = useState(false)
+  const camStreamRef = useRef<MediaStream | null>(null)
+  const videoElRef = useRef<HTMLVideoElement>(null)
+
   // Esc closes the modal (Discord-style).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -121,14 +135,75 @@ export function Settings({
     }
   }
 
-  // Entering the Voice tab: (re)enumerate devices so labels populate. Leaving it (or
-  // unmounting): always stop the mic test so the mic light goes out.
+  // Stop the camera preview (stop tracks, detach from the <video>).
+  const stopCameraTest = () => {
+    camStreamRef.current?.getTracks().forEach((t) => t.stop())
+    camStreamRef.current = null
+    if (videoElRef.current) videoElRef.current.srcObject = null
+    setCamTesting(false)
+  }
+
+  // Enumerate video inputs (cameras) — kept local to Settings since video isn't part
+  // of the voice capture pipeline yet (slice 3b is preview-only).
+  const refreshCameras = async () => {
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices()
+      setVideoInputs(devs.filter((d) => d.kind === 'videoinput'))
+    } catch {
+      /* enumeration unsupported — the picker just stays at Auto */
+    }
+  }
+
+  // Open the selected camera into the preview <video>. Takes an explicit deviceId so a
+  // live device swap doesn't read a stale `camera` from this render's closure.
+  const startCameraTest = async (deviceId = camera) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+      })
+      camStreamRef.current = stream
+      setCamTesting(true)
+      if (videoElRef.current) {
+        videoElRef.current.srcObject = stream
+        await videoElRef.current.play().catch(() => {})
+      }
+      void refreshCameras() // labels populate once permission is granted
+    } catch {
+      window.alert('Could not access the camera. Check the browser permission.')
+      stopCameraTest()
+    }
+  }
+
+  const changeCamera = (id: string) => {
+    setCamera(id)
+    setCameraDeviceId(id)
+    // If a preview is live, swap to the newly chosen camera immediately.
+    if (camTesting) {
+      stopCameraTest()
+      void startCameraTest(id)
+    }
+  }
+
+  // Entering the Voice tab: (re)enumerate audio + video devices so labels populate.
+  // Leaving it (or unmounting): always stop both tests so the mic/camera lights die.
   useEffect(() => {
-    if (tab === 'voice') void onRefreshDevices()
-    else stopMicTest()
+    if (tab === 'voice') {
+      void onRefreshDevices()
+      void refreshCameras()
+    } else {
+      stopMicTest()
+      stopCameraTest()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
-  useEffect(() => stopMicTest, []) // unmount cleanup
+  useEffect(
+    () => () => {
+      stopMicTest()
+      stopCameraTest()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  ) // unmount cleanup
 
   const toggleDsp = (key: keyof AudioProcessing) => {
     const next = { ...dsp, [key]: !dsp[key] }
@@ -395,6 +470,44 @@ export function Settings({
                   <span>Automatic Gain Control</span>
                 </label>
                 <span className="settings-hint">Applied the next time you join a voice channel.</span>
+              </div>
+
+              {/* Camera — device picker + live preview (preview only for now). */}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="settings-camera-device">
+                  Camera
+                </label>
+                <select
+                  id="settings-camera-device"
+                  className="settings-input settings-device-select"
+                  aria-label="camera"
+                  value={camera}
+                  onChange={(e) => changeCamera(e.target.value)}
+                >
+                  <option value="">Auto (system default)</option>
+                  {videoInputs.map((d, i) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Camera ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+                <div className={`cam-preview${camTesting ? ' live' : ''}`}>
+                  <video
+                    ref={videoElRef}
+                    className="cam-preview-video"
+                    aria-label="camera preview"
+                    muted
+                    playsInline
+                  />
+                  {!camTesting && <span className="cam-preview-empty">Camera preview</span>}
+                </div>
+                <button
+                  type="button"
+                  className={`settings-btn${camTesting ? '' : ' primary'}`}
+                  onClick={() => (camTesting ? stopCameraTest() : void startCameraTest())}
+                >
+                  {camTesting ? 'Stop Camera' : 'Test Camera'}
+                </button>
               </div>
             </section>
           )}

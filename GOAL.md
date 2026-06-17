@@ -64,8 +64,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   default-on); `voice.ts audioConstraints` reads the DSP flags (no behavior change until the user
   opts out); the in-call voice-bar pickers + the settings pickers share Chat state + localStorage.
   Browser QA `07d3` (toggles render, persist across a modal remount, meter moves); AI-vision verified
-  the panel; shipped + `railway up` + rollout-verified. **Still TODO (slice 3b/3c):** input/output
-  **volume sliders** + **camera device + live preview**.
+  the panel; shipped + `railway up` + rollout-verified. **Slice 3b DONE (iter 131): camera device +
+  live preview** — a videoinput picker (persisted in `voiceSettings`) + a mirrored 16:9 `<video>`
+  preview driven by `getUserMedia({video})` ("Test Camera" / "Stop Camera"), full teardown on
+  stop/tab-switch/unmount, live device hot-swap. Browser QA `07d3c` (picker renders, preview decodes
+  the fake-device frames `videoWidth>0`, container goes `.live`, stop tears it down); AI-vision verified.
+  **Still TODO (slice 3c):** input/output **volume sliders**.
 - [ ] **Appearance / general polish pass** — consistent spacing + hover/active/focus states,
   visible focus rings (a11y, keep the axe-core scan green), and an overall "feels like Discord"
   sweep across sidebar / header / chat / member list.

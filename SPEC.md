@@ -1642,6 +1642,25 @@ DSP toggles render; flip **noise suppression** off → reload → reopen → ass
 (fake tone) → Stop. AI-vision the panel. Verify: `npm run build`, full browser QA green, ship +
 `railway up` + rollout-verify.
 
+**Shipped iter 130** as specced, with two QA refinements landed iter 131: (a) the persistence check
+uses a direct `localStorage.getItem` assertion + modal remount instead of a `page.reload()` (a reload
+mid-suite resets the app to `#general` and breaks the downstream server-channel steps); (b) the
+mic-test meter assertion polls for the PEAK level over a ~4s window (the fake mic *pulses*, so a single
+read after a fixed wait flakes to 0).
+
+### Slice 3b — Voice & Video tab · camera device + live preview — SHIPPED iter 131
+
+`voiceSettings.ts` gains `getCameraDeviceId()/setCameraDeviceId()`. `Settings.tsx` Voice & Video tab
+adds a **Camera** section: a videoinput `<select>` (enumerated locally in Settings — video isn't in the
+voice pipeline yet) + a mirrored 16:9 `<video>` preview driven by `getUserMedia({video:{deviceId}})`
+("Test Camera"/"Stop Camera"); `startCameraTest(deviceId=camera)` takes an explicit id so a live swap
+doesn't read a stale closure; teardown (stop tracks, detach `srcObject`) on Stop + tab-switch + unmount.
+`styles.css` `.cam-preview`/`.cam-preview-video` (`object-fit:cover`, `transform:scaleX(-1)` mirror).
+QA `07d3c`: picker renders (`getByLabel('camera',{exact:true})` — the video's `aria-label="camera
+preview"` would otherwise collide on substring), `waitForFunction(videoWidth>0)` proves frames decode,
+`.cam-preview.live` toggles, Stop tears it down. AI-vision verified the fake-device preview. **Slice 3c
+TODO:** input/output volume sliders.
+
 Concrete plan captured at commit 1b97700 so a fresh-context tick builds it without re-discovery.
 Reuses existing handlers — NO new endpoints (`PUT /me/status`, `PUT /me/presence`, `POST /avatar`).
 

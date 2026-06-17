@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (iter 131) — Camera preview; two QA-robustness bugs the *fake media* exposed
+
+Shipped the **camera device + live preview** (Voice & Video slice 3b). **Component: UI → polished +
+video groundwork.** The build was green and AI-vision was clean, but the FIRST browser-QA run failed
+twice — both failures were in the *test*, not the feature, and both are reusable lessons:
+
+1. **`getByLabel('camera')` matched two elements** — the `<select aria-label="camera">` AND the
+   `<video aria-label="camera preview">`, because Playwright's `getByLabel` is **substring + case-
+   insensitive by default**, and "camera" is a prefix of "camera preview". Strict mode → the whole
+   script crashed. Fix: `getByLabel('camera', { exact: true })`. **Lesson — when two controls share a
+   word in their accessible names, default `getByLabel`/`getByRole` name matching will collide; use
+   `{exact:true}` (or disjoint labels) the moment a label is a substring of another.**
+
+2. **The mic-test meter assertion flaked to 0** — it passed last tick (0.02) on the *same code* and
+   failed this tick (0.00). Root cause: Chromium's fake mic **pulses** (beeps), and the assertion did
+   `click → waitForTimeout(1200) → read once`. A single instantaneous read lands in a silent gap ~half
+   the time. Fix: poll for the **peak** over a ~4s window and break on first non-zero. **Lesson — for a
+   meter/level/animation driven by a periodic or noisy source, never assert a single instantaneous
+   sample after a fixed sleep; poll for the peak (or a threshold) over a window.** A test that passes
+   "usually" is a latent red that will burn a future tick at random.
+
+**Highest-value meta-point:** headless **fake media** is great for exercising getUserMedia paths, but
+its signal is *synthetic and timing-quirky* (pulsing audio, a fixed test-pattern video). Assertions
+against it must be **shape-robust** (peak-over-window, `videoWidth>0`), never value-exact or
+single-sample. Both fixes above make the suite deterministic regardless of where the fake tone is in
+its cycle.
+
+**Next QA-growth target (slice 3c):** input/output **volume sliders** — input gain needs a `GainNode`
+spliced into the capture chain (more invasive than this preview), so QA it by asserting the slider
+persists + the gain node's `.gain.value` tracks the slider, and AI-vision the control row.
+
 ## 2026-06-16 (iter 130) — Voice & Video tab; a reload-based persistence test would have wrecked downstream context
 
 Shipped the **Voice & Video settings tab** (slice 3a: device pickers + DSP toggles + mic-test
