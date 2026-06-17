@@ -150,6 +150,10 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/attachments/{id}`        | bearer | Download an attachment (access-gated to the channel's members) |
 | `POST`   | `/api/avatar`                  | bearer | Set your own avatar (multipart `file`, image ≤2 MiB)            |
 | `GET`    | `/api/users/{id}/avatar`       | bearer | A user's avatar image (404 → client shows initials)            |
+| `POST`   | `/api/servers/{id}/emoji`      | bearer | Upload a custom server emoji (multipart `name`, `file`, image ≤256 KiB) (admin) |
+| `GET`    | `/api/servers/{id}/emoji`      | bearer | A server's custom emoji (members only)                         |
+| `DELETE` | `/api/servers/{id}/emoji/{emojiId}` | bearer | Delete a custom server emoji (admin)                      |
+| `GET`    | `/api/emoji/{id}`              | bearer | A custom emoji's image (any authed user)                       |
 | `POST`   | `/api/voice/token`             | bearer | Mint a LiveKit SFU token for a voice channel (when `OPENCORD_SFU_URL` is set) |
 | `WS`     | `/ws?token=<jwt>&channel=<id>` | token  | Real-time channel (history · send · typing · voice signaling) |
 

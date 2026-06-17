@@ -1899,3 +1899,28 @@ message. Most visible on a freshly created channel/DM (empty → it's all you se
 - **QA:** browser asserts `.channel-intro` renders with "Welcome to #general" + "start of the #general
   channel"; AI-vision verified the block (icon + title + subtitle, sits above the Today divider).
 - **Verify:** tsc + full QA green + AI-vision; ship + `railway up` + rollout-verify.
+
+## Custom server emoji — backend (v0.5, slice 1)
+
+**Why:** Discord lets a server upload named image emoji (`:name:`). Slice 1 is the backend
+(self-hostable, local-disk like avatars — Rule A); slices 2/3 add client `:name:` rendering + a
+picker/upload UI.
+
+- **Schema** (`internal/db/schema.sql`): `server_emoji(id, server_id→servers ON DELETE CASCADE, name,
+  emoji_key, content_type, created_by, created_at)` + `server_id` index + `(server_id, name)` unique.
+- **Store** (`internal/chat/emoji.go`): `ServerEmoji`, `ValidEmojiName` (`^[a-z0-9_]{2,32}$`),
+  `CreateServerEmoji` (23505→`ErrEmojiExists`), `ListServerEmoji`, `ServerEmojiForServe`,
+  `DeleteServerEmoji` (scoped by server_id → can't delete a foreign server's emoji).
+- **Handlers** (`internal/httpapi/emoji.go`): mirror the avatar pattern. Upload bounds the body
+  (`MaxBytesReader`, 256 KiB), validates the name, **sniffs** the content-type and rejects anything
+  not in the image allowlist (SVG sniffs as text → rejected; no script/XSS vector), stores under an
+  opaque key (no path traversal), cleans up the file on every error path, 409 on dup. Serve sets
+  nosniff + inline + `filepath.Base` defense-in-depth. Delete is best-effort file cleanup + 204.
+- **Routes** (authed group): `POST /servers/{id}/emoji` (admin), `GET /servers/{id}/emoji` (member),
+  `DELETE /servers/{id}/emoji/{emojiId}` (admin), `GET /emoji/{id}` (any authed user). README synced.
+- **Rule 15 (verified):** `TestServerEmojiIntegration` — non-admin can't upload/delete (403),
+  non-member can't list (403), invalid name 400, oversized rejected (no row), non-image rejected,
+  dup-same-server 409 vs same-name-different-server allowed, wrong-server delete 404 (survives), all
+  unauth 401. Witnessed passing on a real Postgres + the real router; build/vet/gofmt/full-suite green.
+- **Next:** slice 2 — client renders `:name:` as the emoji image (markdown + a server-emoji fetch);
+  slice 3 — emoji picker + server-settings upload/delete UI.

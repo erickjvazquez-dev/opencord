@@ -365,7 +365,11 @@ item from here as the structural milestones above land.
 - [x] "Start of channel" intro (iter 149) — Discord-style welcome block atop every channel/DM
   scrollback (round #/@ icon + "Welcome to #general!" + "This is the start of the #general channel.";
   DM variant); browser QA asserts it + AI-vision verified (composes with the Today divider).
-- [ ] Custom emoji · stickers · GIF picker
+- [~] Custom emoji (server-uploaded `:name:`) — **backend DONE (iter 150, slice 1):** `server_emoji`
+  table + store CRUD + admin-gated upload/delete, member-gated list, public serve (local-disk like
+  avatars, Rule A); Rule-15 hardened (sniffed image allowlist → no SVG/XSS, opaque keys → no traversal,
+  size cap, scoped delete) and verified by `TestServerEmojiIntegration` (9 cases incl. all adversarial).
+  **Next:** slice 2 client `:name:` render, slice 3 picker + upload UI. · stickers · GIF picker (later)
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
   (React elements, no innerHTML); E2E + AI-vision verified.

@@ -206,3 +206,21 @@ CREATE TABLE IF NOT EXISTS server_bans (
     PRIMARY KEY (server_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS server_bans_server_id_idx ON server_bans (server_id);
+
+-- Custom server emoji (v0.5): a server may upload named image emoji usable by its
+-- members. The bytes live on the server's local disk under OPENCORD_UPLOAD_DIR keyed
+-- by `emoji_key` (a server-generated opaque random name — never client input, so
+-- traversal is impossible). content_type is the sniffed image type (never the
+-- client's claim). `name` is a Discord-style slug, unique within the server. Deleting
+-- the server cascades its emoji away.
+CREATE TABLE IF NOT EXISTS server_emoji (
+    id           BIGSERIAL PRIMARY KEY,
+    server_id    BIGINT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    emoji_key    TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    created_by   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS server_emoji_server_id_idx ON server_emoji (server_id);
+CREATE UNIQUE INDEX IF NOT EXISTS server_emoji_name_uniq ON server_emoji (server_id, name);

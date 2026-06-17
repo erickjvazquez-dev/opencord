@@ -284,6 +284,51 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			// Uploaded avatars: set your own (JWT-derived); serve any user's (404 → initials).
 			r.Post("/avatar", handleUploadAvatar(cfg.UploadDir, store))
 			r.Get("/users/{id}/avatar", handleServeAvatar(cfg.UploadDir, store))
+			// Custom server emoji. Upload/delete are admin-gated; list is member-gated;
+			// serving the bytes is open to any authed user (emoji are public in-instance,
+			// like avatars). The handlers take only (uploadDir, store), so the member/admin
+			// access checks live here in the route closures (like the channel routes).
+			r.Post("/servers/{id}/emoji", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := serverIDParam(r)
+				if err != nil {
+					http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+					return
+				}
+				if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				handleUploadServerEmoji(cfg.UploadDir, store)(w, r)
+			})
+			r.Get("/servers/{id}/emoji", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := serverIDParam(r)
+				if err != nil {
+					http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+					return
+				}
+				if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				handleListServerEmoji(store)(w, r)
+			})
+			r.Delete("/servers/{id}/emoji/{emojiId}", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := serverIDParam(r)
+				if err != nil {
+					http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+					return
+				}
+				if ok, err := store.IsServerAdmin(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				handleDeleteServerEmoji(cfg.UploadDir, store)(w, r)
+			})
+			// Serve an emoji's bytes (any authed user; emoji are public in-instance).
+			r.Get("/emoji/{id}", handleServeEmoji(cfg.UploadDir, store))
 			r.Get("/messages/search", chat.HandleSearch(store))
 			r.Get("/messages/pins", chat.HandlePins(store))
 			// Mint a join token for the optional LiveKit SFU (large voice calls).
