@@ -1601,6 +1601,47 @@ emoji)`, CSS for `.settings-*` + `.self-chip*`. QA selectors migrated (status/pr
 header→modal; new `07d0` ⚙-open + Esc-close). browser QA green; AI-vision verified. Next: slice 3
 (Voice & Video settings tab).
 
+### Slice 3a — executable build plan (Voice & Video tab · audio: devices + DSP + mic test)
+
+Scope this tick to the AUDIO half so it's shippable + cleanly verifiable without disturbing the
+heavily-QA'd voice-bar/session flow; **defer** input/output **volume sliders** + **camera device +
+live preview** to slice 3b/3c. No backend (device ids + DSP toggles are device-specific → localStorage,
+Rule A).
+
+**New `web/src/voiceSettings.ts`** — the single localStorage source of truth for persistent voice
+prefs: `getInputDeviceId()/setInputDeviceId(id)`, `getOutputDeviceId()/setOutputDeviceId(id)`, and 3
+DSP toggles `noiseSuppression`/`echoCancellation`/`autoGainControl` (`getAudioProcessing()` →
+`{ns,ec,agc}`, all default **true**; `setAudioProcessing(partial)`). Keys namespaced `opencord.voice.*`.
+
+**`voice.ts`** — `audioConstraints(deviceId)` reads the 3 DSP flags from `voiceSettings.getAudioProcessing()`
+instead of the hardcoded `true`s (default true ⇒ no behavior change until the user toggles). The
+screen-share constraints (line ~106, all `false`) stay hardcoded — those are deliberate, not user prefs.
+
+**`Chat.tsx`** — seed `inputDevice`/`outputDevice` `useState` from `voiceSettings.get*DeviceId()`;
+`changeInputDevice`/`changeOutputDevice` also persist via `voiceSettings.set*DeviceId`. Pass to
+`<Settings>`: `audioInputs`, `audioOutputs`, `inputDevice`, `outputDevice`, `onChangeInputDevice`,
+`onChangeOutputDevice`, `onRefreshDevices` (= existing `refreshDevices`). Single source of truth in
+Chat → the in-call voice-bar pickers and the settings pickers stay in sync via shared state + localStorage.
+
+**`Settings.tsx`** — enable the **Voice & Video** tab (drop the disabled "SOON" placeholder). Tab body:
+input-device `<select>` (Auto + `audioInputs`), output-device `<select>` (Auto + `audioOutputs`), 3 DSP
+toggle checkboxes (read/write `voiceSettings`), and a **Mic Test** button → live input-sensitivity
+**meter**: self-contained `getUserMedia({audio:{deviceId}})` → `AudioContext` → `AnalyserNode` → rAF loop
+sets a 0–1 level → meter-fill width. Start/Stop; **clean up** (stop tracks, close ctx, cancel rAF) on
+Stop + tab-switch + unmount. Call `onRefreshDevices()` on entering the tab (the mic test grants the
+permission that populates device labels).
+
+**`styles.css`** — `.settings-voice-row`, `.settings-toggle` (checkbox row), `.mic-test`, `.mic-meter`
++ `.mic-meter-fill` (animated width), reuse `--accent`/`--online`. Focus rings on every control.
+
+**QA (`qa/browser.mjs`) — new `07k` Voice & Video flow** (Chromium already launches with
+`--use-fake-device-for-media-stream` + `--use-fake-ui-for-media-stream`, so getUserMedia/enumerate
+resolve + the fake mic emits a tone): open settings → click the **Voice & Video** tab → assert the 3
+DSP toggles render; flip **noise suppression** off → reload → reopen → assert it's still off
+(localStorage persistence); click **Mic Test** → assert `.mic-meter-fill` width grows > 0 within ~3s
+(fake tone) → Stop. AI-vision the panel. Verify: `npm run build`, full browser QA green, ship +
+`railway up` + rollout-verify.
+
 Concrete plan captured at commit 1b97700 so a fresh-context tick builds it without re-discovery.
 Reuses existing handlers — NO new endpoints (`PUT /me/status`, `PUT /me/presence`, `POST /avatar`).
 

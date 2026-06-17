@@ -56,11 +56,16 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   browser QA `browser=0 realtime=0 voice=0 search=0`; AI-vision verified the modal (My Account),
   the status-save flow, the avatar upload, and the mobile header (no overflow). Shipped + `railway
   up` + rollout-verified.
-- [ ] **Voice & Video settings tab** — input device + output device, **input-volume + output-volume
-  sliders**, a **mic test / input-sensitivity meter**, **noise-suppression + echo-cancellation +
-  auto-gain toggles**, and **camera device + live preview**. Persist per-user (localStorage for
-  device/toggle prefs; they're device-specific). (today: only in-call device pickers exist, no
-  sliders/test/toggles/camera)
+- [~] **Voice & Video settings tab** — slice 3a DONE (iter 130): the **Voice & Video** tab is live
+  (no longer a "SOON" placeholder) with **input + output device pickers**, a **mic test /
+  input-sensitivity meter** (Web Audio RMS from the selected device — verified responding to the
+  fake-mic tone in QA), and **noise-suppression + echo-cancellation + auto-gain toggles**. New
+  `web/src/voiceSettings.ts` is the single localStorage source of truth (device ids + DSP flags,
+  default-on); `voice.ts audioConstraints` reads the DSP flags (no behavior change until the user
+  opts out); the in-call voice-bar pickers + the settings pickers share Chat state + localStorage.
+  Browser QA `07d3` (toggles render, persist across a modal remount, meter moves); AI-vision verified
+  the panel; shipped + `railway up` + rollout-verified. **Still TODO (slice 3b/3c):** input/output
+  **volume sliders** + **camera device + live preview**.
 - [ ] **Appearance / general polish pass** — consistent spacing + hover/active/focus states,
   visible focus rings (a11y, keep the axe-core scan green), and an overall "feels like Discord"
   sweep across sidebar / header / chat / member list.

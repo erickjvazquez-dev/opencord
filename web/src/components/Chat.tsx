@@ -62,6 +62,7 @@ import { renderMarkdown } from '../markdown'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
 import { Settings } from './Settings'
+import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
 
@@ -596,8 +597,10 @@ export function Chat({
   // mic permission is granted, so we (re)enumerate once in a call.
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([])
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([])
-  const [inputDevice, setInputDevice] = useState('')
-  const [outputDevice, setOutputDevice] = useState('')
+  // Seed from the persisted Voice & Video prefs so the in-call picker AND the settings
+  // tab start on the user's last chosen device (single localStorage source of truth).
+  const [inputDevice, setInputDevice] = useState(() => voiceSettings.getInputDeviceId())
+  const [outputDevice, setOutputDevice] = useState(() => voiceSettings.getOutputDeviceId())
   const inputDeviceRef = useRef('')
   inputDeviceRef.current = inputDevice
 
@@ -783,11 +786,13 @@ export function Chat({
 
   const changeInputDevice = (id: string) => {
     setInputDevice(id)
+    voiceSettings.setInputDeviceId(id)
     void voiceRef.current?.setInputDevice(id || undefined)
   }
 
   const changeOutputDevice = (id: string) => {
     setOutputDevice(id)
+    voiceSettings.setOutputDeviceId(id)
     voiceRef.current?.setOutputDevice(id)
   }
 
@@ -2586,6 +2591,13 @@ export function Chat({
           onAvatarPicked={onAvatarPicked}
           onSaveStatus={saveStatus}
           onChangePresence={changePresence}
+          audioInputs={audioInputs}
+          audioOutputs={audioOutputs}
+          inputDevice={inputDevice}
+          outputDevice={outputDevice}
+          onChangeInputDevice={changeInputDevice}
+          onChangeOutputDevice={changeOutputDevice}
+          onRefreshDevices={refreshDevices}
           onClose={() => setSettingsOpen(false)}
         />
       )}

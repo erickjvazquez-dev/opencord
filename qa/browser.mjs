@@ -698,6 +698,58 @@ async function main() {
   await page.getByRole('button', { name: 'close settings' }).click()
   await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
 
+  // 7d3 — Voice & Video settings tab (slice 3a): the DSP toggles render, a toggle
+  // persists across a reload (localStorage), and the mic-test meter responds to the
+  // fake-device tone. Chromium runs with --use-fake-device/ui-for-media-stream, so
+  // getUserMedia resolves and the synthetic mic emits a continuous tone.
+  step('settings → Voice & Video tab → DSP toggles render; mic-test meter moves')
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.locator('.settings-tab', { hasText: 'Voice & Video' }).click()
+  await page.getByLabel('noise suppression').waitFor({ timeout: 8000 })
+  check(
+    await page.getByLabel('noise suppression').isVisible() &&
+      (await page.getByLabel('echo cancellation').isVisible()) &&
+      (await page.getByLabel('automatic gain control').isVisible()),
+    'the 3 DSP toggles render in the Voice & Video tab',
+  )
+  check(
+    await page.getByLabel('input device').isVisible() && (await page.getByLabel('output device').isVisible()),
+    'input + output device pickers render',
+  )
+  // Flip noise suppression OFF (defaults on) — it must land in localStorage and the
+  // UI must re-read it on remount. (No page reload: that would drop the server-channel
+  // context the next steps need; localStorage + modal remount proves the round-trip.)
+  check(await page.getByLabel('noise suppression').isChecked(), 'noise suppression defaults ON')
+  await page.getByLabel('noise suppression').uncheck()
+  await shot('07d3-voice-settings.png')
+  const nsStored = await page.evaluate(() => localStorage.getItem('opencord.voice.noiseSuppression'))
+  check(nsStored === '0', `unchecking noise suppression persists to localStorage (got ${nsStored})`)
+  // Mic test: start → the meter fill width should climb above 0 from the fake tone.
+  await page.getByRole('button', { name: "Let's Check" }).click()
+  await page.waitForTimeout(1200) // let the tone drive a few meter samples
+  const micLevel = await page
+    .locator('.mic-meter-fill')
+    .evaluate((el) => parseFloat(el.getAttribute('data-level') || '0'))
+  check(micLevel > 0, `mic-test meter responds to the fake mic tone (level=${micLevel})`)
+  await shot('07d3b-mic-test.png')
+  await page.getByRole('button', { name: 'Stop Testing' }).click()
+  // Close + reopen the modal (Settings remounts → re-reads getAudioProcessing()).
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.locator('.settings-tab', { hasText: 'Voice & Video' }).click()
+  await page.getByLabel('noise suppression').waitFor({ timeout: 8000 })
+  check(
+    !(await page.getByLabel('noise suppression').isChecked()),
+    'the noise-suppression toggle stayed OFF after a modal remount (localStorage re-read)',
+  )
+  // Restore the default (on) so later voice QA captures with full DSP, then close.
+  await page.getByLabel('noise suppression').check()
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
   await page.getByRole('button', { name: 'make read-only' }).click()

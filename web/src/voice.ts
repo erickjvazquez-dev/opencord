@@ -9,6 +9,8 @@
 // re-renders. Chat.tsx owns one instance per call, feeds it relayed frames, and
 // renders the roster it emits.
 
+import { getAudioProcessing } from './voiceSettings'
+
 // Frames we send up the channel WS. The server stamps `from` and rebroadcasts.
 export type VoiceFrame =
   | { type: 'voice-join' }
@@ -125,14 +127,17 @@ const VAD_FFT_SIZE = 512
 // High-quality voice capture. Browser DSP (echo cancellation, noise suppression,
 // auto-gain) is the same toolchain Discord uses; 48 kHz mono keeps Opus crisp.
 // No `deviceId` → the OS's *current* default input (the headset the user is
-// actually talking into); an explicit id pins a chosen device.
+// actually talking into); an explicit id pins a chosen device. The 3 DSP flags
+// come from the user's Voice & Video settings (all default ON, so capture is
+// unchanged until they opt out in the settings tab).
 function audioConstraints(deviceId?: string): MediaStreamConstraints {
+  const { ns, ec, agc } = getAudioProcessing()
   return {
     audio: {
       ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      echoCancellation: ec,
+      noiseSuppression: ns,
+      autoGainControl: agc,
       channelCount: 1,
       sampleRate: 48_000,
     },

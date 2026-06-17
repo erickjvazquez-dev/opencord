@@ -3,6 +3,35 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (iter 130) — Voice & Video tab; a reload-based persistence test would have wrecked downstream context
+
+Shipped the **Voice & Video settings tab** (slice 3a: device pickers + DSP toggles + mic-test
+meter, persisted to `voiceSettings.ts`). **Component: UI → polished/Discord-faithful + audio.**
+The QA lesson came from a near-miss I caught at review, not run-time: my first draft verified the
+toggle persistence with a full `page.reload()` → reopen-tab → assert-still-off. That's the
+*intuitive* way to test localStorage, but in a long single-session Playwright script a reload
+**silently resets the app to `#general`**, and the very next step (`07e` make-read-only) needs the
+**server-channel** context the suite had navigated into 6 steps earlier. The reload would have
+green-passed my new step and then failed `07e` with a confusing "button not found" three steps
+later — a failure that reads as unrelated to the change that caused it.
+
+**Highest-value lesson — in a stateful, sequential E2E script, prefer the *least-disruptive* proof
+of a property over the most-thorough one.** I swapped the reload for: (a) a direct
+`localStorage.getItem(...)` assertion (proves it persisted to storage — actually *stronger* than a
+reload, which only proves the value survived), plus (b) a **modal close→reopen** that remounts the
+component so its `useState(() => getAudioProcessing())` re-reads storage (proves the UI re-hydrates).
+Same guarantee, zero context loss. A `page.reload()` mid-suite is only safe if the step **owns** its
+navigation afterward (like `07i` avatar, which re-clicks `#general`) — otherwise it's a landmine for
+every step that assumed the prior context.
+
+**Loop-process improvement applied:** when adding an E2E step that needs a reload, either (1) make
+the step restore the exact navigation context it found, or (2) prove the property without a reload
+(direct storage assertion + component remount). Default to (2).
+
+**Next QA-growth target (slice 3b):** input/output **volume sliders** + **camera device + live
+preview** — the camera preview needs a `<video>` + `getUserMedia({video})` flow and an AI-vision
+check that the preview tile renders (fake video device supplies frames headlessly).
+
 ## 2026-06-16 (iter 129) — User Settings modal; migrate QA selectors *in the same edit* as the UI move
 
 Shipped the **User Settings modal** (GOAL TOP-PRIORITY slice 2). **Component: UI →
