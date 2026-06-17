@@ -1592,3 +1592,45 @@ list, advanced one slice per tick alongside the loop's normal health/QA work.
 
 **Non-negotiables:** every slice stays self-hostable (Rule A — settings persist locally, no new paid
 service); inputs validated (Rule B); browser-QA + AI-vision verify the rendered result before "done".
+
+### Slice 2 — executable build plan (User Settings modal · My Account tab)
+
+Concrete plan captured at commit 1b97700 so a fresh-context tick builds it without re-discovery.
+Reuses existing handlers — NO new endpoints (`PUT /me/status`, `PUT /me/presence`, `POST /avatar`).
+
+**Current header `.meta` block (`Chat.tsx` ~1675–1726)** holds, in order: online-count dot · hidden
+avatar `<input ref={avatarInputRef}>` + `self-avatar-btn` (avatar + username, `onClick` → file picker
+via `onAvatarPicked`) · `presence-pill` (`presence-pip` + `presence-select` `<select>` → `changePresence`,
+aria-label "set your presence") · `status-edit` link (→ `editMyStatus()`, which uses TWO `window.prompt`s
+for emoji+status) · `log out`. Handlers: `onAvatarPicked` (~529), `editMyStatus` (~1130), `changePresence`
+(~1154). State: `myPresence`/`setMyPresence_`, `myStatus`/`setMyStatus_`, `myStatusEmoji`/`setMyStatusEmoji_`,
+`avatarVersion`.
+
+**Build:**
+1. **`web/src/components/Settings.tsx`** (new) — fixed overlay + modal, left `settings-nav` tab list
+   (My Account active; a disabled/"coming soon" Voice & Video tab placeholder for slice 3), `settings-body`.
+   Props: `{ token, user, myPresence, myStatus, myStatusEmoji, avatarVersion, onAvatarPicked,
+   onSaveStatus(status,emoji), onChangePresence(next), onClose }`. **My Account tab:** avatar preview
+   (`<Avatar bust={avatarVersion}>`) + "Change avatar" button (triggers a file input → `onAvatarPicked`);
+   username (read-only — no rename endpoint yet); **custom status** = a text `<input>` (value myStatus) +
+   an emoji `<input>` (value myStatusEmoji) + a **Save** button → `onSaveStatus` (replaces the
+   `window.prompt` flow); **presence** = the 4-option `<select>` → `onChangePresence`. Close on Esc
+   (keydown listener) + overlay click; stop propagation on the modal.
+2. **`Chat.tsx`** — add `settingsOpen` state. In `.meta`, REPLACE the avatar-btn + presence-pill +
+   status-edit cluster with: a compact user chip (avatar + username) + a **⚙ "User settings"** button
+   (`aria-label="user settings"`, opens the modal) + keep online-count + `log out`. Refactor
+   `editMyStatus` into a plain `saveStatus(status, emoji)` (no prompts) passed to Settings; keep
+   `changePresence`/`onAvatarPicked` as-is. Render `<Settings/>` when `settingsOpen`.
+3. **`styles.css`** — `.settings-overlay` (fixed, dim backdrop, grid center), `.settings-modal`
+   (elevated card, max-width ~740px, flex row), `.settings-nav`/`.settings-tab` (left rail),
+   `.settings-body`, `.settings-row` (label + control), reuse `--bg-elevated`/`--accent`. Focus rings.
+
+**QA migration (`qa/browser.mjs`) — selectors MOVE from header into settings; update in lockstep:**
+- New: click ⚙ (`getByRole('button',{name:'user settings'})`) → modal visible; Esc closes it.
+- `07d2` status: open settings → fill the status text input → Save → assert it shows in the member list
+  (drop the `window.prompt` dialog handler for status).
+- `07d2b` presence: open settings → set the presence `<select>` to dnd → assert the member dot recolors.
+- `07i` avatar: open settings → change avatar there.
+- `08b` mobile header: header now has fewer controls; keep the ≤640px no-overflow assertion.
+Verify: `npm run build`, full browser QA green, **AI-vision the modal** (My Account tab — avatar, status
+fields, presence, tab rail; clean/Discord-like), then ship + `railway up` + rollout-verify the new bundle.
