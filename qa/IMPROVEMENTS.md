@@ -2945,3 +2945,29 @@ contract — keep them, add to them; don't rename them.** Grew QA with a Show/Hi
 **deploys** — `railway up` + rollout verification (live bundle is the new hash). Going forward every UI
 slice deploys; docs/test ticks stay push-only. Next slice: the Discord-style User Settings modal
 (My Account tab).
+
+## 2026-06-17 (tick 143) — slice 3d: input (mic) volume + a NEW QA capability (decoded inbound RMS)
+
+Shipped the Voice & Video **Input Volume** slider (mic gain spliced into the live capture chain). The
+high-value QA advance this tick: `qa/voice.mjs` now measures the **decoded RMS of a peer's inbound mic
+stream** via an `AnalyserNode` on the receiver — proving a send-side change actually alters what the
+other browser HEARS, not just a DOM property. Slice 3c could only assert `au.volume` (a playback
+property); there was **no way to prove a capture/encode-side change reached the receiver**. The new
+`measureRms(page, audioId)` helper closes that — it proved input 0% silences A on B while C stays
+audible (isolation), the real end-to-end proof Rule 14 wants for audio.
+
+**Component advanced:** audio → toward its north star (faithful, controllable, free) + QA-process
+(decoded-audio measurement is now a reusable tool).
+
+**Highest-value NEXT improvement (QA blind spot the new helper can now close):** mute / PTT / deafen
+are currently verified only via the **self-chip label** and `track.enabled` — NOT by confirming the
+RECEIVER actually gets silence. With `measureRms` we can now assert, two-client, that when A mutes (or
+releases PTT), B's decoded inbound RMS for A drops to ~0 — and rises again on unmute. That would turn
+the most safety-critical voice behaviors (am I really muted?) from "the UI says muted" into "the other
+person provably hears nothing." Open as the next Track-0 QA item.
+
+**Carry (loop-process):** a large, careful single-feature tick on the core voice path landed clean
+because the change reused an in-file proven pattern (`buildScreenSendAudio`) and the two-client QA
+exercised every adjacent flow (mute/PTT/deafen/screen/camera/hot-swap) — the blast-radius proof. When
+touching the core audio path, lean on the existing send-gain pattern and let the full voice QA be the
+regression guard, rather than hand-reasoning about each interaction.

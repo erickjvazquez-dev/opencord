@@ -56,7 +56,7 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   browser QA `browser=0 realtime=0 voice=0 search=0`; AI-vision verified the modal (My Account),
   the status-save flow, the avatar upload, and the mobile header (no overflow). Shipped + `railway
   up` + rollout-verified.
-- [~] **Voice & Video settings tab** — slice 3a DONE (iter 130): the **Voice & Video** tab is live
+- [x] **Voice & Video settings tab** — slice 3a DONE (iter 130): the **Voice & Video** tab is live
   (no longer a "SOON" placeholder) with **input + output device pickers**, a **mic test /
   input-sensitivity meter** (Web Audio RMS from the selected device — verified responding to the
   fake-mic tone in QA), and **noise-suppression + echo-cancellation + auto-gain toggles**. New
@@ -74,9 +74,17 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   `setMasterVolume`): a pure `effectiveVolume(peerVol, master)` (vitest-tested, clamped) scales every
   peer's `<audio>` playback on top of their personal volume. Two-client voice QA proves it composes
   live (master 50% × peer 40% → 0.2); browser QA proves the slider renders + persists; AI-vision
-  verified. **Still TODO (slice 3d):** input **volume / mic-gain** slider — deferred because it needs a
-  `GainNode` spliced into the capture chain (interacts with mute/PTT/hot-swap), unlike playback-only
-  output volume; do it carefully on its own tick.
+  verified. **Slice 3d DONE (iter 143): input (mic) volume slider** — the Discord "Input Volume"
+  control (how loud peers hear YOU), spliced as a `GainNode` into the live CAPTURE chain (raw mic →
+  source → `micSendGain` → destination → `micSendTrack`), reusing the proven screen-audio send-gain
+  pattern. Peers receive the gain-scaled track; `setInputVolume` sets the gain live mid-call.
+  Mute/PTT/deafen unchanged (toggle the raw source `.enabled` — a disabled source feeds silence
+  through the node); a mic hot-swap rebuilds the chain + `replaceTrack`s; degrades to the raw track if
+  Web Audio is absent. vitest (clamp/default/corrupt/independence); browser QA (slider renders +
+  persists + re-reads on remount); **two-client voice QA measures B's DECODED inbound RMS for A's mic:
+  input 0% drops it to ~silence while C stays audible → the gain is really wired through the send
+  path** (the mute/PTT/screen/camera flows all stayed green = blast radius intact). Shipped + `railway
+  up` + rollout-verified (live bundle carries the slider). **Tab complete (3a–3d).**
 - [~] **Appearance / general polish pass** — **focus-ring a11y baseline DONE (iter 133):** one global
   `:focus-visible` rule gives EVERY interactive element (buttons/links/selects/`[role]`/`[tabindex]`) a
   consistent, theme-matched 2px accent ring under **keyboard** focus (never on a mouse click), replacing
@@ -483,6 +491,12 @@ item from here as the structural milestones above land.
   (exit 0) rather than false-red. Proven to catch a "match-all" regression (operators
   silently ignored → 5 of 7 assertions trip); green on prod (7 msgs) and on the local
   gate (14 msgs).
+- [ ] **Prove mute/PTT/deafen by RECEIVER silence (not just the UI label)** — currently mute/PTT/
+  deafen are checked only via the self-chip label + `track.enabled`; we never confirm the *other*
+  browser actually receives silence. Tick 143 added `measureRms(page, audioId)` to `qa/voice.mjs`
+  (decoded inbound RMS via an AnalyserNode) — reuse it: assert two-client that when A mutes / releases
+  PTT, B's decoded inbound RMS for A drops to ~0 and rises again on unmute. Turns "the UI says muted"
+  into "the peer provably hears nothing" — the most safety-critical voice guarantee.
 
 ---
 
