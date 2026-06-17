@@ -208,6 +208,55 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				writeJSON(w, http.StatusOK, p)
 			})
+			// Block a user (v0.5, slice 1): symmetric DM enforcement. Identity is the
+			// JWT caller (Rule B/C — never the body); the target is the path id. 400 if
+			// you try to block yourself, 404 for an unknown user, 204 on success
+			// (idempotent — re-blocking is also 204).
+			r.Post("/users/{id}/block", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+					return
+				}
+				switch err := store.BlockUser(r.Context(), me.ID, id); {
+				case errors.Is(err, chat.ErrForbidden):
+					http.Error(w, `{"error":"cannot block yourself"}`, http.StatusBadRequest)
+				case errors.Is(err, chat.ErrUserNotFound):
+					http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+				case err != nil:
+					http.Error(w, `{"error":"could not block user"}`, http.StatusInternalServerError)
+				default:
+					w.WriteHeader(http.StatusNoContent)
+				}
+			})
+			// Unblock a user. 404 if they weren't blocked, 204 on success.
+			r.Delete("/users/{id}/block", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+					return
+				}
+				switch err := store.UnblockUser(r.Context(), me.ID, id); {
+				case errors.Is(err, chat.ErrUserNotFound):
+					http.Error(w, `{"error":"user is not blocked"}`, http.StatusNotFound)
+				case err != nil:
+					http.Error(w, `{"error":"could not unblock user"}`, http.StatusInternalServerError)
+				default:
+					w.WriteHeader(http.StatusNoContent)
+				}
+			})
+			// The users I've blocked (so the client can render + manage the block list).
+			r.Get("/me/blocks", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				blocked, err := store.ListBlocked(r.Context(), me.ID)
+				if err != nil {
+					http.Error(w, `{"error":"could not load blocks"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusOK, blocked)
+			})
 			// Update a server channel — posting policy ('everyone'|'admins') and/or
 			// topic. Admins only. Fields are optional (pointers): each is applied only
 			// when present, so old {postPolicy} clients keep working.

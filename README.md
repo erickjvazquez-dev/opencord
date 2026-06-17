@@ -103,6 +103,9 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `PUT`    | `/api/me/status`               | bearer | Set your custom status `{status, statusEmoji}` (empty clears) |
 | `PUT`    | `/api/me/profile`              | bearer | Set your profile `{about, pronouns}` (empty clears)  |
 | `GET`    | `/api/users/{id}/profile`      | bearer | A user's public profile (about, pronouns, status, presence) |
+| `POST`   | `/api/users/{id}/block`        | bearer | Block a user (symmetric — neither can DM the other) |
+| `DELETE` | `/api/users/{id}/block`        | bearer | Unblock a user                                 |
+| `GET`    | `/api/me/blocks`               | bearer | Users you've blocked                           |
 | `PUT`    | `/api/me/presence`             | bearer | Set your presence `{presence}` (`online`/`idle`/`dnd`/`invisible`) |
 | `GET`    | `/api/channels`                | bearer | List public channels                           |
 | `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |

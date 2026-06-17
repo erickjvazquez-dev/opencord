@@ -207,6 +207,18 @@ CREATE TABLE IF NOT EXISTS server_bans (
 );
 CREATE INDEX IF NOT EXISTS server_bans_server_id_idx ON server_bans (server_id);
 
+-- User blocks (v0.5): a directed block — blocker_id has blocked blocked_id. A block is
+-- enforced SYMMETRICALLY for DMs: if A blocked B OR B blocked A, neither can open, read,
+-- or send in their DM (slice 1). Hiding a blocked user's messages in SERVER channels is
+-- a later slice. ON DELETE CASCADE drops a user's blocks when their account is removed.
+CREATE TABLE IF NOT EXISTS user_blocks (
+    blocker_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (blocker_id, blocked_id)
+);
+CREATE INDEX IF NOT EXISTS user_blocks_blocked_id_idx ON user_blocks (blocked_id);
+
 -- Custom server emoji (v0.5): a server may upload named image emoji usable by its
 -- members. The bytes live on the server's local disk under OPENCORD_UPLOAD_DIR keyed
 -- by `emoji_key` (a server-generated opaque random name — never client input, so

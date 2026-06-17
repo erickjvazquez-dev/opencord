@@ -2068,3 +2068,29 @@ permission on click (a user gesture) and only persists ON if granted (denied →
   `@meelsewhere` rejection + regex-escape). browser E2E: stub `window.Notification`, grant permission,
   force `document.hidden`, a 2nd user posts an @mention → assert a notification was constructed with
   the author + body. Verified: build clean, vitest 60/60, full QA `browser=0 realtime=0 voice=0 search=0`.
+
+## User blocking — backend (v0.5, slice 1)
+
+**Why:** Discord lets you block a user (privacy/safety). Slice 1 = the block API + DM-only enforcement;
+hiding a blocked user's messages in SERVER channels is slice 2.
+
+**Semantics:** a block is enforced SYMMETRICALLY for DMs — if A blocked B OR B blocked A, neither can
+open or use their DM (create/open, send, react, read history all denied).
+
+- **Schema:** `user_blocks(blocker_id, blocked_id, created_at, PK(blocker_id,blocked_id))` + index on
+  blocked_id.
+- **Store:** `BlockUser` (self→ErrForbidden, target must exist, idempotent), `UnblockUser` (0 rows→
+  ErrUserNotFound), `IsBlocked(a,b)` (symmetric EXISTS), `ListBlocked` (directed, newest first);
+  `ErrBlocked`.
+- **Enforcement (3 points):** (1) `CanAccessChannel` — the central gate (send/react/history) — the
+  `kind='dm'` branch ALSO denies if the caller is in a block relationship with the other DM member
+  (server/global branches UNCHANGED, regression-tested); (2) `CreateOrGetDM` → `ErrBlocked` (can't
+  open/reopen); (3) `ListDMs` filters out blocked DMs so the sidebar never shows an un-openable one.
+- **Routes:** `POST /users/{id}/block` (400 self / 404 unknown / 204), `DELETE /users/{id}/block`
+  (404 / 204), `GET /me/blocks`. `HandleCreateDM` maps `ErrBlocked`→403. README synced.
+- **Rule 15 (verified):** integration tests — symmetric block → `CreateOrGetDM` both directions
+  ErrBlocked; a PRE-EXISTING DM's `CanAccessChannel` false for BOTH after block; server-channel +
+  #general access UNAFFECTED (explicit regression guard); unblock restores; endpoints 401/400/404/204.
+  Full suite green (existing DM/server tests still pass). Build/vet/gofmt clean.
+- **Next (slice 2 — client + hide msgs):** block/unblock button (profile card / member row), a
+  blocked-users list in Settings, and hide/collapse a blocked user's messages in server channels.

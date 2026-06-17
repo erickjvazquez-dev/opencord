@@ -424,7 +424,12 @@ item from here as the structural milestones above land.
   per-user volume, push-to-talk, deafen, and a rebindable global PTT hotkey all shipped
 
 ### Direct messages
-- [ ] 1:1 DMs · group DMs · friends / friend requests / blocking
+- [~] 1:1 DMs (done) · **user blocking backend DONE (iter 157, slice 1)** — `user_blocks` table +
+  block/unblock/list API + SYMMETRIC DM enforcement (block → can't open/send/read the DM, either
+  direction) via the central `CanAccessChannel` gate (+ CreateOrGetDM + ListDMs filter); server-channel
+  access unaffected (regression-tested); Rule-15 adversarial integration tests. **Slice 2:** block
+  button (profile card/member row) + blocked-list in Settings + hide blocked users' messages in
+  channels. · group DMs · friends / friend requests (later)
 
 ### Users / Profiles
 - [x] Avatars (initials)

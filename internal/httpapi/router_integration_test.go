@@ -702,6 +702,66 @@ func TestRouterBanMemberIntegration(t *testing.T) {
 	})
 }
 
+// TestRouterBlockUserIntegration walks the v0.5 user-blocking endpoints through the
+// real HTTP layer (Rule B/C — identity from the JWT, never the body): unauth → 401,
+// block → 204, the block shows in GET /me/blocks, self-block → 400, unknown user → 404,
+// unblock → 204, re-unblock → 404. It also confirms a normal (un-blocked) DM still opens
+// and that a block then forbids opening the DM (403) — DM-only enforcement, slice 1.
+func TestRouterBlockUserIntegration(t *testing.T) {
+	hs := newHarness(t)
+
+	alice, aliceTok := hs.user(t)
+	bob, _ := hs.user(t)
+	carol, _ := hs.user(t)
+
+	blockPath := func(uid int64) string { return fmt.Sprintf("/api/users/%d/block", uid) }
+
+	t.Run("auth required", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", blockPath(bob.ID), "", ""), http.StatusUnauthorized, "unauth block")
+		wantStatus(t, hs.req(t, "GET", "/api/me/blocks", "", ""), http.StatusUnauthorized, "unauth list")
+		wantStatus(t, hs.req(t, "DELETE", blockPath(bob.ID), "", ""), http.StatusUnauthorized, "unauth unblock")
+	})
+	t.Run("malformed user id is 400", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", "/api/users/abc/block", aliceTok, ""), http.StatusBadRequest, "bad user id")
+	})
+	t.Run("can't block yourself", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", blockPath(alice.ID), aliceTok, ""), http.StatusBadRequest, "self block")
+	})
+	t.Run("blocking an unknown user is 404", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", blockPath(alice.ID+999999), aliceTok, ""), http.StatusNotFound, "block unknown")
+	})
+
+	// A normal (un-blocked) DM with carol opens fine — proves no regression.
+	t.Run("normal DM opens before any block", func(t *testing.T) {
+		body := fmt.Sprintf(`{"username":%q}`, carol.Username)
+		wantStatus(t, hs.req(t, "POST", "/api/dms", aliceTok, body), http.StatusOK, "open dm with carol")
+	})
+
+	t.Run("block → 204, listed, then DM is forbidden, then unblock restores", func(t *testing.T) {
+		// Block bob → 204 (idempotent: a second block is also 204).
+		wantStatus(t, hs.req(t, "POST", blockPath(bob.ID), aliceTok, ""), http.StatusNoContent, "block bob")
+		wantStatus(t, hs.req(t, "POST", blockPath(bob.ID), aliceTok, ""), http.StatusNoContent, "re-block bob")
+
+		// GET /me/blocks shows bob.
+		listResp := hs.req(t, "GET", "/api/me/blocks", aliceTok, "")
+		wantStatus(t, listResp, http.StatusOK, "list blocks")
+		if !strings.Contains(listResp.Body.String(), fmt.Sprintf(`"id":%d`, bob.ID)) {
+			t.Fatalf("blocks list should contain bob; got %s", listResp.Body.String())
+		}
+
+		// Opening a DM with a blocked user is forbidden (403) — DM-only enforcement.
+		body := fmt.Sprintf(`{"username":%q}`, bob.Username)
+		wantStatus(t, hs.req(t, "POST", "/api/dms", aliceTok, body), http.StatusForbidden, "open dm with blocked bob")
+
+		// Unblock → 204; the DM opens again.
+		wantStatus(t, hs.req(t, "DELETE", blockPath(bob.ID), aliceTok, ""), http.StatusNoContent, "unblock bob")
+		wantStatus(t, hs.req(t, "POST", "/api/dms", aliceTok, body), http.StatusOK, "open dm with unblocked bob")
+
+		// Unblocking a not-blocked user is 404.
+		wantStatus(t, hs.req(t, "DELETE", blockPath(bob.ID), aliceTok, ""), http.StatusNotFound, "re-unblock bob")
+	})
+}
+
 // TestRouterInviteManagementIntegration walks the invite list/revoke endpoints through
 // the HTTP layer: listing + revoking are admin-gated (a stranger/member gets 403, not the
 // list and not a revoke), revoke is scoped by server_id so an admin of one server can't

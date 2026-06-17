@@ -441,6 +441,138 @@ func TestDirectMessagesIntegration(t *testing.T) {
 	}
 }
 
+// TestUserBlockingIntegration exercises the v0.5 user-blocking store layer (slice 1:
+// DM-only enforcement). A block is SYMMETRIC for DMs — if A blocked B OR B blocked A,
+// neither can open, read, or send in their DM — and it must not touch server/global
+// channel access.
+func TestUserBlockingIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+
+	// Can't block yourself.
+	if err := store.BlockUser(ctx, alice.ID, alice.ID); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("self-block err = %v, want ErrForbidden", err)
+	}
+	// Blocking a non-existent user → ErrUserNotFound.
+	if err := store.BlockUser(ctx, alice.ID, 1<<40); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("block unknown err = %v, want ErrUserNotFound", err)
+	}
+
+	// Pre-existing DM alice↔bob, accessible to both before any block.
+	dm, err := store.CreateOrGetDM(ctx, alice.ID, bob.ID)
+	if err != nil {
+		t.Fatalf("create dm: %v", err)
+	}
+	for _, who := range []int64{alice.ID, bob.ID} {
+		if ok, err := store.CanAccessChannel(ctx, dm.ID, who); err != nil || !ok {
+			t.Fatalf("before block: user %d must access dm, got %v err %v", who, ok, err)
+		}
+	}
+
+	// Alice blocks bob (idempotent: a second block is a no-op, not an error).
+	if err := store.BlockUser(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("block bob: %v", err)
+	}
+	if err := store.BlockUser(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("re-block bob (idempotent): %v", err)
+	}
+
+	// IsBlocked is symmetric.
+	if ok, err := store.IsBlocked(ctx, alice.ID, bob.ID); err != nil || !ok {
+		t.Fatalf("IsBlocked(alice,bob) = %v err %v, want true", ok, err)
+	}
+	if ok, err := store.IsBlocked(ctx, bob.ID, alice.ID); err != nil || !ok {
+		t.Fatalf("IsBlocked(bob,alice) = %v err %v, want true (symmetric)", ok, err)
+	}
+	if ok, _ := store.IsBlocked(ctx, alice.ID, carol.ID); ok {
+		t.Fatal("IsBlocked(alice,carol) must be false")
+	}
+
+	// CreateOrGetDM is now blocked in BOTH directions (symmetric).
+	if _, err := store.CreateOrGetDM(ctx, alice.ID, bob.ID); !errors.Is(err, chat.ErrBlocked) {
+		t.Fatalf("CreateOrGetDM(alice,bob) err = %v, want ErrBlocked", err)
+	}
+	if _, err := store.CreateOrGetDM(ctx, bob.ID, alice.ID); !errors.Is(err, chat.ErrBlocked) {
+		t.Fatalf("CreateOrGetDM(bob,alice) err = %v, want ErrBlocked (symmetric)", err)
+	}
+
+	// The pre-existing DM is now inaccessible to BOTH members (symmetric read gate).
+	for _, who := range []int64{alice.ID, bob.ID} {
+		if ok, err := store.CanAccessChannel(ctx, dm.ID, who); err != nil || ok {
+			t.Fatalf("after block: user %d must NOT access dm, got %v err %v", who, ok, err)
+		}
+	}
+
+	// The blocked DM is filtered out of both members' DM lists.
+	if dms, _ := store.ListDMs(ctx, alice.ID); hasDM(dms, dm.ID, bob.ID) {
+		t.Fatalf("alice's DM list must exclude the blocked dm: %+v", dms)
+	}
+	if dms, _ := store.ListDMs(ctx, bob.ID); hasDM(dms, dm.ID, alice.ID) {
+		t.Fatalf("bob's DM list must exclude the blocked dm: %+v", dms)
+	}
+
+	// ListBlocked is the directed blocker→blocked view: alice sees bob, bob sees nobody.
+	blocked, err := store.ListBlocked(ctx, alice.ID)
+	if err != nil || len(blocked) != 1 || blocked[0].ID != bob.ID {
+		t.Fatalf("ListBlocked(alice) = %+v err %v, want [bob]", blocked, err)
+	}
+	if bobBlocked, _ := store.ListBlocked(ctx, bob.ID); len(bobBlocked) != 0 {
+		t.Fatalf("ListBlocked(bob) = %+v, want empty (block is directed in storage)", bobBlocked)
+	}
+
+	// REGRESSION GUARD: server/global channel access is untouched by blocking. Put
+	// alice + bob in a server channel; both must still access it despite the block.
+	srv, err := store.CreateServer(ctx, alice.ID, "Block Regression Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := store.AddServerMember(ctx, srv.ID, bob.ID); err != nil {
+		t.Fatalf("add bob to server: %v", err)
+	}
+	ch, err := store.CreateServerChannel(ctx, srv.ID, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create server channel: %v", err)
+	}
+	for _, who := range []int64{alice.ID, bob.ID} {
+		if ok, err := store.CanAccessChannel(ctx, ch.ID, who); err != nil || !ok {
+			t.Fatalf("server-channel access for user %d must be unaffected by a block, got %v err %v", who, ok, err)
+		}
+	}
+	general, _ := store.DefaultChannelID(ctx)
+	if ok, err := store.CanAccessChannel(ctx, general, bob.ID); err != nil || !ok {
+		t.Fatalf("global #general access must be unaffected by a block, got %v err %v", ok, err)
+	}
+
+	// Unblock restores everything: DM re-opens, both regain access, list clears.
+	if err := store.UnblockUser(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("unblock bob: %v", err)
+	}
+	// Unblocking a not-blocked pair → ErrUserNotFound.
+	if err := store.UnblockUser(ctx, alice.ID, bob.ID); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("re-unblock err = %v, want ErrUserNotFound", err)
+	}
+	if ok, err := store.IsBlocked(ctx, alice.ID, bob.ID); err != nil || ok {
+		t.Fatalf("after unblock IsBlocked = %v err %v, want false", ok, err)
+	}
+	reopened, err := store.CreateOrGetDM(ctx, alice.ID, bob.ID)
+	if err != nil || reopened.ID != dm.ID {
+		t.Fatalf("after unblock CreateOrGetDM = %+v err %v, want the original dm %d", reopened, err, dm.ID)
+	}
+	for _, who := range []int64{alice.ID, bob.ID} {
+		if ok, err := store.CanAccessChannel(ctx, dm.ID, who); err != nil || !ok {
+			t.Fatalf("after unblock: user %d must access dm again, got %v err %v", who, ok, err)
+		}
+	}
+	if dms, _ := store.ListDMs(ctx, alice.ID); !hasDM(dms, dm.ID, bob.ID) {
+		t.Fatalf("after unblock alice's DM list must include the dm again: %+v", dms)
+	}
+	if blocked, _ := store.ListBlocked(ctx, alice.ID); len(blocked) != 0 {
+		t.Fatalf("after unblock ListBlocked(alice) = %+v, want empty", blocked)
+	}
+}
+
 // A non-member must not be able to react (or un-react) to a message in a DM they
 // can't access — reactions take a message id, which is guessable, so the read gate
 // alone isn't enough (Rule 15). Members and public-channel reactions stay open.

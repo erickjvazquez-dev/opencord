@@ -43,6 +43,9 @@ var (
 	ErrInviteExhausted = errors.New("invite has reached its maximum uses")
 	// ErrBanned is returned when a banned user tries to (re)join a server.
 	ErrBanned = errors.New("banned from this server")
+	// ErrBlocked is returned when a user tries to open/use a DM with someone in a
+	// block relationship with them (symmetric: either side having blocked the other).
+	ErrBlocked = errors.New("blocked")
 	// ErrTimedOut is returned when a timed-out member tries to post.
 	ErrTimedOut = errors.New("timed out")
 	// ErrInvalidRole is returned when a role is not one that can be assigned.
@@ -926,6 +929,12 @@ func (s *Store) Unreads(ctx context.Context, userID int64, username string) ([]C
 // CanAccessChannel reports whether userID may read/join channelID. Public
 // channels are open to everyone; DM (and future private) channels require
 // membership. A non-existent channel returns (false, nil).
+//
+// For DM channels there is an ADDITIONAL gate (v0.5 user blocking, slice 1): even a
+// member is denied if they are in a block relationship with the OTHER DM member —
+// symmetric, so it holds whichever side did the blocking. This makes block enforcement
+// flow through every read/send/react path that already routes through this gate, while
+// leaving server/global channel access completely unchanged.
 func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx,
@@ -933,6 +942,12 @@ func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (
 		          WHEN c.kind = 'dm' THEN
 		            EXISTS (SELECT 1 FROM channel_members m
 		                     WHERE m.channel_id = c.id AND m.user_id = $2)
+		            AND NOT EXISTS (
+		                  SELECT 1 FROM channel_members other
+		                    JOIN user_blocks b
+		                      ON (b.blocker_id = $2 AND b.blocked_id = other.user_id)
+		                      OR (b.blocker_id = other.user_id AND b.blocked_id = $2)
+		                   WHERE other.channel_id = c.id AND other.user_id <> $2)
 		          WHEN c.server_id IS NOT NULL THEN
 		            EXISTS (SELECT 1 FROM server_members sm
 		                     WHERE sm.server_id = c.server_id AND sm.user_id = $2)
@@ -981,6 +996,12 @@ func (s *Store) CreateOrGetDM(ctx context.Context, a, b int64) (DMChannel, error
 	other, err := s.LookupUserByID(ctx, b)
 	if err != nil {
 		return DMChannel{}, err
+	}
+	// A block (either direction) forbids opening/reopening a DM (v0.5, symmetric).
+	if blocked, err := s.IsBlocked(ctx, a, b); err != nil {
+		return DMChannel{}, err
+	} else if blocked {
+		return DMChannel{}, ErrBlocked
 	}
 
 	// Existing DM with exactly {a, b}?
@@ -1033,7 +1054,9 @@ func (s *Store) LookupUserByID(ctx context.Context, id int64) (DMUser, error) {
 	return u, err
 }
 
-// ListDMs returns userID's direct-message channels, each with the other member.
+// ListDMs returns userID's direct-message channels, each with the other member. DMs
+// whose other member is in a block relationship with the caller (either direction) are
+// filtered out (v0.5, symmetric) so the sidebar never shows an un-openable DM.
 func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT c.id, c.created_at, u.id, u.username
@@ -1042,6 +1065,10 @@ func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) 
 		   JOIN channel_members other ON other.channel_id = c.id AND other.user_id <> $1
 		   JOIN users u ON u.id = other.user_id
 		  WHERE c.kind = 'dm'
+		    AND NOT EXISTS (
+		          SELECT 1 FROM user_blocks b
+		           WHERE (b.blocker_id = $1 AND b.blocked_id = other.user_id)
+		              OR (b.blocker_id = other.user_id AND b.blocked_id = $1))
 		  ORDER BY c.id`, userID)
 	if err != nil {
 		return nil, err
@@ -1396,6 +1423,77 @@ func (s *Store) ListServerBans(ctx context.Context, serverID int64) ([]ServerBan
 			return nil, err
 		}
 		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// BlockUser records that blockerID has blocked blockedID (v0.5, slice 1: DM-only
+// enforcement). Idempotent — re-blocking is a no-op. You can't block yourself
+// (ErrForbidden); the target must exist (ErrUserNotFound from the lookup). The block is
+// directed in storage but enforced SYMMETRICALLY for DMs (see CanAccessChannel /
+// CreateOrGetDM / ListDMs).
+func (s *Store) BlockUser(ctx context.Context, blockerID, blockedID int64) error {
+	if blockerID == blockedID {
+		return ErrForbidden // can't block yourself
+	}
+	if _, err := s.LookupUserByID(ctx, blockedID); err != nil {
+		return err // ErrUserNotFound for an unknown target
+	}
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)
+		 ON CONFLICT (blocker_id, blocked_id) DO NOTHING`,
+		blockerID, blockedID)
+	return err
+}
+
+// UnblockUser lifts blockerID's block on blockedID. Returns ErrUserNotFound when there
+// was no such block (the pair wasn't blocked / no such user) — mirrors the unban shape.
+func (s *Store) UnblockUser(ctx context.Context, blockerID, blockedID int64) error {
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+		blockerID, blockedID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrUserNotFound // wasn't blocked
+	}
+	return nil
+}
+
+// IsBlocked reports whether users a and b are in a block relationship in EITHER
+// direction (symmetric) — a blocked b OR b blocked a. This is the predicate behind DM
+// enforcement.
+func (s *Store) IsBlocked(ctx context.Context, a, b int64) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(
+		   SELECT 1 FROM user_blocks
+		    WHERE (blocker_id = $1 AND blocked_id = $2)
+		       OR (blocker_id = $2 AND blocked_id = $1))`,
+		a, b).Scan(&ok)
+	return ok, err
+}
+
+// ListBlocked returns the users that userID has blocked (the directed blocker→blocked
+// view), newest block first, as a non-nil (possibly empty) slice.
+func (s *Store) ListBlocked(ctx context.Context, userID int64) ([]DMUser, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT u.id, u.username
+		   FROM user_blocks b JOIN users u ON u.id = b.blocked_id
+		  WHERE b.blocker_id = $1
+		  ORDER BY b.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]DMUser, 0)
+	for rows.Next() {
+		var u DMUser
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
 	}
 	return out, rows.Err()
 }
@@ -2449,6 +2547,12 @@ func HandleCreateDM(store *Store) http.HandlerFunc {
 		dm, err := store.CreateOrGetDM(r.Context(), me.ID, target.ID)
 		if errors.Is(err, ErrCannotDMSelf) {
 			http.Error(w, `{"error":"cannot DM yourself"}`, http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, ErrBlocked) {
+			// A block (either direction) forbids opening the DM (v0.5, symmetric). 403
+			// without distinguishing who blocked whom (no information leak, Rule 15).
+			http.Error(w, `{"error":"cannot open a DM with this user"}`, http.StatusForbidden)
 			return
 		}
 		if err != nil {
