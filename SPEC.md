@@ -1944,3 +1944,23 @@ Server-scoped: only renders for names in the CURRENT server's emoji set (literal
 - **Verify (done):** tsc + vitest 39/39 + full QA green (no markdown regression across all message
   types) + AI-vision (shortcode renders as an inline image); ship + `railway up` + rollout-verify.
 - **Next:** slice 3 — emoji picker (insert `:name:`) + server-settings upload/delete UI + live refetch.
+
+## Custom server emoji — manager UI (v0.5, slice 3a) — feature complete
+
+**Why:** slices 1+2 shipped the backend + `:name:` rendering, but emoji could only be added via raw API.
+Slice 3a is the admin UI to upload/list/delete emoji, with live cache invalidation.
+
+- **`api.ts`:** `uploadServerEmoji(token, serverId, name, file)` (multipart; surfaces 409/400/413),
+  `deleteServerEmoji(token, serverId, emojiId)`.
+- **`Chat.tsx`:** an **Emoji** section in the members/server-settings panel (admin-gated, mirroring the
+  Invites/Bans pattern; `.emoji-manager-*` namespace so it can't collide with existing selectors):
+  list (image + `:name:` + delete), upload form (name input client-validated `[a-z0-9_]{2,32}` + file
+  picker), and `refreshEmojiCache` which rebuilds the per-server name→id map after every upload/delete
+  so `:name:` resolves **live, no page reload** — the slice-3a UX win.
+- **`styles.css`:** dark-theme `.emoji-manager-*` consistent with invites/bans.
+- **QA:** browser E2E — open manager → upload via the UI → row appears → send `:ui_emoji:` → renders
+  `img.emoji-inline` WITHOUT a reload (proves live invalidation) → delete → row removed. Screenshot.
+- **Verify (done):** tsc + vitest 39/39 + full QA green + AI-vision (manager Discord-like, integrated).
+  Ship + `railway up` + rollout-verify. Backend enforces admin regardless (client gate is UX).
+- **Custom emoji is now complete end-to-end.** Optional later: slice 3b emoji PICKER (insert `:name:`
+  from a palette in the composer); stickers/GIF much later.

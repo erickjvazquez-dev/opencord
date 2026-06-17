@@ -411,6 +411,48 @@ export async function listServerEmoji(token: string, serverId: number): Promise<
   return res.json()
 }
 
+// Upload a custom emoji to a server (admin-gated; multipart `name` + `file`). The
+// server validates the name (lowercase `[a-z0-9_]{2,32}`, unique per server) and the
+// image (≤256 KiB). Surfaces the server's error message on non-2xx (e.g. 409 name
+// taken / 400 invalid / 413 too big). Returns the created record.
+export async function uploadServerEmoji(
+  token: string,
+  serverId: number,
+  name: string,
+  file: File,
+): Promise<ServerEmoji> {
+  const form = new FormData()
+  form.append('name', name)
+  form.append('file', file)
+  // NOTE: don't set Content-Type — the browser sets the multipart boundary.
+  const res = await fetch(`/api/servers/${serverId}/emoji`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok && res.status !== 201) {
+    throw new Error((data as { error?: string }).error || `could not upload emoji (${res.status})`)
+  }
+  return data as ServerEmoji
+}
+
+// Delete a server's custom emoji (admin-gated). Mirrors the other admin DELETEs.
+export async function deleteServerEmoji(
+  token: string,
+  serverId: number,
+  emojiId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/emoji/${emojiId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not delete emoji')
+  }
+}
+
 export async function createServerChannel(
   token: string,
   serverId: number,

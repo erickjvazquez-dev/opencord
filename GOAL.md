@@ -373,7 +373,11 @@ item from here as the structural milestones above land.
   `<img>` from `/api/emoji/{id}` for names in the active server's emoji map (per-server cached;
   literal in #general/DMs), XSS-safe (React img, numeric src); 8 vitest cases + a browser E2E
   (upload via API → `:qa_emoji:` → `img.emoji-inline`) + AI-vision verified, no markdown regression.
-  **Next:** slice 3 — emoji picker + server-settings upload/delete UI. · stickers · GIF picker (later)
+  **Manager UI DONE (iter 152, slice 3a):** an admin **Emoji** section in the members/server-settings
+  panel — list + upload (name + image) + delete, with `refreshEmojiCache` so `:name:` resolves LIVE
+  (no reload); browser E2E (UI upload → live render → delete) + AI-vision verified. **Custom emoji is
+  now complete end-to-end** (backend + render + manager). Optional later: slice 3b picker (insert
+  `:name:` from a palette). · stickers · GIF picker (later)
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
   (React elements, no innerHTML); E2E + AI-vision verified.

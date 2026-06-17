@@ -17,6 +17,8 @@ import {
   fetchDMs,
   fetchServerChannels,
   listServerEmoji,
+  uploadServerEmoji,
+  deleteServerEmoji,
   fetchPins,
   fetchServerMembers,
   fetchServers,
@@ -59,6 +61,7 @@ import type {
   Reaction,
   Server,
   ServerBan,
+  ServerEmoji,
   ServerEvent,
   ServerMember,
   User,
@@ -218,6 +221,15 @@ export function Chat({
   const [bans, setBans] = useState<ServerBan[] | null>(null)
   // Active invites for the server whose members panel is open (admin-only; null until loaded).
   const [serverInvites, setServerInvites] = useState<Invite[] | null>(null)
+  // Custom emoji for the server whose members panel is open (admin-only; null until
+  // loaded). Drives the Emoji manager section: list + upload + delete.
+  const [emojiManager, setEmojiManager] = useState<ServerEmoji[] | null>(null)
+  // Upload form state for the Emoji manager: the chosen name, the picked file, a busy
+  // flag, and the last error to surface (e.g. 409 name taken / 413 too big).
+  const [emojiName, setEmojiName] = useState('')
+  const [emojiFile, setEmojiFile] = useState<File | null>(null)
+  const [emojiUploading, setEmojiUploading] = useState(false)
+  const [emojiError, setEmojiError] = useState('')
   // Persistent right-hand member list (Discord-style) for the current server channel.
   const [memberList, setMemberList] = useState<ServerMember[]>([])
   // The caller's own custom status (synced from whichever member list includes them).
@@ -949,6 +961,20 @@ export function Chat({
     }
   }
 
+  // Load a server's custom emoji into the manager — admin-only, so swallow a 403
+  // (non-admins simply see no emoji section). Mirrors loadInvites/loadBans.
+  const loadEmoji = async (serverId: number, role?: string) => {
+    if (role !== 'owner' && role !== 'admin') {
+      setEmojiManager(null)
+      return
+    }
+    try {
+      setEmojiManager(await listServerEmoji(token, serverId))
+    } catch {
+      setEmojiManager(null)
+    }
+  }
+
   const openMembers = async (serverId: number) => {
     try {
       setPins(null)
@@ -958,8 +984,61 @@ export function Chat({
       const myRole = members.find((m) => m.userId === user.id)?.role
       void loadBans(serverId, myRole)
       void loadInvites(serverId, myRole)
+      void loadEmoji(serverId, myRole)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not load members')
+    }
+  }
+
+  // Refresh the cached per-server `:name:` → id map from the live emoji list so a
+  // subsequently-sent (or re-rendered) shortcode resolves to an image WITHOUT a page
+  // reload — the slice-3a UX win. Called after every successful upload/delete.
+  const refreshEmojiCache = (serverId: number, list: ServerEmoji[]) => {
+    const map = new Map(list.map((e) => [e.name, e.id]))
+    setServerEmoji((cur) => ({ ...cur, [serverId]: map }))
+  }
+
+  // Upload a new emoji from the manager (admin). On success: refresh the manager list,
+  // invalidate the per-server cache (live `:name:` rendering), and clear the form. On
+  // error: surface the server's message (409 name taken / 400 invalid / 413 too big).
+  const uploadEmojiFromManager = async (serverId: number) => {
+    setEmojiError('')
+    const name = emojiName.trim().toLowerCase()
+    if (!/^[a-z0-9_]{2,32}$/.test(name)) {
+      setEmojiError('Name must be 2–32 chars: lowercase letters, numbers, or underscores.')
+      return
+    }
+    if (!emojiFile) {
+      setEmojiError('Pick an image file to upload.')
+      return
+    }
+    setEmojiUploading(true)
+    try {
+      await uploadServerEmoji(token, serverId, name, emojiFile)
+      const list = await listServerEmoji(token, serverId)
+      setEmojiManager(list)
+      refreshEmojiCache(serverId, list)
+      setEmojiName('')
+      setEmojiFile(null)
+    } catch (err) {
+      setEmojiError(err instanceof Error ? err.message : 'could not upload emoji')
+    } finally {
+      setEmojiUploading(false)
+    }
+  }
+
+  // Delete an emoji from the manager (admin). On success: drop it from the list and
+  // invalidate the per-server cache so `:name:` stops resolving without a reload.
+  const deleteEmojiFromManager = async (serverId: number, emojiId: number, name: string) => {
+    if (!window.confirm(`Delete the :${name}: emoji? Messages using it will show the literal text.`))
+      return
+    try {
+      await deleteServerEmoji(token, serverId, emojiId)
+      const list = await listServerEmoji(token, serverId)
+      setEmojiManager(list)
+      refreshEmojiCache(serverId, list)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not delete emoji')
     }
   }
 
@@ -1154,6 +1233,7 @@ export function Chat({
       setMembersOf(null)
       setBans(null)
       setServerInvites(null)
+      setEmojiManager(null)
       if (wasViewing) {
         const general = channels.find((c) => c.name === 'general') ?? channels[0]
         if (general) setChannelId(general.id)
@@ -1178,6 +1258,7 @@ export function Chat({
       setMembersOf(null)
       setBans(null)
       setServerInvites(null)
+      setEmojiManager(null)
       if (wasViewing) {
         const general = channels.find((c) => c.name === 'general') ?? channels[0]
         if (general) setChannelId(general.id)
@@ -2196,6 +2277,10 @@ export function Chat({
                     setMembersOf(null)
                     setBans(null)
                     setServerInvites(null)
+                    setEmojiManager(null)
+                    setEmojiName('')
+                    setEmojiFile(null)
+                    setEmojiError('')
                   }}
                 >
                   ✕ close
@@ -2388,6 +2473,83 @@ export function Chat({
                         onClick={() => void revokeInvite(membersOf.serverId, iv.code)}
                       >
                         revoke
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+              {/* Custom-emoji manager (admin view): list the server's emoji, upload a new
+                  one (name + image), and delete one. A successful upload/delete refreshes
+                  the per-server `:name:` cache so the renderer picks it up live (no reload).
+                  Dedicated emoji-manager-* classes throughout (NOT .member-row /
+                  .invites-head / .bans-head) so this never collides with those QA +
+                  behavioural selectors. */}
+              {emojiManager !== null && (
+                <>
+                  <div className="emoji-manager-head">Emoji ({emojiManager.length})</div>
+                  <form
+                    className="emoji-manager-form"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void uploadEmojiFromManager(membersOf.serverId)
+                    }}
+                  >
+                    <input
+                      className="emoji-manager-name"
+                      aria-label="emoji name"
+                      placeholder="emoji_name"
+                      maxLength={32}
+                      value={emojiName}
+                      onChange={(e) => setEmojiName(e.target.value)}
+                    />
+                    <input
+                      className="emoji-manager-file"
+                      type="file"
+                      accept="image/*"
+                      aria-label="emoji image"
+                      onChange={(e) => {
+                        setEmojiFile(e.target.files?.[0] ?? null)
+                        setEmojiError('')
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="link emoji-upload-btn"
+                      disabled={emojiUploading}
+                    >
+                      {emojiUploading ? 'Uploading…' : 'Upload'}
+                    </button>
+                  </form>
+                  <span className="emoji-manager-hint">
+                    Name: 2–32 chars, lowercase letters, numbers, or underscores. Use it as{' '}
+                    <code>:name:</code> in chat. Image ≤256 KiB.
+                  </span>
+                  {emojiError && (
+                    <div className="emoji-manager-error" role="alert">
+                      {emojiError}
+                    </div>
+                  )}
+                  {emojiManager.length === 0 && (
+                    <div className="emoji-manager-empty">
+                      No custom emoji yet — upload one to use it as <code>:name:</code> in chat.
+                    </div>
+                  )}
+                  {emojiManager.map((em) => (
+                    <div key={em.id} className="emoji-manager-row">
+                      <img
+                        className="emoji-manager-img"
+                        src={`/api/emoji/${em.id}`}
+                        alt={`:${em.name}:`}
+                        title={`:${em.name}:`}
+                      />
+                      <code className="emoji-manager-code">:{em.name}:</code>
+                      <button
+                        className="link emoji-delete-btn"
+                        onClick={() =>
+                          void deleteEmojiFromManager(membersOf.serverId, em.id, em.name)
+                        }
+                      >
+                        delete
                       </button>
                     </div>
                   ))}

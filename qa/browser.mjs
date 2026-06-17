@@ -787,6 +787,75 @@ async function main() {
     'revoking an invite removes it from the list',
   )
 
+  // 7d3e — Emoji manager (slice 3a): the admin uploads a custom emoji THROUGH THE UI
+  // (name + image file) in the members panel, the new emoji appears in the manager list,
+  // and a `:ui_emoji:` sent right after renders as an inline image WITHOUT a page reload
+  // (proving the upload invalidated the per-server `:name:` cache live — the slice-3a UX
+  // win over slices 1-2). Then deleting it via the manager removes it from the list.
+  // The members panel is still open from the invites steps above.
+  step('emoji manager: upload :ui_emoji: via the UI → list + live :name: render (no reload) → delete')
+  const emojiHead = page.locator('.emoji-manager-head')
+  await emojiHead.waitFor({ timeout: 8000 })
+  check(await emojiHead.isVisible(), 'admin sees the Emoji manager section in the members panel')
+  const emojiRowsBefore = await page.locator('.emoji-manager-row').count()
+  // Fill the name + set the file input to a tiny PNG, then click Upload.
+  await page.getByLabel('emoji name').fill('ui_emoji')
+  await page.getByLabel('emoji image').setInputFiles({
+    name: 'ui_emoji.png',
+    mimeType: 'image/png',
+    buffer: PNG_FIXTURE,
+  })
+  await page.locator('.emoji-upload-btn').click()
+  // The new emoji row appears (its image src points at /api/emoji/{id}).
+  const uiEmojiRow = page.locator('.emoji-manager-row', { hasText: ':ui_emoji:' })
+  await uiEmojiRow.waitFor({ timeout: 8000 })
+  await shot('03j-emoji-manager.png')
+  check(await uiEmojiRow.isVisible(), 'the uploaded emoji appears as a row in the manager list')
+  check(
+    (await page.locator('.emoji-manager-row').count()) > emojiRowsBefore,
+    'uploading via the UI adds a row to the emoji list',
+  )
+  check(
+    /\/api\/emoji\/\d+/.test((await uiEmojiRow.locator('.emoji-manager-img').getAttribute('src')) || ''),
+    'the manager row image src points at /api/emoji/{id}',
+  )
+  // Close the panel and send `:ui_emoji:` in the server channel — NO page reload. The
+  // upload invalidated the per-server cache, so the renderer must resolve it to an image.
+  await page.getByRole('button', { name: 'close' }).click()
+  await page.locator('.search-results').waitFor({ state: 'detached', timeout: 4000 }).catch(() => {})
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).waitFor({ timeout: 8000 })
+  await page.waitForTimeout(1200) // let the message rate-limiter refill
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).fill('live emoji :ui_emoji: yes')
+  await page.getByRole('button', { name: 'Send' }).click()
+  const uiEmojiImg = page.locator('.message .body img.emoji-inline[alt=":ui_emoji:"]').last()
+  await uiEmojiImg.waitFor({ timeout: 8000 })
+  check(
+    await uiEmojiImg.isVisible(),
+    ':ui_emoji: renders as an inline img.emoji-inline live after a UI upload (NO page reload)',
+  )
+  check(
+    /\/api\/emoji\/\d+/.test((await uiEmojiImg.getAttribute('src')) || ''),
+    'the live-rendered emoji src points at /api/emoji/{id} (cache was invalidated, not reloaded)',
+  )
+  // Reopen the members panel → delete the emoji via the manager → its row disappears.
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: 'members' })
+    .click()
+  await page.locator('.emoji-manager-row', { hasText: ':ui_emoji:' }).waitFor({ timeout: 8000 })
+  const emojiRowsBeforeDel = await page.locator('.emoji-manager-row').count()
+  await page
+    .locator('.emoji-manager-row', { hasText: ':ui_emoji:' })
+    .locator('.emoji-delete-btn')
+    .click() // the confirm() is auto-accepted by the dialog handler
+  await page
+    .locator('.emoji-manager-row', { hasText: ':ui_emoji:' })
+    .waitFor({ state: 'detached', timeout: 8000 })
+  check(
+    (await page.locator('.emoji-manager-row', { hasText: ':ui_emoji:' }).count()) === 0 &&
+      (await page.locator('.emoji-manager-row').count()) < emojiRowsBeforeDel,
+    'deleting an emoji via the manager removes it from the list',
+  )
   await page.getByRole('button', { name: 'close' }).click()
 
   // 7d0 — User Settings modal opens from the header ⚙ and closes on Esc. The account

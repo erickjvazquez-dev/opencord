@@ -1583,6 +1583,101 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Custom-emoji manager in the members panel (admin-only): a section header, an
+   upload form (name + file + Upload), then rows of emoji image + :name: + delete.
+   Dedicated emoji-manager-* classes — NOT .member-row / .invites-head / .bans-head —
+   because those carry QA + behavioural selectors elsewhere. */
+.emoji-manager-head {
+  margin: 12px 4px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.emoji-manager-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 4px 2px;
+  flex-wrap: wrap;
+}
+.emoji-manager-name {
+  flex: 0 1 160px;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+}
+.emoji-manager-file {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.emoji-upload-btn {
+  color: var(--link);
+  font-weight: 600;
+}
+.emoji-upload-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.emoji-manager-hint {
+  display: block;
+  margin: 0 4px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.emoji-manager-hint code,
+.emoji-manager-empty code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.emoji-manager-error {
+  margin: 2px 4px 4px;
+  font-size: 12px;
+  color: var(--danger);
+}
+.emoji-manager-empty {
+  margin: 4px 4px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+/* Emoji rows are deliberately NOT .member-row: a .member-row filter must never match
+   an emoji row whose :name: shares text with a username. */
+.emoji-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+}
+.emoji-manager-img {
+  height: 28px;
+  width: 28px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+}
+.emoji-manager-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emoji-delete-btn {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /* Per-member online presence: a status dot on the avatar's corner (Discord-style). */
 .avatar-presence {
   position: relative;
