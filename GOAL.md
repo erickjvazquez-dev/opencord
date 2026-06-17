@@ -77,9 +77,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   verified. **Still TODO (slice 3d):** input **volume / mic-gain** slider — deferred because it needs a
   `GainNode` spliced into the capture chain (interacts with mute/PTT/hot-swap), unlike playback-only
   output volume; do it carefully on its own tick.
-- [ ] **Appearance / general polish pass** — consistent spacing + hover/active/focus states,
-  visible focus rings (a11y, keep the axe-core scan green), and an overall "feels like Discord"
-  sweep across sidebar / header / chat / member list.
+- [~] **Appearance / general polish pass** — **focus-ring a11y baseline DONE (iter 133):** one global
+  `:focus-visible` rule gives EVERY interactive element (buttons/links/selects/`[role]`/`[tabindex]`) a
+  consistent, theme-matched 2px accent ring under **keyboard** focus (never on a mouse click), replacing
+  the inconsistent/near-invisible browser default across sidebar/header/chat/member list. CSS-only,
+  axe-core stays 0-violations; new browser-QA `3f3` Tabs to a button and asserts a visible outline;
+  AI-vision verified the ring. **Still TODO:** consistent spacing + hover/active-state sweep; broader
+  "feels like Discord" pass.
 - [ ] **(stretch) Video calling** — camera on/off in a voice channel with live video tiles for each
   participant (beyond the existing screen share); mesh first, SFU path after.
 

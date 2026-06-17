@@ -240,6 +240,33 @@ async function main() {
   for (const v of bad) console.log(`     [a11y ${v.impact}] ${v.id}: ${v.help} (${v.nodes.length})`)
   check(bad.length === 0, `no serious/critical a11y violations (found ${bad.length})`)
 
+  // 3f3 — Keyboard focus ring: the global a11y baseline must give every interactive
+  // element a VISIBLE ring under keyboard focus. :focus-visible never matches a mouse
+  // click, so we Tab through (which DOES match) until a <button> is focused — inputs use
+  // a border instead of an outline, so target a button to assert the outline baseline.
+  step('accessibility: keyboard Tab shows a visible focus ring on a focused button')
+  await page.evaluate(() => document.activeElement && document.activeElement.blur())
+  let focusRing = null
+  for (let i = 0; i < 14; i++) {
+    await page.keyboard.press('Tab')
+    focusRing = await page.evaluate(() => {
+      const el = document.activeElement
+      if (!el || el.tagName !== 'BUTTON') return null
+      const s = getComputedStyle(el)
+      return {
+        outlineStyle: s.outlineStyle,
+        outlineWidth: parseFloat(s.outlineWidth) || 0,
+        label: (el.textContent || '').trim().slice(0, 24),
+      }
+    })
+    if (focusRing) break
+  }
+  check(
+    !!focusRing && focusRing.outlineStyle !== 'none' && focusRing.outlineWidth > 0,
+    `keyboard focus shows a visible ring on a button (got ${JSON.stringify(focusRing)})`,
+  )
+  await shot('03f3-focus-ring.png')
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).

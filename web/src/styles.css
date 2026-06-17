@@ -43,6 +43,21 @@ input {
   font: inherit;
 }
 
+/* ── Global keyboard-focus ring (a11y) ──────────────────────────────────────
+   Every interactive element gets a consistent, theme-matched focus ring when
+   reached by KEYBOARD (:focus-visible never matches a mouse click, so pointer
+   users see no change). This is the app-wide baseline; component rules below
+   (settings, self-chip, …) are more specific and override where they want a
+   tailored treatment. Inputs/textareas keep their border-on-focus styling. */
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ── Auth ─────────────────────────────────────────────────────────────── */
 .auth {
   height: 100%;

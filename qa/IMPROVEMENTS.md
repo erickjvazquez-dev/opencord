@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (iter 133) — Focus-ring a11y; ground a "polish pass" in a measured gap + test the property robustly
+
+Shipped the **global keyboard focus-ring** (Appearance pass, a11y slice). **Component: UI →
+accessible.** After 4 ticks deep in one settings tab, I rotated to the owner's "Appearance polish"
+item — but "polish" is the kind of vague directive that invites *churn* (Rule 10). The discipline that
+made it safe: **don't polish by vibe — measure the gap first.** A 2-line audit (`grep -c focus-visible
+styles.css` → only 6 hits, all on the brand-new settings components; `grep` for global resets → none)
+proved objectively that the entire main chrome (sidebar/header/chat/member-list buttons) had no
+visible keyboard focus indicator. That turned "make it feel nicer" into a single, defensible,
+high-coverage change: one global `:focus-visible` rule. **Lesson — before any "polish/cleanup" tick,
+run a quick metric (grep count, axe scan, a screenshot) to convert the vague ask into a specific
+measured gap; if the metric shows no gap, it's churn — don't do it.**
+
+QA-robustness lesson (continuing the fake-media theme): `:focus-visible` **only matches keyboard
+focus, never a mouse click** — so the test MUST drive it with `page.keyboard.press('Tab')`, and a
+programmatic `.focus()` would silently not match. And the *first* Tab can land on an input (which uses
+a border, not an outline), so a naive "Tab once, assert outline" flakes by DOM order. Fix: **Tab in a
+loop until `activeElement.tagName === 'BUTTON'`, then assert the outline** — robust to wherever the tab
+order starts. **Lesson — when asserting a state that only some element types express (outline on
+buttons vs border on inputs), drive toward the element type that expresses it rather than assuming the
+first focusable does.**
+
+**Next polish target:** hover/active-state consistency sweep — audit which interactive surfaces lack a
+`:hover`/`:active` feedback rule (another grep-measurable gap), then unify them; AI-vision a hover state.
+
 ## 2026-06-16 (iter 132) — Output volume; split a feature along its RISK seam, and verify each layer where it lives
 
 Shipped the **output (master) volume slider** (Voice & Video slice 3c) and explicitly **deferred** the
