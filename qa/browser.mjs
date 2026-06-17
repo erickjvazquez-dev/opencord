@@ -1290,6 +1290,107 @@ async function main() {
   await shot('07d7-profile-from-message.png')
   await page.keyboard.press('Escape')
   await page.locator('.profile-card').waitFor({ state: 'detached', timeout: 4000 })
+
+  // 03n/03o — User blocking (client slice 2): a SECOND author posts in #general; the
+  // main user opens that author's profile card → Block → their message disappears from
+  // the channel; Settings → Privacy lists the blocked user → Unblock → the message
+  // reappears. We're in #general (no member list), so the second author is reached via
+  // their message author-link and the GET /users/{id}/profile path. The second user is
+  // registered + posts over a raw WS from the page (same origin), like the desktop-notify
+  // step — the message arrives via the live broadcast and renders in the open #general.
+  step('blocking: a second author posts in #general → block → their message hides → unblock → it returns')
+  await page.getByRole('button', { name: /general/ }).click()
+  await page.getByPlaceholder('Message #general').waitFor({ timeout: 8000 })
+  const blockUser = 'qablock' + String(Date.now()).slice(-7)
+  const blockBody = `message from the blocked author ${chanName}`
+  const blockPost = await page.evaluate(
+    async ({ other, body }) => {
+      const reg = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: other, password: 'hunter2' }),
+      })
+      if (!reg.ok) return { ok: false, why: 'register failed ' + reg.status }
+      const { token } = await reg.json()
+      const chans = await fetch('/api/channels', {
+        headers: { Authorization: 'Bearer ' + token },
+      }).then((r) => r.json())
+      const general = (chans || []).find((c) => c.name === 'general')
+      if (!general) return { ok: false, why: 'no #general' }
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      const url = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${general.id}`
+      return await new Promise((resolve) => {
+        const ws = new WebSocket(url)
+        const done = (r) => {
+          try {
+            ws.close()
+          } catch {
+            /* already closing */
+          }
+          resolve(r)
+        }
+        const timer = setTimeout(() => done({ ok: false, why: 'ws open timeout' }), 8000)
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ body }))
+          clearTimeout(timer)
+          setTimeout(() => done({ ok: true }), 1500)
+        }
+        ws.onerror = () => {
+          clearTimeout(timer)
+          done({ ok: false, why: 'ws error' })
+        }
+      })
+    },
+    { other: blockUser, body: blockBody },
+  )
+  check(blockPost.ok, `second author posted in #general over the WS (${blockPost.why || 'ok'})`)
+  // The second author's message arrives + renders in the open #general (live broadcast).
+  const blockMsg = page.locator('.message', { hasText: blockBody })
+  await blockMsg.first().waitFor({ timeout: 8000 })
+  check(await blockMsg.first().isVisible(), 'the second author’s message renders before blocking')
+  // Open their profile card via their message author-link, then Block (danger button).
+  await page.locator('.message .author-link', { hasText: blockUser }).first().click()
+  await page.locator('.profile-card').waitFor({ timeout: 8000 })
+  const blockBtn = page.locator('.profile-block-btn')
+  await blockBtn.waitFor({ timeout: 8000 })
+  check(await blockBtn.isVisible(), 'the profile card shows a Block button for another user')
+  check(
+    ((await blockBtn.textContent()) ?? '').trim() === 'Block' &&
+      (await blockBtn.getAttribute('data-blocked')) === 'false',
+    'the button reads "Block" (not yet blocked)',
+  )
+  await shot('03n-block.png')
+  await blockBtn.click()
+  // Blocking closes the card AND hides every message from that author.
+  await page.locator('.profile-card').waitFor({ state: 'detached', timeout: 4000 })
+  await blockMsg.first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  check(
+    (await page.locator('.message', { hasText: blockBody }).count()) === 0,
+    'the blocked author’s message disappears from the channel',
+  )
+  // Settings → Privacy: the blocked user is listed; Unblock removes the row + un-hides.
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.locator('.settings-tab', { hasText: 'Privacy' }).click()
+  const blockedRow = page.locator('.blocked-row', { hasText: blockUser })
+  await blockedRow.waitFor({ timeout: 8000 })
+  check(await blockedRow.isVisible(), 'Settings → Privacy lists the blocked user')
+  await shot('03o-blocked-list.png')
+  await blockedRow.locator('.blocked-unblock-btn').click()
+  await blockedRow.waitFor({ state: 'detached', timeout: 8000 })
+  check(
+    (await page.locator('.blocked-row', { hasText: blockUser }).count()) === 0,
+    'unblocking removes the user from the Privacy list',
+  )
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  // The unblocked author’s message reappears in #general (Chat's hide set refreshed).
+  await page.locator('.message', { hasText: blockBody }).first().waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.message', { hasText: blockBody }).first().isVisible(),
+    'the unblocked author’s message reappears in the channel',
+  )
+
   // Navigate BACK to the server channel so the downstream server-channel steps (read-only,
   // pins, etc.) have their expected context (iter-130 lesson: a detour must restore context).
   await page.getByRole('button', { name: new RegExp(srvChan) }).click()

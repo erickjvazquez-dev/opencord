@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Avatar } from './Avatar'
 import type { User } from '../types'
+import { listBlocked } from '../api'
 import {
   getAudioProcessing,
   setAudioProcessing,
@@ -14,7 +15,7 @@ import {
 } from '../voiceSettings'
 import { getDesktopNotify, setDesktopNotify, requestNotifyPermission } from '../notify'
 
-type Tab = 'account' | 'voice' | 'notifications'
+type Tab = 'account' | 'voice' | 'notifications' | 'privacy'
 
 // Settings is the Discord-style User Settings overlay. It consolidates the account
 // controls that used to be scattered in the chat header (avatar, custom status +
@@ -44,6 +45,7 @@ export function Settings({
   onRefreshDevices,
   onSetMasterVolume,
   onSetInputVolume,
+  onUnblock,
   onClose,
 }: {
   token: string
@@ -67,6 +69,9 @@ export function Settings({
   onRefreshDevices: () => void | Promise<void>
   onSetMasterVolume: (volume: number) => void
   onSetInputVolume: (volume: number) => void
+  // Unblock a user by id. Resolves once the server has unblocked them and Chat's
+  // message-hide set has been refreshed, so the local list can drop the row.
+  onUnblock: (userId: number) => void | Promise<void>
   onClose: () => void
 }) {
   const [tab, setTab] = useState<Tab>('account')
@@ -148,6 +153,37 @@ export function Settings({
     setNotifyEnabled(granted)
     setDesktopNotify(granted)
   }
+
+  // Privacy: the users I've blocked. Settings owns its own copy of the list (so it can
+  // show/refresh it independently) and fetches it whenever the Privacy tab is opened.
+  // Unblocking delegates to onUnblock (which hits the server + refreshes Chat's hide set)
+  // and then drops the row locally.
+  const [blockedUsers, setBlockedUsers] = useState<{ id: number; username: string }[]>([])
+  const [blockedLoading, setBlockedLoading] = useState(false)
+  const loadBlocked = async () => {
+    setBlockedLoading(true)
+    try {
+      setBlockedUsers(await listBlocked(token))
+    } catch {
+      /* leave the list as-is on failure */
+    } finally {
+      setBlockedLoading(false)
+    }
+  }
+  const unblock = async (userId: number) => {
+    try {
+      await onUnblock(userId)
+      setBlockedUsers((prev) => prev.filter((u) => u.id !== userId))
+    } catch {
+      /* onUnblock surfaces its own error; keep the row on failure */
+    }
+  }
+  // Fetch the block list when the Privacy tab is opened (mirrors the Voice tab's
+  // device (re)enumeration on entry).
+  useEffect(() => {
+    if (tab === 'privacy') void loadBlocked()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   // Esc closes the modal (Discord-style).
   useEffect(() => {
@@ -331,6 +367,13 @@ export function Settings({
             onClick={() => setTab('notifications')}
           >
             Notifications
+          </button>
+          <button
+            type="button"
+            className={`settings-tab${tab === 'privacy' ? ' active' : ''}`}
+            onClick={() => setTab('privacy')}
+          >
+            Privacy
           </button>
         </nav>
 
@@ -691,6 +734,43 @@ export function Settings({
                       : notifyEnabled
                         ? 'You’ll be notified of DMs and @-mentions while this tab is in the background.'
                         : 'Only fires when this tab is in the background — never for your own messages.'}
+                </span>
+              </div>
+            </section>
+          )}
+
+          {tab === 'privacy' && (
+            <section className="settings-section" aria-label="Privacy">
+              <h2 className="settings-title">Privacy</h2>
+
+              {/* Blocked users: avatar/initials + username + an Unblock button each.
+                  Blocking someone hides their messages everywhere and blocks DMs both
+                  ways (server-enforced). Empty state when you've blocked no one. */}
+              <div className="settings-field">
+                <label className="settings-label">Blocked Users</label>
+                {blockedLoading && blockedUsers.length === 0 ? (
+                  <div className="blocked-empty">Loading…</div>
+                ) : blockedUsers.length === 0 ? (
+                  <div className="blocked-empty">No blocked users.</div>
+                ) : (
+                  <div className="blocked-list" aria-label="blocked users">
+                    {blockedUsers.map((u) => (
+                      <div className="blocked-row" key={u.id} data-blocked-user={u.id}>
+                        <Avatar token={token} userId={u.id} username={u.username} />
+                        <span className="blocked-name">{u.username}</span>
+                        <button
+                          type="button"
+                          className="settings-btn blocked-unblock-btn"
+                          onClick={() => void unblock(u.id)}
+                        >
+                          Unblock
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <span className="settings-hint">
+                  Blocking someone hides their messages and prevents direct messages both ways.
                 </span>
               </div>
             </section>

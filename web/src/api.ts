@@ -625,6 +625,39 @@ export async function fetchDMs(token: string): Promise<DMChannel[]> {
   return res.json()
 }
 
+// Block a user (POST → 204). Server-enforced symmetric DM block; identity is derived
+// from the JWT (never the payload). Idempotent on the server (re-blocking is also 204).
+export async function blockUser(token: string, userId: number): Promise<void> {
+  const res = await fetch(`/api/users/${userId}/block`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not block user')
+  }
+}
+
+// Unblock a user (DELETE → 204).
+export async function unblockUser(token: string, userId: number): Promise<void> {
+  const res = await fetch(`/api/users/${userId}/block`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not unblock user')
+  }
+}
+
+// The users I've blocked (id + username), so the client can hide their messages and
+// render a manageable block list.
+export async function listBlocked(token: string): Promise<{ id: number; username: string }[]> {
+  const res = await fetch('/api/me/blocks', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error('could not load blocked users')
+  return res.json()
+}
+
 // `identifier` may be a username or a numeric user id (email once accounts store one).
 export async function openDM(token: string, identifier: string): Promise<DMChannel> {
   const res = await fetch('/api/dms', {

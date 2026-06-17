@@ -2561,6 +2561,62 @@ button:disabled {
   cursor: pointer;
 }
 
+/* Profile card Block/Unblock action — sits below the About Me / status. Block is
+   danger-tinted (a deliberate, removing action); Unblock is a neutral settings button. */
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 20px 20px;
+}
+.profile-block-btn {
+  font-size: 13px;
+  padding: 7px 14px;
+}
+.profile-block-btn.danger {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.profile-block-btn.danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ── Settings → Privacy (blocked users) ─────────────────────────────────────── */
+.blocked-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+.blocked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.blocked-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-input);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.blocked-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blocked-unblock-btn {
+  flex: 0 0 auto;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
 /* Voice & Video tab */
 .settings-device-select {
   width: 100%;

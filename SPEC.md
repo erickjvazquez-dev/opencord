@@ -2094,3 +2094,22 @@ open or use their DM (create/open, send, react, read history all denied).
   Full suite green (existing DM/server tests still pass). Build/vet/gofmt clean.
 - **Next (slice 2 — client + hide msgs):** block/unblock button (profile card / member row), a
   blocked-users list in Settings, and hide/collapse a blocked user's messages in server channels.
+
+## User blocking — client (v0.5, slice 2) — feature complete
+
+**Why:** slice 1 shipped the block API + DM enforcement; slice 2 is the client — block control, blocked
+list, and hiding blocked users' messages in channels.
+
+- **`api.ts`:** `blockUser`/`unblockUser`/`listBlocked`.
+- **`blocking.ts` (new):** pure `visibleMessages(messages, blocked)` — drops messages from blocked
+  authors BEFORE the date-divider/grouping pass (so hiding never orphans a divider or breaks a group);
+  live WS messages from a blocked user are auto-hidden (render filters on the set). Unit-tested.
+- **`Chat.tsx`:** `blocked: Set<number>` fetched on load; `toggleBlock` (optimistic+revert, never self,
+  closes the card on block); message render uses `visibleMessages`.
+- **`ProfileCard.tsx`:** a Block/Unblock button (danger-styled; only on another user's card).
+- **`Settings.tsx`:** a new **Privacy** tab listing blocked users (avatar + name + Unblock) + a hint;
+  unblocking refreshes Chat's hide set so the messages reappear.
+- **QA:** two-author browser E2E — 2nd user posts → main user blocks via the card → message disappears →
+  Settings → Privacy lists them → Unblock → message reappears. vitest for `visibleMessages`.
+- **Verify (done):** build clean, vitest 65/65, full QA `browser=0 realtime=0 voice=0 search=0`,
+  AI-vision (block button + Privacy list + message-hide). **User blocking complete (backend + client).**

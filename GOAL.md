@@ -429,7 +429,11 @@ item from here as the structural milestones above land.
   direction) via the central `CanAccessChannel` gate (+ CreateOrGetDM + ListDMs filter); server-channel
   access unaffected (regression-tested); Rule-15 adversarial integration tests. **Slice 2:** block
   button (profile card/member row) + blocked-list in Settings + hide blocked users' messages in
-  channels. · group DMs · friends / friend requests (later)
+  channels. **Client slice 2 DONE (iter 158):** Block/Unblock button on the profile card + a Settings
+  → Privacy blocked-users list (+ hint), and blocked authors' messages are HIDDEN in every channel
+  (pure `visibleMessages` filter; live WS auto-hidden). Two-author browser E2E (block → message
+  disappears → unblock → reappears) + vitest. **User blocking COMPLETE (backend + client).**
+  · group DMs · friends / friend requests (later)
 
 ### Users / Profiles
 - [x] Avatars (initials)

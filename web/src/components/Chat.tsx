@@ -51,6 +51,9 @@ import {
   fetchMutedChannels,
   setChannelMuted,
   fetchUserProfile,
+  blockUser,
+  unblockUser,
+  listBlocked,
 } from '../api'
 import type {
   Channel,
@@ -67,6 +70,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
+import { visibleMessages } from '../blocking'
 import { getDesktopNotify, mentionsMe, shouldNotify, showNotification } from '../notify'
 import { dayLabel, shortTime, messageTimestamp } from '../dates'
 import { AttachmentList } from './Attachment'
@@ -256,6 +260,10 @@ export function Chat({
   const [myPronouns, setMyPronouns_] = useState('')
   // The member whose profile card is open (clicked in the member list), or null.
   const [profileMember, setProfileMember] = useState<ServerMember | null>(null)
+  // User ids I've blocked: their messages are hidden from every channel (filtered at
+  // render time, so live WS messages from a blocked user never appear either). Managed
+  // from the profile card (Block/Unblock) and the Settings → Privacy list. Fetched on load.
+  const [blocked, setBlocked] = useState<Set<number>>(new Set())
   // The caller's own chosen presence (online|idle|dnd|invisible), synced from their
   // own member-list row (which reports the true self state).
   const [myPresence, setMyPresence_] = useState('online')
@@ -356,6 +364,9 @@ export function Chat({
       .catch(() => {})
     fetchDMs(token).then(setDms).catch(() => {})
     void refreshServers()
+    listBlocked(token)
+      .then((us) => setBlocked(new Set(us.map((u) => u.id))))
+      .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
@@ -1409,6 +1420,45 @@ export function Chat({
   const openUserProfile = async (userId: number) => {
     const p = await fetchUserProfile(token, userId)
     if (p) setProfileMember(p)
+  }
+
+  // Block / unblock a user. Optimistically flips the local `blocked` set (so their
+  // messages hide/show instantly), persists it, and reverts on error. You can never
+  // block yourself. Blocking also closes the profile card (you're done with them).
+  const toggleBlock = async (userId: number) => {
+    if (userId === user.id) return
+    const wasBlocked = blocked.has(userId)
+    setBlocked((prev) => {
+      const next = new Set(prev)
+      if (wasBlocked) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+    if (!wasBlocked) setProfileMember(null) // blocking dismisses their card
+    try {
+      if (wasBlocked) await unblockUser(token, userId)
+      else await blockUser(token, userId)
+    } catch (err) {
+      // Roll back the optimistic toggle.
+      setBlocked((prev) => {
+        const next = new Set(prev)
+        if (wasBlocked) next.add(userId)
+        else next.delete(userId)
+        return next
+      })
+      window.alert(err instanceof Error ? err.message : 'could not update block')
+    }
+  }
+
+  // Re-read the authoritative block list from the server. Settings unblocks update their
+  // own list locally AND call this so Chat's message-hide set stays consistent.
+  const refreshBlocked = async () => {
+    try {
+      const us = await listBlocked(token)
+      setBlocked(new Set(us.map((u) => u.id)))
+    } catch {
+      /* leave the set as-is on failure */
+    }
   }
 
   // Change my presence (online|idle|dnd|invisible). Optimistically update the picker,
@@ -2772,8 +2822,12 @@ export function Chat({
           {membersOf === null &&
             searchResults === null &&
             pins === null &&
-            messages.map((m, i) => {
-            const prev = i > 0 ? messages[i - 1] : null
+            // Hide blocked users' messages entirely. Filter FIRST so the date-divider +
+            // grouping logic below computes over the VISIBLE list (a hidden message can't
+            // break a run or leave an orphaned divider). Live WS messages from a blocked
+            // user are filtered here too — no special-casing needed.
+            visibleMessages(messages, blocked).map((m, i, visible) => {
+            const prev = i > 0 ? visible[i - 1] : null
             // First message of a new calendar day (Discord-style date divider). The
             // very first message also starts a day (prev === null).
             const newDay =
@@ -3218,12 +3272,25 @@ export function Chat({
           onRefreshDevices={refreshDevices}
           onSetMasterVolume={(v) => voiceRef.current?.setMasterVolume(v)}
           onSetInputVolume={(v) => voiceRef.current?.setInputVolume(v)}
+          onUnblock={async (id) => {
+            // Unblock on the server, then refresh Chat's hide set so the unblocked
+            // user's messages reappear immediately (keeps both views consistent).
+            await unblockUser(token, id)
+            await refreshBlocked()
+          }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
 
       {profileMember && (
-        <ProfileCard member={profileMember} token={token} onClose={() => setProfileMember(null)} />
+        <ProfileCard
+          member={profileMember}
+          token={token}
+          selfId={user.id}
+          blocked={blocked.has(profileMember.userId)}
+          onToggleBlock={(id) => void toggleBlock(id)}
+          onClose={() => setProfileMember(null)}
+        />
       )}
     </div>
   )
