@@ -439,6 +439,11 @@ item from here as the structural milestones above land.
 - [~] **Unread indicators + @mention-count badges DONE** (per-channel sidebar grey dots
   for unread; red count badge for unread @mentions incl. @everyone/@here, server-side
   match mirrors the client highlight; store+router+browser tested, AI-vision verified).
+  **Browser tab badge DONE (iter 138)** — `document.title` reflects activity so a
+  backgrounded tab signals it (Discord-style): `(N) • Opencord` when you have unread
+  @mentions (N = the count), `● Opencord` for plain unreads, plain `Opencord` when all
+  read; excludes the channel you're viewing; resets on logout. Reuses the existing unread
+  map (no new state/endpoint); two-client realtime QA asserts the three title states.
   Per-channel/server mute · DM notifications · web push TODO
 
 ### Platform / Integrations

@@ -3,6 +3,35 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 138) — Tab badge + closed the voiceSettings coverage gap I flagged last tick (acting on my own notes)
+
+Shipped the **browser tab unread/mention badge** AND closed the **`voiceSettings.ts` unit-test gap**
+that iter-136's reflection explicitly named as "next." **Components: notifications/UI + test coverage.**
+Two process wins worth recording:
+
+1. **The loop's own IMPROVEMENTS notes are a backlog — act on them.** Iter 136 wrote "voiceSettings
+   has ZERO unit tests despite being load-bearing for 4 features — add them next low-risk tick." This
+   tick I did exactly that (9 tests: defaults, clamping on both set+get, the readBool('0') sentinel,
+   partial-update isolation, corrupt-value fallback). **Lesson — the reflection step only pays off if a
+   later tick actually picks up the flagged item; treat "Next QA-growth target" lines as a real queue,
+   not journaling. Pairing a small feature with closing a previously-flagged coverage gap is a good
+   shape for a low-risk tick.**
+
+2. **Reuse existing state for a "new" feature → near-zero risk + free correctness.** The tab badge added
+   NO new state or endpoint — it's a pure `useEffect` over the existing `unread` map (the same data the
+   sidebar dots/mention badges already use), so it's automatically consistent with them and can't drift.
+   **Lesson — when a feature is a new VIEW of state you already track, derive it (don't re-fetch/re-model);
+   the derivation is trivially correct and the existing data's tests cover it transitively.**
+
+QA-technique note: the tab title isn't screenshot-able, so AI-vision doesn't apply — the verification is
+Playwright's `page.title()` asserting the exact strings (`● Opencord`, `(1) • Opencord`, `Opencord`)
+across the existing two-client unread→mention→read sequence in realtime.mjs. **Lesson — not every UI
+feature is visual; for `document.title`/`aria-live`/clipboard/focus, assert the DOM/API value directly
+rather than forcing a screenshot.**
+
+vitest is now node-only (no jsdom); for the localStorage round-trip I installed a tiny in-memory
+`globalThis.localStorage` shim in `beforeEach` (the module reads the bare global), avoiding a jsdom dep.
+
 ## 2026-06-17 (iter 137) — Ephemeral TURN creds; rotating to the component furthest from its north star, + verifying a "gated-off-on-prod" change
 
 Shipped **ephemeral HMAC TURN credentials**. **Component: audio/security (toward the audio north star:

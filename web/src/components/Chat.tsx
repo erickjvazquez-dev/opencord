@@ -1453,6 +1453,24 @@ export function Chat({
     }
   }, [token])
 
+  // Browser tab badge (Discord-style): reflect unread/mention state in document.title so
+  // a backgrounded tab signals activity — "(N) • Opencord" when you have @mentions, a
+  // "● Opencord" dot for plain unreads, else just "Opencord". Excludes the active channel.
+  useEffect(() => {
+    let mentions = 0
+    let unreadCount = 0
+    unread.forEach((m, id) => {
+      if (id === channelId) return
+      unreadCount++
+      mentions += m
+    })
+    const base = 'Opencord'
+    document.title = mentions > 0 ? `(${mentions}) • ${base}` : unreadCount > 0 ? `● ${base}` : base
+    return () => {
+      document.title = base // reset on unmount (logout) so the login screen isn't badged
+    }
+  }, [unread, channelId])
+
   // Sidebar indicators (never for the channel you're viewing): a channel is unread if in
   // the map; mentionCount > 0 shows the red badge instead of the plain dot.
   const isUnread = (id: number) => id !== channelId && unread.has(id)

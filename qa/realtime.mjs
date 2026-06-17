@@ -400,6 +400,11 @@ async function main() {
   }
   check(gotUnread, 'B sees an unread dot on the server channel after A posts while B is away')
   await b.screenshot({ path: join(SHOTS, 'rt-12-unread.png') })
+  // Tab badge: a plain unread (no mention) shows the "● Opencord" dot in B's tab title.
+  check(
+    /^●\s/.test(await b.title()),
+    `a plain unread badges B's tab title with a dot (got "${await b.title()}")`,
+  )
 
   // 7c — Mention: A @mentions B → B's indicator becomes a red mention badge (count).
   await a.getByPlaceholder(new RegExp('Message #' + srvChan)).fill('@' + userB + ' ping you')
@@ -415,6 +420,11 @@ async function main() {
     ((await bSrvChanBtn.locator('.mention-badge').textContent()) ?? '').trim().length > 0,
     'the mention badge shows a count',
   )
+  // Tab badge: a mention shows "(N) • Opencord" in B's tab title (the count, like Discord).
+  check(
+    /^\(\d+\)\s•\s/.test(await b.title()),
+    `a mention badges B's tab title with the count (got "${await b.title()}")`,
+  )
   await b.screenshot({ path: join(SHOTS, 'rt-12b-mention.png') })
 
   await bSrvChanBtn.click()
@@ -424,6 +434,11 @@ async function main() {
     (await bSrvChanBtn.locator('.unread-dot').count()) === 0 &&
       (await bSrvChanBtn.locator('.mention-badge').count()) === 0,
     'opening the channel clears both the unread dot and the mention badge',
+  )
+  // Tab badge clears too once everything is read.
+  check(
+    (await b.title()) === 'Opencord',
+    `reading everything clears B's tab badge (got "${await b.title()}")`,
   )
 
   // 7h — Timeout (moderation): A (owner) temporarily mutes B, then clears it. B stays a
