@@ -3084,3 +3084,29 @@ slice 2 = client `:name:` markdown render, slice 3 = picker + upload UI. Spec-fi
 while cautious about a big feature in a long context — but that caution shouldn't stall the roadmap, so
 next tick commits to custom-emoji slice 1 (a backend slice is safe to do as a contained unit). Not
 forcing a clear (re-arm is fragile; the <20% auto-clear is the safety net).
+
+## 2026-06-17 (tick 150) — custom emoji BACKEND (slice 1), built via delegated agent + reviewed
+
+Committed to the big feature. Per Rule 17, used an Explore agent to map the avatar/schema/auth/test
+patterns (kept my context lean), then a general-purpose agent to implement+test the backend slice in
+its own context, then I REVIEWED the diff, hardened, and independently verified. Shipped: server_emoji
+table + store CRUD + 4 auth-gated routes (admin upload/delete, member list, public serve), Rule-15
+hardened (sniffed image allowlist → no SVG/XSS, opaque keys → no traversal, size cap, scoped delete).
+`TestServerEmojiIntegration` (9 cases) witnessed passing on real Postgres; prod-verified the migration
+applied (authed GET /api/emoji/999999 → 404, not 500).
+
+**Carry (agentic delegation works, but REVIEW is non-negotiable):** the impl agent verified with
+build/vet/test — which DON'T check formatting — and left router.go gofmt-dirty (mixed tab indentation).
+My review caught it; `gofmt -w` fixed it before commit. Lesson: when delegating code, always run the
+checks the agent's own gate omits (gofmt, lint) and read the security-sensitive files yourself. Net:
+delegation saved my context on a 666-line change while I still owned correctness + security.
+
+**Highest-value NEXT improvement:** custom emoji slice 2 — CLIENT renders `:name:` as the emoji image
+(fetch a channel/server's emoji list, extend `markdown.ts` to replace `:name:` with an <img> from
+/api/emoji/{id}, cache the name→id map per server). Then slice 3: emoji picker (insert `:name:`) +
+server-settings upload/delete UI. Slice 2 is client-only + testable via browser QA + AI-vision.
+
+**Loop-process note (context):** heaviest tick yet (2 agents + big review + deploy); context now heavy.
+NOT forcing a clear (re-arm wipes the ScheduleWakeup + is fragile; would disrupt the 30-min cadence the
+session is paced on). Relying on the wired ctx<20% auto-clear as the net; still executing cleanly
+(delegated well, caught the gofmt issue, verified independently + on prod).
