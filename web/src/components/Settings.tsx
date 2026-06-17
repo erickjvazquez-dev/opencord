@@ -12,8 +12,9 @@ import {
   setInputVolume,
   type AudioProcessing,
 } from '../voiceSettings'
+import { getDesktopNotify, setDesktopNotify, requestNotifyPermission } from '../notify'
 
-type Tab = 'account' | 'voice'
+type Tab = 'account' | 'voice' | 'notifications'
 
 // Settings is the Discord-style User Settings overlay. It consolidates the account
 // controls that used to be scattered in the chat header (avatar, custom status +
@@ -124,6 +125,28 @@ export function Settings({
     setInputVolumeState(v)
     setInputVolume(v)
     onSetInputVolume(v)
+  }
+
+  // Desktop notifications: the persisted opt-in (default off) + the current OS
+  // permission. Enabling requests permission on the click (a user gesture); we only
+  // persist enabled=true if the user grants it (denied → stay off + show a hint).
+  const notifySupported = typeof window !== 'undefined' && 'Notification' in window
+  const [notifyEnabled, setNotifyEnabled] = useState(() => getDesktopNotify())
+  const [notifyPermission, setNotifyPermission] = useState<string>(() =>
+    notifySupported ? Notification.permission : 'denied',
+  )
+  const toggleNotify = async () => {
+    if (notifyEnabled) {
+      setNotifyEnabled(false)
+      setDesktopNotify(false)
+      return
+    }
+    // Turning ON: ask the OS (user gesture). Only commit if it's actually granted.
+    const perm = await requestNotifyPermission()
+    setNotifyPermission(perm)
+    const granted = perm === 'granted'
+    setNotifyEnabled(granted)
+    setDesktopNotify(granted)
   }
 
   // Esc closes the modal (Discord-style).
@@ -301,6 +324,13 @@ export function Settings({
             onClick={() => setTab('voice')}
           >
             Voice &amp; Video
+          </button>
+          <button
+            type="button"
+            className={`settings-tab${tab === 'notifications' ? ' active' : ''}`}
+            onClick={() => setTab('notifications')}
+          >
+            Notifications
           </button>
         </nav>
 
@@ -630,6 +660,38 @@ export function Settings({
                 >
                   {camTesting ? 'Stop Camera' : 'Test Camera'}
                 </button>
+              </div>
+            </section>
+          )}
+
+          {tab === 'notifications' && (
+            <section className="settings-section" aria-label="Notifications">
+              <h2 className="settings-title">Notifications</h2>
+
+              {/* Desktop notifications opt-in. Enabling requests OS permission on the
+                  click (a user gesture); we only stay on if it's granted. Off by
+                  default — Discord's low-noise default (DMs + @-mentions while away). */}
+              <div className="settings-field">
+                <label className="settings-label">Desktop Notifications</label>
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    aria-label="desktop notifications"
+                    checked={notifyEnabled}
+                    disabled={!notifySupported}
+                    onChange={() => void toggleNotify()}
+                  />
+                  <span>Show a desktop notification for DMs and @-mentions</span>
+                </label>
+                <span className="settings-hint">
+                  {!notifySupported
+                    ? 'Your browser does not support desktop notifications.'
+                    : notifyPermission === 'denied'
+                      ? 'Allow notifications in your browser to enable this.'
+                      : notifyEnabled
+                        ? 'You’ll be notified of DMs and @-mentions while this tab is in the background.'
+                        : 'Only fires when this tab is in the background — never for your own messages.'}
+                </span>
               </div>
             </section>
           )}

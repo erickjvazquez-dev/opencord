@@ -67,6 +67,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
+import { getDesktopNotify, mentionsMe, shouldNotify, showNotification } from '../notify'
 import { dayLabel, shortTime, messageTimestamp } from '../dates'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
@@ -76,6 +77,15 @@ import { ProfileCard } from './ProfileCard'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
+
+// A short, single-line body for a desktop notification (the OS truncates anyway, but
+// we cap + collapse newlines so the preview stays tidy). Empty body → a generic line
+// (e.g. an attachment-only message).
+function notifySnippet(body: string): string {
+  const oneLine = (body ?? '').replace(/\s+/g, ' ').trim()
+  if (!oneLine) return 'Sent a message'
+  return oneLine.length > 120 ? oneLine.slice(0, 119) + '…' : oneLine
+}
 
 // Quick-react palette (Discord-style). Small by design; a full picker is later.
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
@@ -310,6 +320,10 @@ export function Chat({
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
+  // Whether the active channel is a DM — kept fresh for the WS message handler, whose
+  // effect doesn't re-subscribe on `dms` changes (so it can't read `activeDM` directly
+  // without going stale). Drives the desktop-notification rule (DMs always notify).
+  const activeIsDMRef = useRef(false)
 
   // Load the user's servers and each server's channels + categories into their maps.
   const refreshServers = async () => {
@@ -399,6 +413,27 @@ export function Chat({
       } else if (data.type === 'message' && data.message) {
         const m = data.message
         setMessages((prev) => [...prev, m])
+        // Desktop notification (off by default; opt-in via Settings → Notifications).
+        // Discord's low-noise rule: only when the tab is hidden and the message is a
+        // DM or @-mentions you, and never for your own messages. Guard the API so an
+        // unsupported browser is a clean no-op (Rule A).
+        if (typeof Notification !== 'undefined') {
+          const isMine = m.userId === user.id
+          const isDM = activeIsDMRef.current
+          const mentioned = mentionsMe(m.body, user.username)
+          if (
+            shouldNotify({
+              enabled: getDesktopNotify(),
+              permission: Notification.permission,
+              hidden: document.hidden,
+              isMine,
+              isDM,
+              mentionsMe: mentioned,
+            })
+          ) {
+            showNotification(`${m.username}${isDM ? '' : ' (mention)'}`, notifySnippet(m.body))
+          }
+        }
       } else if (data.type === 'message-edited' && data.message) {
         const m = data.message
         // Server's edited message carries no reactions — keep the ones we have.
@@ -1569,6 +1604,8 @@ export function Chat({
 
   const current = channels.find((c) => c.id === channelId)
   const activeDM = dms.find((d) => d.id === channelId)
+  // Keep the WS message handler's view of "is the active channel a DM" current.
+  activeIsDMRef.current = !!activeDM
   const activeServerChannel = Object.values(serverChannels)
     .flat()
     .find((c) => c.id === channelId)

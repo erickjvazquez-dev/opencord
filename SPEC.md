@@ -2043,3 +2043,28 @@ numeric id). Client: reaction palette lists the server's custom emoji after the 
 chips render via `EmojiImg` for `custom:` markers. Go integration test (accept/reject cases) +
 browser E2E (react with a custom emoji → chip loads → toggle off). Verified: go test, vitest 39/39,
 full QA `browser=0 realtime=0 voice=0 search=0`.
+
+## Desktop notifications + image-bug-class audit (iter 156)
+
+**Audit (no code change — bug class CONTAINED):** audited every auth-gated image surface for the
+tick-155 `401-on-<img>-src` bug. Avatars (`Avatar.tsx`) and attachments (`Attachment.tsx`) BOTH already
+use the auth'd fetch+blob pattern AND already have `naturalWidth>0` decode-check QA (avatar QA line
+~1338, attachment QA line ~445). Emoji was the only offender (fixed iter 155). So all three image
+surfaces now use fetch+blob + have load-guards. Refined lesson: the decode-check rigor already existed
+for avatars/attachments — the emoji slices just failed to mirror it when adding a new image surface.
+
+**Feature — desktop notifications (Web Notifications API), Rule-A graceful:** Discord's low-noise
+default — when the tab is UNFOCUSED and a new message in the active channel is a DM (any) or @-mentions
+you (`@you`/`@everyone`/`@here`), show a desktop notification (author + snippet); click focuses the
+window. Off by default; opt-in via a new Settings → **Notifications** tab whose toggle requests OS
+permission on click (a user gesture) and only persists ON if granted (denied → stays off + hint).
+- `web/src/notify.ts`: pure `shouldNotify({enabled,permission,hidden,isMine,isDM,mentionsMe})` +
+  `mentionsMe(body,username)` (regex-escaped username, word-bounded, @everyone/@here) +
+  `getDesktopNotify`/`setDesktopNotify` (localStorage, default off) + `requestNotifyPermission` +
+  `showNotification` (no-op unless granted; try/catch so it never throws into the WS handler; `tag`
+  collapses spam). Every entry point degrades to no-op when unsupported/denied.
+- `Chat.tsx`: the `message` WS handler feeds `shouldNotify` + fires `showNotification`.
+- Tests: vitest `notify.test.ts` (21 cases — full `shouldNotify` truth table + `mentionsMe` incl.
+  `@meelsewhere` rejection + regex-escape). browser E2E: stub `window.Notification`, grant permission,
+  force `document.hidden`, a 2nd user posts an @mention → assert a notification was constructed with
+  the author + body. Verified: build clean, vitest 60/60, full QA `browser=0 realtime=0 voice=0 search=0`.

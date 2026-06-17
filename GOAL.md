@@ -506,7 +506,12 @@ item from here as the structural milestones above land.
   `POST`/`DELETE /channels/{id}/mute` (access-gated, Rule B/C) + `GET /me/muted-channels`; a header
   🔔/🔕 toggle + a sidebar dim. Store integration test (excludes from Unreads, per-user, idempotent,
   reversible) + browser toggle + two-client realtime (B mutes → A posts → B gets NO dot/tab badge).
-  Server-level mute · DM notifications · web push TODO
+  **Desktop notifications DONE (iter 156)** — Web Notifications API (Rule-A graceful): when the tab is
+  UNFOCUSED and a new active-channel message is a DM or @-mentions you, show a desktop notification
+  (author + snippet; click focuses). Off by default; opt-in via a new Settings → Notifications tab
+  (requests OS permission on the click, persists only if granted). Pure `shouldNotify`/`mentionsMe`
+  (`notify.ts`, 21 vitest cases) + browser E2E (stub Notification, force hidden, 2nd user @mentions →
+  notification constructed w/ author+body). Server-level mute · web push TODO
 
 ### Platform / Integrations
 - [ ] Bot/API + webhooks + slash commands · OAuth2 app authorization

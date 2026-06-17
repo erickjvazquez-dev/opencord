@@ -34,7 +34,40 @@ async function main() {
       '--autoplay-policy=no-user-gesture-required',
     ],
   })
-  const page = await (await browser.newContext({ viewport: { width: 1100, height: 820 } })).newPage()
+  const context = await browser.newContext({
+    viewport: { width: 1100, height: 820 },
+    // Pre-grant OS notification permission so the in-app toggle's
+    // Notification.requestPermission() resolves 'granted' headlessly (no real prompt).
+    permissions: ['notifications'],
+  })
+  // Headless Chromium can't show a real OS notification, so STUB window.Notification
+  // before the app loads: record every constructed notification to window.__notifs so
+  // the desktop-notify step can assert it fired with the right author/body. Also lets
+  // us flip document.hidden true (Discord only notifies when the tab is in the
+  // background) via Object.defineProperty, since a headless tab is never truly hidden.
+  await context.addInitScript(() => {
+    window.__notifs = []
+    class StubNotification {
+      static permission = 'granted'
+      static requestPermission() {
+        return Promise.resolve('granted')
+      }
+      constructor(title, opts) {
+        this.title = title
+        this.body = (opts && opts.body) || ''
+        window.__notifs.push({ title: this.title, body: this.body })
+      }
+      close() {}
+      addEventListener() {}
+    }
+    // Replace the real API with the stub (assignable + queryable like the original).
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      writable: true,
+      value: StubNotification,
+    })
+  })
+  const page = await context.newPage()
   page.on('pageerror', (e) => {
     console.log('  [pageerror] ' + e.message)
     failed++
@@ -1345,6 +1378,121 @@ async function main() {
   await msgImg.waitFor({ timeout: 12000 })
   await shot('07i-avatar-message.png')
   check(await msgImg.isVisible(), 'after reload, message-list avatars render the uploaded image')
+
+  // 03m — Desktop notifications (Web Notifications API): with the opt-in toggle enabled
+  // AND the tab "hidden", a NEW message that @-mentions the qabot in the active channel
+  // (#general) must construct a desktop notification carrying the author + a body
+  // snippet. Headless can't show a real OS notification, so window.Notification is
+  // stubbed (context init script) to record every construction into window.__notifs;
+  // OS permission is pre-granted on the context. We post the @mention as a SECOND user
+  // over a raw WebSocket from the page (same origin) so it arrives via the live
+  // `message` broadcast — the exact path the notification fires on. (qabot is on
+  // #general from the avatar step above; the reload reinstalled the stub + cleared
+  // __notifs.) Discord's low-noise rule: off by default, only while the tab is hidden.
+  step('settings → Notifications → enable the desktop-notify toggle (requests permission)')
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.locator('.settings-tab', { hasText: 'Notifications' }).click()
+  const notifyToggle = page.getByLabel('desktop notifications')
+  await notifyToggle.waitFor({ timeout: 8000 })
+  check(!(await notifyToggle.isChecked()), 'desktop notifications default OFF')
+  await notifyToggle.check() // a user gesture → requestPermission() resolves 'granted' (stub)
+  await page.locator('input[aria-label="desktop notifications"]:checked').waitFor({ timeout: 8000 })
+  check(await notifyToggle.isChecked(), 'enabling the toggle persists ON once permission is granted')
+  const notifyStored = await page.evaluate(() => localStorage.getItem('opencord.notify.desktop'))
+  check(notifyStored === '1', `the desktop-notify pref persists to localStorage (got ${notifyStored})`)
+  await shot('03m-desktop-notify.png')
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+
+  // Make sure qabot is viewing #general (the active channel the message must arrive in).
+  await page.getByRole('button', { name: /general/ }).click()
+  await page.getByPlaceholder('Message #general').waitFor({ timeout: 8000 })
+  // Clear any notifications recorded so far, then force the tab "hidden" (a headless tab
+  // never truly backgrounds), since the rule only notifies while the tab is in the
+  // background. dispatch visibilitychange so React's document.hidden read is current.
+  await page.evaluate(() => {
+    window.__notifs = []
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+
+  step('a second user @mentions qabot in #general while the tab is hidden → desktop notification fires')
+  const notifyBody = `hey @${user} desktop ping ${chanName}`
+  const notifResult = await page.evaluate(
+    async ({ other, body }) => {
+      // Register a fresh second user (same origin) and grab their token.
+      const reg = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: other, password: 'hunter2' }),
+      })
+      if (!reg.ok) return { ok: false, why: 'register failed ' + reg.status }
+      const { token } = await reg.json()
+      // Find #general's id with the new user's token.
+      const chans = await fetch('/api/channels', {
+        headers: { Authorization: 'Bearer ' + token },
+      }).then((r) => r.json())
+      const general = (chans || []).find((c) => c.name === 'general')
+      if (!general) return { ok: false, why: 'no #general' }
+      // Open a raw WS as the second user on #general and post the @mention. The qabot's
+      // open socket on #general receives it via the live broadcast → notification fires.
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      const url = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${general.id}`
+      return await new Promise((resolve) => {
+        const ws = new WebSocket(url)
+        const done = (r) => {
+          try {
+            ws.close()
+          } catch {
+            /* already closing */
+          }
+          resolve(r)
+        }
+        const timer = setTimeout(() => done({ ok: false, why: 'ws open timeout' }), 8000)
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ body }))
+          clearTimeout(timer)
+          // Give the server a moment to fan the broadcast back to qabot's socket.
+          setTimeout(() => done({ ok: true }), 1500)
+        }
+        ws.onerror = () => {
+          clearTimeout(timer)
+          done({ ok: false, why: 'ws error' })
+        }
+      })
+    },
+    { other: 'qabuddy' + String(Date.now()).slice(-7), body: notifyBody },
+  )
+  check(notifResult.ok, `second user posted the @mention over the WS (${notifResult.why || 'ok'})`)
+  // The mention must arrive + render in qabot's #general (proves the live broadcast landed).
+  await page.locator('.message .body', { hasText: 'desktop ping ' + chanName }).last().waitFor({ timeout: 8000 })
+  // Poll window.__notifs for the recorded construction (the handler runs synchronously on
+  // the WS frame, but poll a few ticks to avoid a microtask race).
+  let notifs = []
+  for (let i = 0; i < 30; i++) {
+    notifs = await page.evaluate(() => window.__notifs || [])
+    if (notifs.length > 0) break
+    await page.waitForTimeout(100)
+  }
+  check(notifs.length > 0, `a desktop notification was constructed (got ${notifs.length})`)
+  const fired = notifs[notifs.length - 1] || { title: '', body: '' }
+  // The author is the SECOND user; a server (non-DM) mention tags the title "(mention)".
+  check(
+    fired.title.includes('qabuddy') && fired.title.includes('(mention)'),
+    `the notification title carries the author + "(mention)" tag (got "${fired.title}")`,
+  )
+  check(
+    fired.body.includes('desktop ping ' + chanName),
+    `the notification body carries the message snippet (got "${fired.body}")`,
+  )
+  // Restore document.hidden = false so the later steps (mobile, etc.) see a focused tab.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
 
   // 7j — Server settings (owner): create a throwaway server, rename it (the sidebar
   // relabels live), then delete it (typed-name confirm) and watch it leave the sidebar.
