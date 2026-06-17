@@ -37,9 +37,13 @@ then **browser QA + AI-vision verify** the rendered result before "done" (Rule 1
 account/voice controls are scattered in the 2604-LOC `Chat.tsx` header + voice bar; there is no
 settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settings + UI polish".
 
-- [ ] **Login / register page redesign** (`web/src/components/Auth.tsx`) — Discord-quality:
-  branded layout + clear visual hierarchy, inline validation + error states, loading state,
-  password show/hide, responsive at mobile width. (today: a bare centered username/password card)
+- [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
+  "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
+  uppercase field labels, **password show/hide toggle**, inline min-length hint, loading
+  **spinner** on submit, disabled-until-valid submit, accessible labels + `role="alert"` error.
+  Selectors preserved so realtime/voice QA stays green; new browser-QA assertion exercises the
+  toggle. Browser QA `browser=0 realtime=0 voice=0 search=0`; AI-vision verified both modes;
+  shipped + `railway up` + rollout verified.
 - [ ] **User Settings surface (Discord-style)** — a settings modal/page with a left-nav tab list,
   replacing the scattered header controls. First tab **My Account**: avatar (upload/preview),
   username, custom status + emoji, presence picker — consolidated in one place. A ⚙ entry point

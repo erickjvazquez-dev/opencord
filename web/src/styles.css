@@ -48,29 +48,129 @@ input {
   height: 100%;
   display: grid;
   place-items: center;
-  background: radial-gradient(1200px 600px at 50% -10%, #2b2d59, var(--bg));
+  padding: 24px;
+  background: radial-gradient(1100px 560px at 50% -15%, #3a3d7a, var(--bg));
 }
 
 .auth-card {
-  width: min(420px, 92vw);
+  width: min(420px, 100%);
   background: var(--bg-elevated);
   padding: 32px;
   border-radius: var(--radius);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+}
+
+.auth-brand {
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--link);
 }
 
 .auth-card h1 {
-  margin: 0;
+  margin: 4px 0 0;
   text-align: center;
+  font-size: 24px;
+  font-weight: 700;
 }
 
 .tagline {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   text-align: center;
   color: var(--text-muted);
+  font-size: 15px;
+}
+
+/* Labelled form field — uppercase label above the input (Discord-style). */
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field label {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.auth-field input {
+  width: 100%;
+}
+
+/* Password field with an inline Show/Hide reveal toggle. */
+.auth-password {
+  position: relative;
+  display: flex;
+}
+
+.auth-password input {
+  width: 100%;
+  padding-right: 64px;
+}
+
+.auth-reveal {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 8px;
+}
+
+.auth-reveal:hover {
+  color: var(--text);
+}
+
+.auth-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.auth-submit {
+  margin-top: 4px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.auth-switch {
+  align-self: center;
+  margin-top: 4px;
+  text-decoration: none;
+  color: var(--link);
+}
+
+.auth-switch:hover {
+  text-decoration: underline;
 }
 
 .auth-card input,

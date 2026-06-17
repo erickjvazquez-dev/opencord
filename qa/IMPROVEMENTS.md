@@ -2564,3 +2564,26 @@ catching drift while shipping UI; when the rendered bundle is provably unchanged
 green run, a cheap serve-check + the next UI-touching tick's full run is the right call — don't
 re-boot a stack to re-verify identical bytes.** Component/dimension: advanced **QA-process /
 doc-coherence** (a new machine-checkable invariant in the gate).
+
+---
+
+## 2026-06-17 (tick 128) — UI sprint slice 1: login/register redesign (owner UI-parity priority)
+
+First slice of the owner's UI/UX Discord-parity push. Redesigned the bare login card (`Auth.tsx` +
+`styles.css`) to Discord's bar: brand wordmark, mode-aware heading/subtitle, uppercase field labels,
+**password show/hide toggle**, inline min-length hint, a submit **spinner** + disabled-until-valid
+button, accessible labels + `role="alert"` error. **Component: UI → polished.**
+
+**Key discipline that kept the blast radius zero:** the two-client realtime/voice/search QA drives
+auth via `getByPlaceholder('username'/'password')` and the exact button names `Create account` /
+`No account? Register`. I **preserved every one of those selectors** (kept placeholders + button text,
+added labels alongside), so a full UI rewrite of the login touched nothing the other suites depend on
+— `browser=0 realtime=0 voice=0 search=0` first try, no QA edits needed beyond the new toggle assertion.
+**Carry: when redesigning a surface other QA flows pass through, treat its existing test selectors as a
+contract — keep them, add to them; don't rename them.** Grew QA with a Show/Hide-toggle assertion +
+`01b-auth-register.png`; AI-vision verified both login and register modes (polished, no P0/P1).
+
+**Deploy:** this slice changed `web/` (new bundle hash), so unlike the prior 5 docs/test ticks it
+**deploys** — `railway up` + rollout verification (live bundle is the new hash). Going forward every UI
+slice deploys; docs/test ticks stay push-only. Next slice: the Discord-style User Settings modal
+(My Account tab).

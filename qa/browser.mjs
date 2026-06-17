@@ -70,6 +70,15 @@ async function main() {
   await page.getByRole('button', { name: 'No account? Register' }).click()
   await page.getByPlaceholder('username').fill(user)
   await page.getByPlaceholder('password').fill('hunter2')
+
+  // 1b — password show/hide toggle (login redesign): reveal flips the field to text.
+  const pwField = page.getByPlaceholder('password')
+  await page.getByRole('button', { name: 'Show password' }).click()
+  check((await pwField.getAttribute('type')) === 'text', 'Show reveals the password (type=text)')
+  await shot('01b-auth-register.png')
+  await page.getByRole('button', { name: 'Hide password' }).click()
+  check((await pwField.getAttribute('type')) === 'password', 'Hide re-masks the password')
+
   await page.getByRole('button', { name: 'Create account' }).click()
 
   // 2 — Chat loads.
