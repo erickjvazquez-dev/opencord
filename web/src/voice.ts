@@ -9,7 +9,7 @@
 // re-renders. Chat.tsx owns one instance per call, feeds it relayed frames, and
 // renders the roster it emits.
 
-import { getAudioProcessing, getOutputVolume } from './voiceSettings'
+import { getAudioProcessing, getOutputVolume, getCameraDeviceId } from './voiceSettings'
 
 // A peer's effective playback volume = their personal volume scaled by the master
 // output volume, clamped to [0,1]. Pure so it can be unit-tested.
@@ -22,9 +22,13 @@ export type VoiceFrame =
   | { type: 'voice-join' }
   | { type: 'voice-leave' }
   | { type: 'voice-signal'; target: number; signal: unknown }
-  // Announce we started/stopped screen sharing. `streamId` (start only) is the
-  // screen MediaStream's id so peers can tell its tracks apart from the mic.
-  | { type: 'voice-screen'; on: boolean; streamId?: string }
+  // Announce we started/stopped sharing a video (screen or camera). `streamId`
+  // (start only) is the video MediaStream's id so peers can tell its tracks apart
+  // from the mic; `kind` tags it as the screen (default) or the camera.
+  | { type: 'voice-screen'; on: boolean; streamId?: string; kind?: VideoKind }
+
+// Which kind of video a peer is publishing through the shared mesh video slot.
+export type VideoKind = 'screen' | 'camera'
 
 // An inbound voice frame as relayed to the channel (server-stamped with `from`).
 export interface VoiceInbound {
@@ -35,6 +39,7 @@ export interface VoiceInbound {
   signal?: unknown
   on?: boolean
   streamId?: string
+  kind?: VideoKind
 }
 
 export type PeerState = 'connecting' | 'connected' | 'failed'
@@ -60,8 +65,13 @@ export interface VoiceTransport {
   // Start/stop sharing the screen (getDisplayMedia: high-res video + optional
   // system/tab audio). Capable of 4K@60 when the source and link allow it.
   startScreenShare(): Promise<void>
+  // Turn the camera on in the call (mesh: publishes through the same video slot as
+  // screen share; mutually exclusive with it for now). stopScreenShare() stops either.
+  startCamera(deviceId?: string): Promise<void>
   stopScreenShare(): void
   isScreenSharing(): boolean
+  // The kind of video currently being published (screen/camera), or null if none.
+  currentVideoKind(): VideoKind | null
   // Audio mixing while sharing screen audio:
   //  • setScreenSendGain — the SHARER raises/lowers the shared audio level sent to
   //    ALL viewers (gain on the outgoing track; 1 = unchanged, >1 louder).
@@ -90,6 +100,9 @@ export interface VoicePeer {
   sharingScreen: boolean
   screenStream: MediaStream | null
   screenVolume: number
+  // Whether the shared video is a screen capture (default) or the peer's camera —
+  // drives the tile's label and mirror. Only meaningful while sharingScreen.
+  videoKind: VideoKind
 }
 
 // Public STUN only (Rule A: no required paid service). On loopback/LAN, host
@@ -186,6 +199,12 @@ interface Peer {
   screenStream: MediaStream | null
   screenAudioEl: HTMLAudioElement | null
   screenVolume: number
+  // Whether this peer's shared video is their screen (default) or their camera.
+  videoKind: VideoKind
+  // The last inbound video MediaStream from this peer, retained across a screen↔camera
+  // switch (which reuses the transceiver and doesn't re-fire ontrack) so the tile can
+  // be re-attached from the voice-screen announce. Cleared only when the track ends.
+  inboundVideoStream: MediaStream | null
 }
 
 export class VoiceSession {
@@ -225,6 +244,8 @@ export class VoiceSession {
   private screenSendGainValue = 1
   private screenMonitorEl: HTMLAudioElement | null = null
   private screenMonitorVolume = 0
+  // Whether our currently-published video (screenStream) is the screen or the camera.
+  private localVideoKind: VideoKind = 'screen'
 
   constructor(
     private myId: number,
@@ -233,8 +254,9 @@ export class VoiceSession {
     // Reports the local participant's speaking state (optional; the roster carries
     // remote peers' speaking state).
     private onLocalSpeaking?: (speaking: boolean) => void,
-    // Reports OUR own screen-share stream (for a local preview), or null on stop.
-    private onLocalScreen?: (stream: MediaStream | null) => void,
+    // Reports OUR own shared-video stream (for a local preview), or null on stop,
+    // plus whether it's the screen or the camera (so the preview mirrors correctly).
+    private onLocalScreen?: (stream: MediaStream | null, kind?: VideoKind) => void,
     // ICE servers from the server (configured STUN + optional TURN for hostile NATs).
     // Falls back to the built-in public STUN if the voice-token call didn't provide any.
     private iceServers?: RTCIceServer[],
@@ -485,11 +507,38 @@ export class VoiceSession {
     const rawAudio = stream.getAudioTracks()[0]
     if (rawAudio) this.screenSendAudioTrack = this.buildScreenSendAudio(rawAudio)
 
+    this.localVideoKind = 'screen'
     for (const peer of this.peers.values()) this.addScreenTracksToPeer(peer)
     // Tell peers which stream id is the screen so they classify its tracks, then
     // expose our own stream for a local preview.
-    this.send({ type: 'voice-screen', on: true, streamId: stream.id })
-    this.onLocalScreen?.(stream)
+    this.send({ type: 'voice-screen', on: true, streamId: stream.id, kind: 'screen' })
+    this.onLocalScreen?.(stream, 'screen')
+  }
+
+  // Turn on the camera in the call: capture it and publish it through the SAME mesh
+  // video slot as screen share (so the receive path is unchanged). Camera and screen
+  // are mutually exclusive for now (both use screenStream) — the caller stops one
+  // before starting the other. No audio (the mic is the voice path); 'motion' hint.
+  async startCamera(deviceId?: string): Promise<void> {
+    if (this.stopped || this.screenStream) return
+    const id = deviceId ?? getCameraDeviceId()
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: id ? { deviceId: { exact: id } } : true,
+    })
+    if (this.stopped) {
+      stream.getTracks().forEach((t) => t.stop())
+      return
+    }
+    this.screenStream = stream
+    this.screenVideoTrack = stream.getVideoTracks()[0] ?? null
+    if (this.screenVideoTrack) {
+      this.screenVideoTrack.contentHint = 'motion'
+      this.screenVideoTrack.onended = () => this.stopScreenShare()
+    }
+    this.localVideoKind = 'camera'
+    for (const peer of this.peers.values()) this.addScreenTracksToPeer(peer)
+    this.send({ type: 'voice-screen', on: true, streamId: stream.id, kind: 'camera' })
+    this.onLocalScreen?.(stream, 'camera')
   }
 
   // Stop sharing: drop the screen senders from every peer, tear down capture +
@@ -513,8 +562,15 @@ export class VoiceSession {
     this.screenVideoTrack = null
     this.screenSendAudioTrack = null
     this.screenSendGain = null
+    this.localVideoKind = 'screen'
     if (!this.stopped) this.send({ type: 'voice-screen', on: false })
     this.onLocalScreen?.(null)
+  }
+
+  // The kind of video we're currently publishing (screen/camera), or null if none.
+  // Lets the UI show the right toggle state for the shared screen/camera slot.
+  currentVideoKind(): VideoKind | null {
+    return this.screenStream ? this.localVideoKind : null
   }
 
   // SHARER control: scale the screen-audio level sent to ALL viewers (1 = as
@@ -601,15 +657,20 @@ export class VoiceSession {
       // A participant appeared. Open a peer; perfect negotiation drives the
       // offer/answer from whichever side fires negotiationneeded first.
       this.ensurePeer(ev.from, ev.username ?? '')
-      // If WE are already sharing, re-announce so the new joiner learns our screen
-      // stream id (ensurePeer also publishes our screen tracks to them).
+      // If WE are already sharing a video, re-announce so the new joiner learns our
+      // stream id + kind (ensurePeer also publishes our video tracks to them).
       if (this.screenStream) {
-        this.send({ type: 'voice-screen', on: true, streamId: this.screenStream.id })
+        this.send({
+          type: 'voice-screen',
+          on: true,
+          streamId: this.screenStream.id,
+          kind: this.localVideoKind,
+        })
       }
     } else if (ev.type === 'voice-leave') {
       this.dropPeer(ev.from)
     } else if (ev.type === 'voice-screen') {
-      this.onScreenAnnounce(ev.from, ev.username ?? '', ev.on === true, ev.streamId)
+      this.onScreenAnnounce(ev.from, ev.username ?? '', ev.on === true, ev.streamId, ev.kind)
     } else if (ev.type === 'voice-signal' && ev.target === this.myId) {
       await this.onSignal(ev.from, ev.username ?? '', ev.signal as SignalPayload | undefined)
     }
@@ -619,10 +680,23 @@ export class VoiceSession {
   // we record their screen stream id so the screen's tracks are told apart from
   // the mic — and reclassify any screen track that arrived before this frame. On
   // stop we tear down their screen video/audio.
-  private onScreenAnnounce(id: number, username: string, on: boolean, streamId?: string): void {
+  private onScreenAnnounce(
+    id: number,
+    username: string,
+    on: boolean,
+    streamId?: string,
+    kind?: VideoKind,
+  ): void {
     const peer = this.ensurePeer(id, username)
     if (on && streamId) {
       peer.screenStreamId = streamId
+      peer.videoKind = kind === 'camera' ? 'camera' : 'screen'
+      // Re-attach the inbound video when the peer SWITCHES source (screen↔camera) on a
+      // live call: that reuses the transceiver, so ontrack won't re-fire — the announce
+      // is our only signal that the (same) inbound stream now carries the new video.
+      if (!peer.screenStream && peer.inboundVideoStream) {
+        peer.screenStream = peer.inboundVideoStream
+      }
       // A screen audio track may have landed before this frame and been treated as
       // the mic — if the mic element now holds the screen stream, move it over.
       const micStream = peer.audioEl.srcObject as MediaStream | null
@@ -670,6 +744,8 @@ export class VoiceSession {
       screenStream: null,
       screenAudioEl: null,
       screenVolume: 1,
+      videoKind: 'screen',
+      inboundVideoStream: null,
     }
     this.peers.set(id, peer)
     this.applySink(audioEl)
@@ -698,13 +774,18 @@ export class VoiceSession {
     }
     pc.ontrack = ({ track, streams }) => {
       const stream = streams[0] ?? null
-      // Video is always the screen share (the mesh mic is audio-only).
+      // Video is the shared screen/camera (the mesh mic is audio-only).
       if (track.kind === 'video') {
         peer.screenStreamId = stream?.id ?? peer.screenStreamId
         peer.screenStream = stream
+        // Remember the inbound video stream so we can re-attach it when the peer
+        // switches video source (screen↔camera): that REUSES the transceiver, so
+        // ontrack does NOT fire again — only the voice-screen announce does.
+        peer.inboundVideoStream = stream
         // Safety net: if the track truly ends (not just the voice-screen frame),
         // tear the tile down so a stopped share can't linger.
         track.onended = () => {
+          if (peer.inboundVideoStream === stream) peer.inboundVideoStream = null
           if (peer.screenStream === stream) {
             this.teardownPeerScreen(peer)
             this.emitRoster()
@@ -863,6 +944,7 @@ export class VoiceSession {
       sharingScreen: p.screenStream != null,
       screenStream: p.screenStream,
       screenVolume: p.screenVolume,
+      videoKind: p.videoKind,
     }))
     this.onRoster(peers)
   }

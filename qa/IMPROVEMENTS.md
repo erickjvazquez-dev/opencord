@@ -3,6 +3,39 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 135) — Video calling; the two-client QA caught a real WebRTC bug a single client never could
+
+Shipped **mesh video calling (camera) — slice 1**, the biggest remaining Discord-parity feature, by
+reusing the screen-share pipeline + a `kind` tag. **Component: UI + audio/realtime.** Two reusable
+lessons, both about how the loop's QA earns its keep on hard features:
+
+1. **The two-client voice QA caught a genuine WebRTC bug that NO single-client test or unit test could.**
+   When A stops screen-share then starts camera, the peer connection REUSES the video transceiver, so
+   B's `ontrack` does **not** re-fire — B never re-attached the video and saw no camera tile. Build was
+   green, the camera worked on A's own screen, the Go relay test passed — every gate except the
+   two-client E2E was happy. Only driving *two real browsers through the actual screen→camera switch*
+   exposed it. Fix: the receiver retains the inbound video stream and re-attaches it on the
+   `voice-screen` announce (the announce is the only signal when ontrack won't fire). **Lesson —
+   realtime/peer features MUST be verified two-client through the actual state TRANSITIONS (not just the
+   happy single-action path); the transitions (switch source, stop-then-start, reconnect) are where the
+   transceiver/negotiation bugs live, and they're invisible to every non-two-browser gate.**
+
+2. **Reuse the proven pipeline + an additive tag, not a parallel rewrite — it shrinks the risk surface.**
+   Camera could have been a whole parallel video path (new frame, new peer fields, new ontrack branch).
+   Instead it rides the EXISTING screen `addScreenTracksToPeer`/`voice-screen`/`ontrack` with one
+   additive `kind` field — so the receive path (the scary part) was UNCHANGED and the existing
+   screen-share QA proved no regression for free. The cost is a slice-1 limitation (screen ⊻ camera),
+   documented and deferred. **Lesson — when a new feature is 90% an existing one, extend with an additive
+   discriminator and keep the hot path byte-identical; the old feature's tests then guard the new one.**
+
+**Adversarial note (Rule 15):** the new `kind` is attacker-controlled WS input, so the Go relay
+whitelists it (`∈ {"", "screen", "camera"}` → else drop the frame) and a regression test fires a
+`<script>` kind and proves the garbage frame never reaches the other client.
+
+**Next QA-growth target (slice 2):** when screen+camera coexist (parallel streams), QA must assert BOTH
+tiles render for one peer simultaneously (the case slice 1 explicitly can't do) — two-client, two video
+streams from A, both visible on B.
+
 ## 2026-06-17 (iter 134) — Press feedback; the QA CAUGHT a CSS regression that would've shipped (and the cause is a reusable trap)
 
 Shipped global **press (`:active`) feedback** and, more importantly, the browser QA **caught a real

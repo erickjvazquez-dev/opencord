@@ -396,6 +396,61 @@ async function main() {
     check(await waitForCount(b.locator('[data-screen-peer]'), 0), 'B no longer sees A’s screen tile')
   }
 
+  // ── Camera / video calling (A turns camera on → B receives a live camera tile) ──
+  // Unlike screen capture, getUserMedia({video}) always resolves with the fake video
+  // device, so this runs unconditionally. Camera reuses the screen video slot (slice 1)
+  // but is tagged kind=camera so it labels/mirrors correctly and carries no audio.
+  step('camera: A turns the camera on')
+  // Let any just-stopped screen-share renegotiation settle before swapping in the
+  // camera video on the same peer connection (real usage is human-paced).
+  await a.waitForTimeout(1500)
+  const camBtn = a.locator('.voice-camera-toggle')
+  await camBtn.click()
+  await a.locator('[data-camera-self]').waitFor({ timeout: 10000 })
+  check(
+    await a.locator('[data-camera-self] video.screen-video.mirror').isVisible(),
+    'A sees own camera self-view (mirrored)',
+  )
+  check((await camBtn.getAttribute('data-camera')) === 'true', 'camera button shows the on state')
+  check(
+    (await a.locator('[data-camera-self] [data-screen-send-gain]').count()) === 0,
+    'camera self-tile has no screen-audio sliders (camera is video-only)',
+  )
+
+  step('B receives A’s camera as a live inbound video tile labelled camera')
+  const bCam = b.locator('[data-screen-peer][data-video-kind="camera"]').first()
+  const gotCam = await bCam
+    .waitFor({ timeout: 15000 })
+    .then(() => true)
+    .catch(() => false)
+  check(gotCam, 'B sees a camera tile for A')
+  if (gotCam) {
+    const bHasCamVideo = await b.evaluate(() => {
+      const v = document.querySelector('[data-video-kind="camera"] video.screen-video')
+      const ms = v && v.srcObject
+      return !!(ms && ms.getVideoTracks && ms.getVideoTracks().length > 0)
+    })
+    check(bHasCamVideo, 'B’s camera tile carries a live inbound video track')
+    check(
+      (await b.locator('[data-video-kind="camera"] [data-screen-volume-for]').count()) === 0,
+      'a camera tile has no shared-audio volume slider (camera is video-only)',
+    )
+    check(
+      ((await bCam.locator('.screen-tile-name').textContent()) ?? '').includes('camera'),
+      'B’s camera tile is labelled “camera”',
+    )
+    await b.screenshot({ path: join(SHOTS, 'voice-10-camera.png') })
+    await a.screenshot({ path: join(SHOTS, 'voice-11-camera-self.png') })
+  }
+
+  step('A turns the camera off → camera tiles disappear for A and B')
+  await camBtn.click()
+  check(await waitForCount(a.locator('[data-camera-self]'), 0), 'A’s own camera tile is gone after stop')
+  check(
+    await waitForCount(b.locator('[data-screen-peer][data-video-kind="camera"]'), 0),
+    'B no longer sees A’s camera tile',
+  )
+
   step('mute toggles the local mic label')
   await a.getByRole('button', { name: 'mute' }).click()
   check(

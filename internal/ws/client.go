@@ -163,6 +163,7 @@ func (c *Client) readPump(store *chat.Store) {
 			Signal   json.RawMessage `json:"signal"`
 			On       bool            `json:"on"`
 			StreamID string          `json:"streamId"`
+			Kind     string          `json:"kind"`
 		}
 		if json.Unmarshal(raw, &in) != nil {
 			continue
@@ -192,15 +193,21 @@ func (c *Client) readPump(store *chat.Store) {
 				continue
 			}
 			if in.Type == "voice-screen" {
-				// Announce a start/stop of screen share. StreamID lets receivers tell
-				// the screen's tracks from the mic; bound it (Rule B) and only carry
-				// it when starting.
+				// Announce a start/stop of a shared video (screen OR camera). StreamID
+				// lets receivers tell the video's tracks from the mic; Kind tags it as
+				// the screen or the camera. Bound StreamID and whitelist Kind (Rule B —
+				// an unknown kind is hostile/garbage, so drop the frame); carry both
+				// only when starting.
 				if len(in.StreamID) > maxStreamID {
+					continue
+				}
+				if in.On && in.Kind != "" && in.Kind != "screen" && in.Kind != "camera" {
 					continue
 				}
 				ev := Event{Type: "voice-screen", From: c.user.ID, Username: c.user.Username, On: in.On}
 				if in.On {
 					ev.StreamID = in.StreamID
+					ev.Kind = in.Kind
 				}
 				c.hub.BroadcastToChannel(c.channelID, ev)
 				continue

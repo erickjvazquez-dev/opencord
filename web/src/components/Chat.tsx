@@ -242,6 +242,8 @@ export function Chat({
   // `screenSendGain` is how loud our shared audio is sent to viewers (0..4, 1=as-is);
   // `screenMonitor` is our own local monitor of that audio (0..1, 0=off, avoids echo).
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null)
+  // Whether our local shared video is the screen or the camera (drives label + mirror).
+  const [localVideoKind, setLocalVideoKind] = useState<'screen' | 'camera'>('screen')
   const [screenSendGain, setScreenSendGain] = useState(1)
   const [screenMonitor, setScreenMonitor] = useState(0)
   // Screen-share view sizing: tile size (small/medium/large) + how the video fits
@@ -626,20 +628,25 @@ export function Chat({
         iceServers?: RTCIceServer[]
       } => ({ sfu: false }),
     )
+    // Our own shared-video preview: track the stream + whether it's screen or camera.
+    const onLocalVideo = (stream: MediaStream | null, kind?: 'screen' | 'camera') => {
+      setLocalScreen(stream)
+      if (kind) setLocalVideoKind(kind)
+    }
     const session: VoiceTransport =
       t.sfu && t.url && t.token && t.room
         ? new SfuSession(
             { url: t.url, room: t.room, token: t.token },
             setVoicePeers,
             setSpeakingSelf,
-            setLocalScreen,
+            onLocalVideo,
           )
         : new VoiceSession(
             user.id,
             (frame) => wsRef.current?.send(JSON.stringify(frame)),
             setVoicePeers,
             setSpeakingSelf,
-            setLocalScreen,
+            onLocalVideo,
             t.iceServers,
           )
     voiceRef.current = session
@@ -675,15 +682,17 @@ export function Chat({
 
   // Screen share: start capture (the session prompts the OS picker), or stop. The
   // session reports our own stream via setLocalScreen, which drives the preview +
-  // the sharer audio controls. getDisplayMedia rejects if the user cancels.
+  // the sharer audio controls. getDisplayMedia rejects if the user cancels. Screen
+  // and camera share one mesh video slot, so starting screen stops the camera first.
   const toggleScreenShare = async () => {
     const s = voiceRef.current
     if (!s) return
-    if (s.isScreenSharing()) {
+    if (s.currentVideoKind() === 'screen') {
       s.stopScreenShare()
       return
     }
     try {
+      if (s.currentVideoKind() === 'camera') s.stopScreenShare() // free the shared video slot
       await s.startScreenShare()
     } catch (err) {
       // Cancelling the picker throws NotAllowed/AbortError — that's not an error
@@ -691,6 +700,26 @@ export function Chat({
       const name = (err as DOMException)?.name
       if (name !== 'NotAllowedError' && name !== 'AbortError') {
         window.alert((err as Error)?.message || 'Could not start screen sharing.')
+      }
+    }
+  }
+
+  // Camera: turn the camera on/off in the call. Mutually exclusive with screen share
+  // (one mesh video slot) — starting the camera stops a running screen share first.
+  const toggleCamera = async () => {
+    const s = voiceRef.current
+    if (!s) return
+    if (s.currentVideoKind() === 'camera') {
+      s.stopScreenShare() // stops the shared video (the camera)
+      return
+    }
+    try {
+      if (s.currentVideoKind() === 'screen') s.stopScreenShare() // free the slot
+      await s.startCamera()
+    } catch (err) {
+      const name = (err as DOMException)?.name
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        window.alert((err as Error)?.message || 'Could not start the camera.')
       }
     }
   }
@@ -1819,12 +1848,20 @@ export function Chat({
               {deafened ? 'undeafen' : 'deafen'}
             </button>
             <button
-              className={`link voice-screen-toggle${localScreen ? ' on' : ''}`}
+              className={`link voice-screen-toggle${localScreen && localVideoKind === 'screen' ? ' on' : ''}`}
               onClick={() => void toggleScreenShare()}
               title="Share your screen (up to 4K/60 — with system audio if you allow it)"
-              data-sharing={localScreen != null}
+              data-sharing={localScreen != null && localVideoKind === 'screen'}
             >
-              {localScreen ? 'stop sharing' : '🖥 share screen'}
+              {localScreen && localVideoKind === 'screen' ? 'stop sharing' : '🖥 share screen'}
+            </button>
+            <button
+              className={`link voice-camera-toggle${localScreen && localVideoKind === 'camera' ? ' on' : ''}`}
+              onClick={() => void toggleCamera()}
+              title="Turn your camera on (others in the call see your video)"
+              data-camera={localScreen != null && localVideoKind === 'camera'}
+            >
+              {localScreen && localVideoKind === 'camera' ? 'stop camera' : '📹 camera'}
             </button>
             <button className="link voice-leave" onClick={leaveVoice}>
               leave
@@ -1861,9 +1898,13 @@ export function Chat({
               </button>
             </div>
             {localScreen && (
-              <div className="screen-tile" data-screen-self>
+              <div
+                className="screen-tile"
+                data-screen-self={localVideoKind === 'screen' ? true : undefined}
+                data-camera-self={localVideoKind === 'camera' ? true : undefined}
+              >
                 <video
-                  className="screen-video"
+                  className={`screen-video${localVideoKind === 'camera' ? ' mirror' : ''}`}
                   autoPlay
                   muted
                   playsInline
@@ -1873,7 +1914,9 @@ export function Chat({
                   }}
                 />
                 <div className="screen-tile-bar">
-                  <span className="screen-tile-name">You are sharing</span>
+                  <span className="screen-tile-name">
+                    {localVideoKind === 'camera' ? 'Your camera' : 'You are sharing'}
+                  </span>
                   <button
                     type="button"
                     className="link screen-fullscreen"
@@ -1881,41 +1924,53 @@ export function Chat({
                       void e.currentTarget.closest('.screen-tile')?.querySelector('video')?.requestFullscreen?.()
                     }
                     title="Fullscreen"
-                    aria-label="fullscreen this screen"
+                    aria-label="fullscreen this video"
                   >
                     ⛶
                   </button>
-                  <label className="screen-level" title="Audio level sent to viewers">
-                    out
-                    <input
-                      type="range"
-                      min={0}
-                      max={200}
-                      value={Math.round(screenSendGain * 100)}
-                      onChange={(e) => changeScreenSendGain(Number(e.target.value) / 100)}
-                      data-screen-send-gain
-                      aria-label="shared audio level sent to viewers"
-                    />
-                  </label>
-                  <label className="screen-level" title="Your own monitor of the shared audio (off by default)">
-                    monitor
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={Math.round(screenMonitor * 100)}
-                      onChange={(e) => changeScreenMonitor(Number(e.target.value) / 100)}
-                      data-screen-monitor
-                      aria-label="your local monitor of the shared audio"
-                    />
-                  </label>
+                  {/* Screen-audio mixing controls — only the screen carries audio. */}
+                  {localVideoKind === 'screen' && (
+                    <>
+                      <label className="screen-level" title="Audio level sent to viewers">
+                        out
+                        <input
+                          type="range"
+                          min={0}
+                          max={200}
+                          value={Math.round(screenSendGain * 100)}
+                          onChange={(e) => changeScreenSendGain(Number(e.target.value) / 100)}
+                          data-screen-send-gain
+                          aria-label="shared audio level sent to viewers"
+                        />
+                      </label>
+                      <label className="screen-level" title="Your own monitor of the shared audio (off by default)">
+                        monitor
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={Math.round(screenMonitor * 100)}
+                          onChange={(e) => changeScreenMonitor(Number(e.target.value) / 100)}
+                          data-screen-monitor
+                          aria-label="your local monitor of the shared audio"
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
               </div>
             )}
             {voicePeers
               .filter((p) => p.sharingScreen && p.screenStream)
               .map((p) => (
-                <div key={p.id} className="screen-tile" data-screen-peer={p.id}>
+                <div
+                  key={p.id}
+                  className="screen-tile"
+                  data-screen-peer={p.id}
+                  data-video-kind={p.videoKind}
+                >
+                  {/* Remote camera is NOT mirrored — you see others as they are
+                      (only your own self-view is mirrored). */}
                   <video
                     className="screen-video"
                     autoPlay
@@ -1927,19 +1982,24 @@ export function Chat({
                     }}
                   />
                   <div className="screen-tile-bar">
-                    <span className="screen-tile-name">{p.username || `user ${p.id}`}’s screen</span>
-                    <label className="screen-level" title="How loudly you hear this share's audio">
-                      🔉
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={Math.round(p.screenVolume * 100)}
-                        onChange={(e) => changePeerScreenVolume(p.id, Number(e.target.value) / 100)}
-                        data-screen-volume-for={p.id}
-                        aria-label={`shared audio volume for ${p.username || `user ${p.id}`}`}
-                      />
-                    </label>
+                    <span className="screen-tile-name">
+                      {p.username || `user ${p.id}`}’s {p.videoKind === 'camera' ? 'camera' : 'screen'}
+                    </span>
+                    {/* Only a screen carries audio — a camera has none. */}
+                    {p.videoKind === 'screen' && (
+                      <label className="screen-level" title="How loudly you hear this share's audio">
+                        🔉
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={Math.round(p.screenVolume * 100)}
+                          onChange={(e) => changePeerScreenVolume(p.id, Number(e.target.value) / 100)}
+                          data-screen-volume-for={p.id}
+                          aria-label={`shared audio volume for ${p.username || `user ${p.id}`}`}
+                        />
+                      </label>
+                    )}
                     <button
                       type="button"
                       className="link screen-fullscreen"
@@ -1947,7 +2007,7 @@ export function Chat({
                         void e.currentTarget.closest('.screen-tile')?.querySelector('video')?.requestFullscreen?.()
                       }
                       title="Fullscreen"
-                      aria-label={`fullscreen ${p.username || `user ${p.id}`}'s screen`}
+                      aria-label={`fullscreen ${p.username || `user ${p.id}`}'s video`}
                     >
                       ⛶
                     </button>

@@ -88,8 +88,17 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   (a positional nudge moves the element on mousedown and breaks pointer/Playwright click-stability —
   caught by QA). New browser-QA `3f4` holds a button and asserts it dims. **Still TODO:** consistent
   spacing sweep; broader "feels like Discord" pass.
-- [ ] **(stretch) Video calling** — camera on/off in a voice channel with live video tiles for each
-  participant (beyond the existing screen share); mesh first, SFU path after.
+- [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
+  video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
+  publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go
+  relay validates the kind, Rule B — unknown → dropped) so tiles label/mirror correctly (your own
+  camera is mirrored; remote isn't; camera carries no audio). Mutually exclusive with screen-share for
+  now (one mesh video slot). **Fixed a real WebRTC bug found by the two-client QA:** switching video
+  source screen↔camera REUSES the transceiver so `ontrack` doesn't re-fire — the receiver now retains
+  the inbound video stream and re-attaches it on the announce. `go test` (relay + hostile-kind), vitest,
+  full browser+voice QA all green (screen-share stays green = no regression); AI-vision verified both
+  the "Your camera" self-view and the remote "X's camera" tile; shipped + `railway up` + rollout-verified.
+  **Slice 2 (next):** a parallel `cameraStream` path so screen + camera coexist; SFU video.
 
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->

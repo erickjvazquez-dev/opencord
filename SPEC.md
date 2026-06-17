@@ -1715,3 +1715,36 @@ for emoji+status) · `log out`. Handlers: `onAvatarPicked` (~529), `editMyStatus
 - `08b` mobile header: header now has fewer controls; keep the ≤640px no-overflow assertion.
 Verify: `npm run build`, full browser QA green, **AI-vision the modal** (My Account tab — avatar, status
 fields, presence, tab rail; clean/Discord-like), then ship + `railway up` + rollout-verify the new bundle.
+
+## Video calling (camera in a voice call) — slice 1 (mesh, camera ⊻ screen)
+
+**Why:** the #1 remaining Discord-parity feature — voice + screen-share exist, but you can't turn
+your camera on. **Design reuses the proven mesh screen-share pipeline** (capture → `addScreenTracksToPeer`
+→ `voice-screen` frame → `ontrack` → `screenStream` tile) so the receive path is UNCHANGED (lowest risk
+to the heavily-QA'd screen flow). Slice 1: camera is **mutually exclusive with screen-share** (both use
+the single `screenStream` video slot); simultaneous screen+camera is slice 2 (a parallel video stream).
+
+**The only new concept is a `kind: 'screen' | 'camera'` tag** so both ends label/mirror correctly — the
+video pixels render in the existing tile regardless.
+
+- **Server (`internal/ws`):** `Event` gains `Kind string json:"kind,omitempty"`; the inbound parse
+  struct gains `Kind`; the `voice-screen` relay validates `kind ∈ {"", "screen", "camera"}` (Rule B —
+  unknown → drop the frame) and carries it only when `On`. Bounded like `StreamID`.
+- **`voice.ts`:** new `startCamera(deviceId?)` mirrors `startScreenShare` but `getUserMedia({video})`
+  (no audio, `contentHint:'motion'`), sets the same `screenStream`/`screenVideoTrack`, publishes via the
+  same `addScreenTracksToPeer`, sends `{voice-screen, on, streamId, kind:'camera'}`. A `localVideoKind`
+  field; `startScreenShare` sends `kind:'screen'`. `onLocalScreen(stream, kind)` gains the kind. The
+  join re-announce (handle/voice-join) carries the current kind. `VoicePeer` gains
+  `videoKind?: 'screen'|'camera'`; `onScreenAnnounce` records `ev.kind`; `emitRoster` includes it.
+  `ontrack`/`addScreenTracksToPeer`/`stopScreenShare` UNCHANGED (camera reuses them). `VoiceTransport`
+  gains `startCamera`. `getCameraDeviceId()` from voiceSettings supplies the device.
+- **`sfu.ts`:** `startCamera` stub rejects ("not on SFU yet"), like `startScreenShare`.
+- **`Chat.tsx`:** a 📹 Camera toggle in the voice bar (`toggleCamera` — starts camera, stopping screen
+  first if active; mutual exclusion). Track `localVideoKind` from the `onLocalScreen` callback; the local
+  self-tile + the remote tile **mirror** (`scaleX(-1)`) + label "camera" when `videoKind==='camera'`.
+- **QA (`qa/voice.mjs`):** mirror the screen two-client test — A clicks 📹 Camera → A sees a mirrored
+  `[data-screen-self]` camera tile → B receives a live inbound video track in `[data-screen-peer]` →
+  A stops → both tiles clear. The existing screen-share test must stay green (proves no regression).
+- **Verify:** `go test ./...` (the voice-screen relay integration test still passes + a `kind` assertion),
+  `npm run build`, full browser+voice QA green, AI-vision the camera tile, ship + `railway up` + rollout-verify.
+- **Slice 2 (next):** a parallel `cameraStream`/`voice-camera` path so screen + camera coexist; SFU video.

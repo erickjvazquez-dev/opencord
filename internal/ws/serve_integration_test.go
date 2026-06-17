@@ -292,6 +292,7 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 		Signal   json.RawMessage `json:"signal"`
 		On       bool            `json:"on"`
 		StreamID string          `json:"streamId"`
+		Kind     string          `json:"kind"`
 	}
 	// readUntil reads frames on conn (with a deadline) until one of typ arrives.
 	readUntil := func(conn *gws.Conn, typ string) frame {
@@ -330,24 +331,51 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 	}
 
 	// A starts screen sharing → B sees voice-screen on=true from A, carrying the
-	// screen MediaStream id (so B can tell the screen's tracks from the mic).
-	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":true,"streamId":"screen-stream-123"}`)); err != nil {
+	// screen MediaStream id (so B can tell the screen's tracks from the mic) and the
+	// kind ("screen").
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":true,"streamId":"screen-stream-123","kind":"screen"}`)); err != nil {
 		t.Fatalf("A voice-screen on: %v", err)
 	}
 	scr := readUntil(connB, "voice-screen")
-	if scr.From != a.ID || !scr.On || scr.StreamID != "screen-stream-123" {
-		t.Fatalf("voice-screen on: from=%d on=%v streamId=%q, want from=%d on=true streamId=screen-stream-123",
-			scr.From, scr.On, scr.StreamID, a.ID)
+	if scr.From != a.ID || !scr.On || scr.StreamID != "screen-stream-123" || scr.Kind != "screen" {
+		t.Fatalf("voice-screen on: from=%d on=%v streamId=%q kind=%q, want from=%d on=true streamId=screen-stream-123 kind=screen",
+			scr.From, scr.On, scr.StreamID, scr.Kind, a.ID)
 	}
 
-	// A stops sharing → B sees voice-screen on=false (and no stream id leaks).
+	// A turns the camera on → B sees voice-screen on=true with kind="camera" (video
+	// calling reuses the same frame; the kind tags it as the camera, not the screen).
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":true,"streamId":"cam-stream-9","kind":"camera"}`)); err != nil {
+		t.Fatalf("A voice-screen camera on: %v", err)
+	}
+	cam := readUntil(connB, "voice-screen")
+	if cam.From != a.ID || !cam.On || cam.StreamID != "cam-stream-9" || cam.Kind != "camera" {
+		t.Fatalf("voice-screen camera: from=%d on=%v streamId=%q kind=%q, want from=%d on=true streamId=cam-stream-9 kind=camera",
+			cam.From, cam.On, cam.StreamID, cam.Kind, a.ID)
+	}
+
+	// Rule B: a hostile/unknown kind must NOT be relayed — the frame is dropped. We
+	// prove it by sending a garbage-kind frame, then a valid one, and asserting B's
+	// next voice-screen is the VALID one (the garbage never arrived).
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":true,"streamId":"evil","kind":"<script>"}`)); err != nil {
+		t.Fatalf("A voice-screen bad kind: %v", err)
+	}
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":true,"streamId":"good-stream","kind":"screen"}`)); err != nil {
+		t.Fatalf("A voice-screen good after bad: %v", err)
+	}
+	good := readUntil(connB, "voice-screen")
+	if good.StreamID != "good-stream" || good.Kind != "screen" {
+		t.Fatalf("hostile kind leaked: got streamId=%q kind=%q, want the garbage frame dropped and streamId=good-stream kind=screen",
+			good.StreamID, good.Kind)
+	}
+
+	// A stops sharing → B sees voice-screen on=false (and no stream id / kind leaks).
 	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-screen","on":false}`)); err != nil {
 		t.Fatalf("A voice-screen off: %v", err)
 	}
 	off := readUntil(connB, "voice-screen")
-	if off.From != a.ID || off.On || off.StreamID != "" {
-		t.Fatalf("voice-screen off: from=%d on=%v streamId=%q, want from=%d on=false streamId=\"\"",
-			off.From, off.On, off.StreamID, a.ID)
+	if off.From != a.ID || off.On || off.StreamID != "" || off.Kind != "" {
+		t.Fatalf("voice-screen off: from=%d on=%v streamId=%q kind=%q, want from=%d on=false empty streamId+kind",
+			off.From, off.On, off.StreamID, off.Kind, a.ID)
 	}
 }
 

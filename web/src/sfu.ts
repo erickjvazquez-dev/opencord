@@ -12,7 +12,7 @@ import type {
   RemoteTrack,
   RemoteTrackPublication,
 } from 'livekit-client'
-import type { VoiceInbound, VoicePeer, VoiceTransport } from './voice'
+import type { VoiceInbound, VoicePeer, VoiceTransport, VideoKind } from './voice'
 import { effectiveVolume } from './voice'
 import { getOutputVolume } from './voiceSettings'
 
@@ -207,6 +207,14 @@ export class SfuSession implements VoiceTransport {
       new Error('Screen sharing is not available on this server’s SFU yet — it works on the default voice path.'),
     )
   }
+  startCamera(): Promise<void> {
+    return Promise.reject(
+      new Error('Camera video is not available on this server’s SFU yet — it works on the default voice path.'),
+    )
+  }
+  currentVideoKind(): VideoKind | null {
+    return null
+  }
   stopScreenShare(): void {}
   setScreenSendGain(_gain: number): void {}
   setScreenMonitorVolume(_volume: number): void {}
@@ -279,10 +287,11 @@ export class SfuSession implements VoiceTransport {
         state: 'connected',
         speaking: activeIdentities ? activeIdentities.has(p.identity) : p.isSpeaking,
         volume: this.volumes.get(id) ?? 1,
-        // SFU screen share not wired yet (see startScreenShare).
+        // SFU screen share / camera not wired yet (see startScreenShare/startCamera).
         sharingScreen: false,
         screenStream: null,
         screenVolume: 1,
+        videoKind: 'screen',
       })
     }
     this.onRoster(peers)

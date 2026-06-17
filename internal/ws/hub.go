@@ -29,6 +29,9 @@ type Event struct {
 	// On omitted (false) means the peer stopped sharing.
 	On       bool   `json:"on,omitempty"`
 	StreamID string `json:"streamId,omitempty"`
+	// Kind tags a voice-screen video stream as the screen ("screen", the default/
+	// omitted) or the camera ("camera"), so receivers can label/mirror it correctly.
+	Kind string `json:"kind,omitempty"`
 	// ServerID scopes a user-targeted event to a server (e.g. "server-removed",
 	// "server-renamed"). Name carries a server's new name on "server-renamed".
 	ServerID int64  `json:"serverId,omitempty"`

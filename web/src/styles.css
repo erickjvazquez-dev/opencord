@@ -1891,6 +1891,10 @@ button:disabled {
   object-fit: contain;
   display: block;
 }
+/* Your OWN camera self-view is mirrored (like a mirror); remote cameras are not. */
+.screen-video.mirror {
+  transform: scaleX(-1);
+}
 .screen-tile-bar {
   display: flex;
   flex-wrap: wrap;
