@@ -2971,3 +2971,22 @@ because the change reused an in-file proven pattern (`buildScreenSendAudio`) and
 exercised every adjacent flow (mute/PTT/deafen/screen/camera/hot-swap) — the blast-radius proof. When
 touching the core audio path, lean on the existing send-gain pattern and let the full voice QA be the
 regression guard, rather than hand-reasoning about each interaction.
+
+## 2026-06-17 (tick 144) — mute proven at the RECEIVER (closing the GAP I opened tick 143)
+
+Acted on tick 143's reflection: the mute QA only checked the self-chip label, never that the peer
+stops hearing you. Reused the new `measureRms` helper to prove it two-client — A mutes → B's decoded
+inbound RMS for A goes **0.2412 → 0.0000**; unmute → **0.0000 → 0.3079**. The "am I really muted?"
+guarantee is now verified where it matters (the other person's ears), not in the UI. Bonus: it
+reconfirms slice 3d's capture gain node didn't break mute (a disabled source still feeds true silence
+through the node). **Component advanced:** security/robustness (a safety-critical guarantee is now
+provable) + QA-process (receiver-RMS is now an established primitive).
+
+**Highest-value NEXT improvement:** finish the trio with the SAME pattern — PTT (release Talk → B hears
+silence; hold → audible) and deafen (deafen forces A's mic off → B hears silence). These are the last
+two audio-gating behaviors checked only by UI state; the helper makes them cheap. After that, the
+receiver-RMS primitive could guard future audio features (noise gate, per-peer input) for free.
+
+**Carry (loop-process):** find → reflect → open a GOAL item → next tick close it. The tick-143 reflection
+became a one-line GOAL item that made tick 144 obvious and surgical. Keep that find→item→close cadence —
+it turns vague "improve QA" into a concrete queue.
