@@ -3224,3 +3224,26 @@ pattern. Avatars are already fine (Avatar.tsx always used fetch+blob — which i
 
 **Process note:** trusting the "that looks off" instinct + converting it into an assertion (not a guess)
 is exactly how the loop should self-correct. Don't sign off "renders fine" on an image without a decode check.
+
+## 2026-06-17 (tick 156) — image-bug-class audit (clean) + desktop notifications
+
+Audited every auth-gated image surface for the tick-155 401-on-img-src bug: avatars + attachments
+ALREADY use fetch+blob AND already have naturalWidth decode-check QA; emoji was the sole offender
+(fixed 155). Bug class contained + guarded everywhere — no code change. Refined lesson: the decode-check
+rigor already existed; the emoji slices just didn't mirror it. (An audit that finds it's already-clean is
+a valid, valuable tick — confirms no further instances without manufacturing churn.)
+
+Then shipped desktop notifications (Web Notifications API, Rule-A graceful, opt-in via a new Settings →
+Notifications tab): notify on DMs/@-mentions while the tab is backgrounded. Pure shouldNotify/mentionsMe
+(21 vitest cases) + a real stub-based browser E2E (forced document.hidden, 2nd user @mentions → assert a
+Notification was constructed). Delegated impl, reviewed (pure logic, regex-escape, graceful no-ops) +
+verified + prod.
+
+**Highest-value NEXT (rotate):** options, in rough ROI order — (a) **friends / friend requests /
+blocking** (Discord core social; medium-big — new backend social graph + UI); (b) **server-level mute**
+(small clean extension of per-channel mute — mute a whole server); (c) **role colors** (limited, roles
+are fixed owner/admin/member); (d) **threads** (big). Lean friends OR server-level-mute next.
+
+**Process note:** the loop is in a healthy groove — investigate (Explore agent, keep context lean) →
+delegate impl → review the security/correctness bits myself → verify (gate + naturalWidth/decode +
+AI-vision) → ship → prod-verify. The tick-155 P1 catch shows the verification depth is paying off.
