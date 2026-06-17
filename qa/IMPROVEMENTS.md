@@ -3046,3 +3046,22 @@ Bigger parity items still open: custom emoji (server :name:, self-hostable like 
 **Loop-process note (context):** 5 substantive ticks this session (143–147), all clean, no regressions,
 state tracked accurately in GOAL.md/IMPROVEMENTS.md/heartbeat. Not degrading yet, so NOT clearing — but
 watching for any slip next tick (per Step-0 judgment-trigger). Durable state means a clear is cheap if needed.
+
+## 2026-06-17 (tick 148) — Discord-style header timestamp (messaging-polish thread complete)
+
+Shipped tick 147's noted follow-up: message headers now read "Today at 9:31 AM" via `messageTimestamp`
+(= dayLabel + shortTime), replacing the seconds-y `toLocaleTimeString()` ("8:53:23 AM"), across the
+main list + search results + pins. Unit-tested + browser QA asserts the format + AI-vision. This
+completes a coherent 3-tick messaging-polish thread: **date dividers (146) → hover time (147) → header
+time (148)** — all built on the one `dates.ts` module (now 3 tested helpers).
+
+**Highest-value NEXT improvement (bigger feature, rotate up):** the small-polish vein is mined out;
+time for a meatier parity feature. Recommend **custom emoji** (server-uploaded `:name:`, self-hostable
+on local disk like avatars — Rule A clean, high-visibility) as the next build; **Video slice 2**
+(screen+camera coexist) is the alternative if favouring the voice component.
+
+**Loop-process note (context):** 6 clean ticks this session (143–148), no regressions. Checked the
+on-stop.sh auto-clear bridge: it fires `/clear` at ctx<20% AND re-arms `/loop` immediately (wiping the
+ScheduleWakeup) — so a *forced* judgment-clear would break the 30-min idle pace. Since I'm not
+degrading and the <20% safety net is wired, NOT forcing a clear; the mechanical floor is handled
+automatically. Verified the cadence/clear interaction so future ticks don't mis-fire it.
