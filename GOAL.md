@@ -106,7 +106,11 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   the inbound video stream and re-attaches it on the announce. `go test` (relay + hostile-kind), vitest,
   full browser+voice QA all green (screen-share stays green = no regression); AI-vision verified both
   the "Your camera" self-view and the remote "X's camera" tile; shipped + `railway up` + rollout-verified.
-  **Slice 2 (next):** a parallel `cameraStream` path so screen + camera coexist; SFU video.
+  **Slice 2 PLANNED (iter 154):** investigated the mesh video path + wrote a concrete sub-sliced plan
+  in SPEC.md ("Video slice 2 — screen + camera coexist") — 2a sender dual-track, 2d relay kind-on-stop,
+  2b receiver two-stream state, 2c UI two tiles, with the two-client-QA regression matrix. It's NICHE +
+  highest-blast-radius (core mesh), so flagged for a dedicated implementation tick OR deferral in favour
+  of higher-ROI parity (custom-emoji reactions, role colors) — owner's call. SFU video: later.
 
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->

@@ -3178,3 +3178,25 @@ reactions. Per-component rotation: emoji is done; video advances TOP PRIORITY.
 
 **Loop-process (context):** 12 ticks; still trusting the wired ctx<20% auto-clear (purpose-built, fires
 + re-arms when actually low) over a mistimed forced-clear. Delegation keeps per-tick growth modest.
+
+## 2026-06-17 (tick 154) — clarified emoji fixture is fine; spec'd video slice 2 (de-risk)
+
+Two things: (1) Re-examined the emoji QA fixture concern from tick 153 — it's a NON-issue: `makePng`
+builds a real visible 240×140 PNG (the picker tiles visibly render it), so the inline emoji DO render
+(small blurple rect; my tick-153 read was a misinterpretation). No fix needed. Lesson: before queuing a
+"fix", confirm the suspected defect is real — I almost spent a tick fixing a fixture that was already
+correct. (2) Investigated the mesh video path (Explore agent) and wrote a concrete sub-sliced SPEC for
+"screen + camera coexist" (video slice 2) — the last TOP-PRIORITY item.
+
+**Judgment surfaced (not buried):** video slice 2 is NICHE (few users screen+camera at once) and the
+HIGHEST-blast-radius change in the codebase (core voice mesh). Spec is ready, but I recommend either a
+dedicated implementation tick OR deferring it for higher-ROI broadly-used parity — flagged in GOAL.md
+for the owner. This respects the owner's TOP-PRIORITY list (advanced it via investigation+plan) while
+making the risk/value tradeoff explicit rather than rushing a risky core-voice change.
+
+**Highest-value NEXT:** custom-emoji REACTIONS — broadly used, natural extension of the just-completed
+emoji feature, medium risk (reactions store unicode TEXT; add an optional emoji-id path). Recommend this
+over video slice 2 unless the owner wants coexist. Also viable: role colors in member list + messages.
+
+**Context:** running on the 1M-context model — 14 ticks is well within budget (the <20% auto-clear
+hasn't fired because there's huge headroom). Earlier "heavy context" worry was overblown; continuing.

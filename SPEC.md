@@ -1981,3 +1981,40 @@ Slice 3a is the admin UI to upload/list/delete emoji, with live cache invalidati
 - **Note:** the QA emoji fixture is a degenerate 1px PNG → inline emoji look tiny in screenshots
   (picker tiles render visibly). A clearly-visible fixture is the next QA improvement so AI-vision of the
   rendered emoji is unambiguous. **Custom emoji feature is now fully complete (backend+render+manager+picker).**
+
+## Video slice 2 — screen + camera coexist (PLAN, investigated iter 154)
+
+**Goal:** let a participant share their screen AND camera at once (today they're mutually exclusive —
+one mesh video slot). NICHE + HIGH-BLAST-RADIUS (touches the core voice mesh, the product's
+differentiator), so spec-first + implement as its own dedicated effort with full two-client voice QA.
+
+**Current model (voice.ts):** one shared `screenStream`/`screenVideoTrack` (camera reuses the same
+field); `startCamera` bails with `if (this.screenStream) return`. One video transceiver per peer; the
+receiver holds one `inboundVideoStream`/`screenStream` per peer + one tile. The `voice-screen` announce
+carries `{on, streamId, kind}` and the Go relay (`internal/ws/client.go`) validates `kind ∈ {screen,
+camera}` + bounds streamId — already rich enough for two streams, EXCEPT stop frames drop `kind`.
+
+**Changes to coexist (sub-slices, in safe order):**
+- **2a sender (low risk):** add independent `cameraStream`/`cameraVideoTrack` fields; drop the mutual-
+  exclusion guard; `addCameraTrackToPeer` (own transceiver, own streamId, CAMERA_BITRATE < screen);
+  `stopCamera` independent of `stopScreenShare`; `ensurePeer` adds BOTH if active; announce each stream
+  separately with its `kind`.
+- **2d relay (minimal):** carry `kind` on the stop frame too, so the receiver knows WHICH stream ended
+  (`internal/ws/client.go` lines ~208-210). Backward compatible.
+- **2b receiver (low):** per-peer state keyed by kind ({screen?, camera?} streams); `ontrack` stores the
+  inbound stream, `onScreenAnnounce` classifies it by kind; preserve the transceiver-reuse re-attach
+  path for screen-only/camera-only backward compat.
+- **2c UI (medium):** render up to two tiles per peer (+ self), labelled screen/camera, own-camera
+  mirrored, screen-audio volume only on the screen tile; keep the ≤640px no-overflow guard.
+
+**Regression risks (two-client voice QA MUST re-verify):** screen-only, camera-only, screen↔camera
+switch (transceiver reuse — no duplicate tiles), mute/PTT/deafen (deafen still silences screen audio),
+peer join while both active (joiner sees both), peer leave. Extend `qa/voice.mjs`: A shares screen +
+camera → B sees 2 tiles → A stops camera → B sees 1 → A stops screen → B sees 0; each tile's controls
+work independently.
+
+**Value/risk note (for prioritization):** simultaneous screen+camera is an advanced/niche case; the
+change is the highest-blast-radius in the codebase (core mesh). Recommend implementing as a focused
+dedicated tick (delegate per the plan + careful review + the full two-client QA above) OR deferring in
+favour of higher-ROI broadly-used parity (custom-emoji reactions, role colors) — owner's call. Spec is
+ready either way.
