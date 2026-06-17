@@ -1964,3 +1964,20 @@ Slice 3a is the admin UI to upload/list/delete emoji, with live cache invalidati
   Ship + `railway up` + rollout-verify. Backend enforces admin regardless (client gate is UX).
 - **Custom emoji is now complete end-to-end.** Optional later: slice 3b emoji PICKER (insert `:name:`
   from a palette in the composer); stickers/GIF much later.
+
+## Custom emoji — composer picker (v0.5, slice 3b)
+
+**Why:** convenience over typing `:name:` — a picker to insert a server's custom emoji into the composer.
+
+- **`Chat.tsx`:** a 🙂 toggle in the composer (shown only when the active server has custom emoji),
+  a popover listing `activeEmoji` (each an `img.emoji-inline` + `:name:` title). `insertEmojiShortcode`
+  splices `:name:` at the caret (mirrors the mention-accept pattern: `onMouseDown`+`preventDefault` to
+  keep focus, `requestAnimationFrame` to restore caret), closes on select / outside-click / Esc / channel
+  switch. Reuses the per-server emoji map (no api.ts change). Separate state from the reaction palette.
+- **`styles.css`:** `.emoji-picker-*` (dark grid popover above the composer).
+- **QA:** browser E2E — open picker → lists `:ui_emoji:` → click inserts `:ui_emoji:` into the draft →
+  send → renders `img.emoji-inline`. Reaction palette (`pickerFor`) untouched. Screenshot.
+- **Verify (done):** tsc + vitest 39/39 + full QA green + AI-vision (picker + popover render). Ship.
+- **Note:** the QA emoji fixture is a degenerate 1px PNG → inline emoji look tiny in screenshots
+  (picker tiles render visibly). A clearly-visible fixture is the next QA improvement so AI-vision of the
+  rendered emoji is unambiguous. **Custom emoji feature is now fully complete (backend+render+manager+picker).**

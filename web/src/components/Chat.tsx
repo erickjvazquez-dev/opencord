@@ -206,6 +206,10 @@ export function Chat({
   // broadcast is count-only (mine=false), so we own this locally; seeded from history.
   const [myReactions, setMyReactions] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<number | null>(null)
+  // Composer custom-emoji picker: open state for the popover above the textarea that
+  // lists the active server's custom emoji and inserts `:name:` at the caret on click.
+  // Separate from the per-message reaction palette (`pickerFor`) above.
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
   // Mobile: the sidebar is an off-canvas drawer toggled by the header menu button.
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // In-channel search: `results` non-null means the message list shows matches instead.
@@ -297,6 +301,8 @@ export function Chat({
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const mentionRange = useRef<{ start: number; len: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Wraps the composer emoji-picker button + popover so an outside click can close it.
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
@@ -346,6 +352,7 @@ export function Chat({
     setTyping([])
     setMyReactions(new Set())
     setPickerFor(null)
+    setEmojiPickerOpen(false)
     setSearchResults(null)
     setSearchQuery('')
     setMembersOf(null)
@@ -629,6 +636,67 @@ export function Chat({
       }
     })
   }
+
+  // Insert a `:name:` custom-emoji shortcode into the draft at the caret (or append
+  // with a leading space when the textarea isn't focused), then refocus and close the
+  // picker. Mirrors acceptMention's caret-restore so it composes with the auto-resize.
+  const insertEmojiShortcode = (name: string) => {
+    const code = `:${name}:`
+    const ta = composerRef.current
+    setDraft((cur) => {
+      // Splice at the live caret when we have one; otherwise append (space-separated).
+      if (ta && document.activeElement === ta) {
+        const start = ta.selectionStart ?? cur.length
+        const end = ta.selectionEnd ?? cur.length
+        const before = cur.slice(0, start)
+        const next = before + code + cur.slice(end)
+        const caret = before.length + code.length
+        requestAnimationFrame(() => {
+          const el = composerRef.current
+          if (el) {
+            el.focus()
+            el.setSelectionRange(caret, caret)
+            // Keep the auto-grow height in sync with the new content.
+            el.style.height = 'auto'
+            el.style.height = `${el.scrollHeight}px`
+          }
+        })
+        return next
+      }
+      const next = cur.length === 0 || cur.endsWith(' ') ? cur + code : `${cur} ${code}`
+      requestAnimationFrame(() => {
+        const el = composerRef.current
+        if (el) {
+          el.focus()
+          el.setSelectionRange(next.length, next.length)
+          el.style.height = 'auto'
+          el.style.height = `${el.scrollHeight}px`
+        }
+      })
+      return next
+    })
+    setEmojiPickerOpen(false)
+  }
+
+  // Close the composer emoji picker on an outside click or Esc (mirrors the modal
+  // dismiss pattern used by ProfileCard / Settings). Only bound while it's open.
+  useEffect(() => {
+    if (!emojiPickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setEmojiPickerOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEmojiPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [emojiPickerOpen])
 
   // ── Voice call (mesh WebRTC) ────────────────────────────────────────────────
   // Available audio devices + the user's pick ('' = follow the OS default, i.e.
@@ -2898,6 +2966,46 @@ export function Chat({
           >
             📎
           </button>
+          {/* Custom-emoji picker — only when the active server has custom emoji. Inserts
+              `:name:` at the caret. Separate from the per-message reaction palette. */}
+          {activeEmoji && activeEmoji.size > 0 && (
+            <div className="emoji-picker-wrap" ref={emojiPickerRef}>
+              <button
+                type="button"
+                className="emoji-picker-btn"
+                aria-label="insert custom emoji"
+                aria-expanded={emojiPickerOpen}
+                title="Custom emoji"
+                disabled={!connected || !canPost}
+                onClick={() => setEmojiPickerOpen((o) => !o)}
+              >
+                🙂
+              </button>
+              {emojiPickerOpen && (
+                <div className="emoji-picker-popover" role="listbox" aria-label="custom emoji">
+                  {[...activeEmoji.entries()].map(([name, id]) => (
+                    <button
+                      type="button"
+                      key={id}
+                      role="option"
+                      aria-selected={false}
+                      className="emoji-picker-item"
+                      data-emoji-name={name}
+                      title={`:${name}:`}
+                      aria-label={`:${name}:`}
+                      // mousedown so the textarea keeps focus / caret for the splice.
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        insertEmojiShortcode(name)
+                      }}
+                    >
+                      <img className="emoji-inline" src={`/api/emoji/${id}`} alt={`:${name}:`} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <textarea
             ref={composerRef}
             className="composer-input"

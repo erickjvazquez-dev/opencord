@@ -376,8 +376,10 @@ item from here as the structural milestones above land.
   **Manager UI DONE (iter 152, slice 3a):** an admin **Emoji** section in the members/server-settings
   panel — list + upload (name + image) + delete, with `refreshEmojiCache` so `:name:` resolves LIVE
   (no reload); browser E2E (UI upload → live render → delete) + AI-vision verified. **Custom emoji is
-  now complete end-to-end** (backend + render + manager). Optional later: slice 3b picker (insert
-  `:name:` from a palette). · stickers · GIF picker (later)
+  now complete end-to-end** (backend + render + manager). **Picker DONE (iter 153, slice 3b):** a
+  composer 🙂 popover lists the server's emoji and inserts `:name:` at the caret (browser E2E +
+  AI-vision; reaction palette untouched). **Custom emoji is FULLY complete (backend+render+manager+picker).**
+  · stickers · GIF picker (later)
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
   (React elements, no innerHTML); E2E + AI-vision verified.

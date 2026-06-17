@@ -837,6 +837,52 @@ async function main() {
     /\/api\/emoji\/\d+/.test((await uiEmojiImg.getAttribute('src')) || ''),
     'the live-rendered emoji src points at /api/emoji/{id} (cache was invalidated, not reloaded)',
   )
+
+  // 7d3f — Composer emoji picker (slice 3b): the 🙂 toggle appears in the composer because
+  // the active server now has custom emoji. Open it → the popover lists :ui_emoji: as an
+  // image button → click inserts `:ui_emoji:` into the draft at the caret → Send → it
+  // renders as an inline image. Pure convenience over typing `:name:`. (The panel is
+  // closed and we're focused on the server channel, with `ui_emoji` in the cache.)
+  step('composer emoji picker: open → lists :ui_emoji: → click inserts the shortcode → renders')
+  const emojiPickerBtn = page.getByRole('button', { name: 'insert custom emoji' })
+  await emojiPickerBtn.waitFor({ timeout: 8000 })
+  check(
+    await emojiPickerBtn.isVisible(),
+    'the composer emoji-picker button appears (server has custom emoji)',
+  )
+  // Type a draft first so we can prove the shortcode is inserted at the caret, not nuked.
+  const composerInput = page.getByPlaceholder(new RegExp('Message #' + srvChan))
+  await composerInput.fill('pick: ')
+  await emojiPickerBtn.click()
+  const emojiPopover = page.locator('.emoji-picker-popover')
+  await emojiPopover.waitFor({ timeout: 4000 })
+  check(await emojiPopover.isVisible(), 'clicking the button opens the emoji-picker popover')
+  const popoverItem = emojiPopover.locator('.emoji-picker-item[data-emoji-name="ui_emoji"]')
+  await popoverItem.waitFor({ timeout: 4000 })
+  check(
+    await popoverItem.locator('img.emoji-inline').isVisible(),
+    'the popover lists :ui_emoji: as an img.emoji-inline button',
+  )
+  await shot('03k-emoji-picker.png')
+  // Click the emoji → it inserts `:ui_emoji:` into the draft and closes the popover.
+  await popoverItem.click()
+  await emojiPopover.waitFor({ state: 'detached', timeout: 4000 })
+  check((await page.locator('.emoji-picker-popover').count()) === 0, 'selecting an emoji closes the popover')
+  const draftAfter = await composerInput.inputValue()
+  check(
+    draftAfter.includes(':ui_emoji:'),
+    `clicking inserts :ui_emoji: into the composer draft (got "${draftAfter}")`,
+  )
+  // Send it → it renders as an inline image (same path as a manually-typed shortcode).
+  await page.waitForTimeout(1200) // let the message rate-limiter refill
+  await page.getByRole('button', { name: 'Send' }).click()
+  const pickedEmojiImg = page.locator('.message .body img.emoji-inline[alt=":ui_emoji:"]').last()
+  await pickedEmojiImg.waitFor({ timeout: 8000 })
+  check(
+    await pickedEmojiImg.isVisible(),
+    'a message composed via the picker renders :ui_emoji: as an inline img.emoji-inline',
+  )
+
   // Reopen the members panel → delete the emoji via the manager → its row disappears.
   await page
     .locator('.server-group', { hasText: 'qa server' })
