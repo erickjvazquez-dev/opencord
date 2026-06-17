@@ -32,6 +32,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS status_emoji TEXT;
 -- Presence state (v0.4): user-chosen availability (online|idle|dnd|invisible).
 -- NULL reads as 'online'. 'invisible' appears offline to others (live conn still required).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS presence_state TEXT;
+-- Profile (v0.5): a longer "About Me" bio + short pronouns, shown on the profile card.
+-- Both NULL = none. React-escaped on render; length-capped server-side (Rule B).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS about TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pronouns TEXT;
 
 CREATE TABLE IF NOT EXISTS messages (
     id         BIGSERIAL PRIMARY KEY,

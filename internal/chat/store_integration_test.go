@@ -1099,6 +1099,60 @@ func TestChannelMuteIntegration(t *testing.T) {
 	}
 }
 
+// Profile (About Me + pronouns): set, cap, clear, and surface through ListServerMembers.
+func TestUserProfileIntegration(t *testing.T) {
+	store, _, owner := setup(t)
+	ctx := context.Background()
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Profile Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	memberAbout := func() (about, pronouns string) {
+		ms, err := store.ListServerMembers(ctx, srv.ID)
+		if err != nil {
+			t.Fatalf("ListServerMembers: %v", err)
+		}
+		for _, m := range ms {
+			if m.UserID == owner.ID {
+				return m.About, m.Pronouns
+			}
+		}
+		t.Fatal("owner not in member list")
+		return "", ""
+	}
+
+	// Default: empty.
+	if a, p := memberAbout(); a != "" || p != "" {
+		t.Fatalf("fresh profile = (%q,%q), want empty", a, p)
+	}
+	// Set → surfaces, trimmed.
+	if err := store.SetUserProfile(ctx, owner.ID, "  Building Opencord  ", " they/them "); err != nil {
+		t.Fatalf("SetUserProfile: %v", err)
+	}
+	if a, p := memberAbout(); a != "Building Opencord" || p != "they/them" {
+		t.Fatalf("after set = (%q,%q), want trimmed about+pronouns", a, p)
+	}
+	// Cap: an over-long about is truncated to 190 runes (Discord's About Me cap); pronouns to 40.
+	const wantAboutCap, wantPronCap = 190, 40
+	longAbout := strings.Repeat("x", wantAboutCap+50)
+	longPron := strings.Repeat("y", wantPronCap+20)
+	if err := store.SetUserProfile(ctx, owner.ID, longAbout, longPron); err != nil {
+		t.Fatalf("SetUserProfile (long): %v", err)
+	}
+	if a, p := memberAbout(); len([]rune(a)) != wantAboutCap || len([]rune(p)) != wantPronCap {
+		t.Fatalf("caps not enforced: about=%d (want %d), pronouns=%d (want %d)",
+			len([]rune(a)), wantAboutCap, len([]rune(p)), wantPronCap)
+	}
+	// Clear: empty/whitespace clears back to none.
+	if err := store.SetUserProfile(ctx, owner.ID, "   ", ""); err != nil {
+		t.Fatalf("SetUserProfile (clear): %v", err)
+	}
+	if a, p := memberAbout(); a != "" || p != "" {
+		t.Fatalf("after clear = (%q,%q), want empty", a, p)
+	}
+}
+
 func TestUserStatusIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

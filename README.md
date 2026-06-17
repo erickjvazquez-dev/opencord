@@ -101,6 +101,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/auth/login`              | —      | Log in → `{token, user}`                       |
 | `GET`    | `/api/auth/me`                 | bearer | Current user                                   |
 | `PUT`    | `/api/me/status`               | bearer | Set your custom status `{status, statusEmoji}` (empty clears) |
+| `PUT`    | `/api/me/profile`              | bearer | Set your profile `{about, pronouns}` (empty clears)  |
 | `PUT`    | `/api/me/presence`             | bearer | Set your presence `{presence}` (`online`/`idle`/`dnd`/`invisible`) |
 | `GET`    | `/api/channels`                | bearer | List public channels                           |
 | `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |

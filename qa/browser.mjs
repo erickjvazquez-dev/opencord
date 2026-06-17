@@ -712,7 +712,8 @@ async function main() {
   await page.locator('.settings-modal').waitFor({ timeout: 8000 })
   await page.getByLabel('status emoji').fill(myStatusEmoji)
   await page.getByLabel('custom status').fill(myStatus)
-  await page.locator('.settings-modal').getByRole('button', { name: 'Save' }).click()
+  // exact: the My Account tab also has a "Save profile" button which contains "Save".
+  await page.locator('.settings-modal').getByRole('button', { name: 'Save', exact: true }).click()
   await page
     .locator('.member-list .member-status', { hasText: myStatus })
     .waitFor({ timeout: 8000 })
@@ -888,6 +889,39 @@ async function main() {
     (await muteToggle.getAttribute('data-muted')) === 'false',
     'unmuting flips the toggle back',
   )
+
+  // 7d6 — Profile: set About Me + pronouns in settings, then click my member row to open
+  // the profile card and confirm both render on it.
+  step('settings → set About Me + pronouns → click my member row → profile card shows them')
+  const myAbout = 'building opencord ' + chanName
+  const myPron = 'they/them'
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.getByLabel('pronouns').fill(myPron)
+  await page.getByLabel('about me').fill(myAbout)
+  await page.getByRole('button', { name: 'Save profile' }).click()
+  await page.waitForTimeout(400) // let the member-list refetch land
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  // Click my own member row (it carries my username) → the profile card.
+  await page.locator('.member-list-row', { hasText: user }).first().click()
+  await page.locator('.profile-card').waitFor({ timeout: 8000 })
+  check(
+    ((await page.locator('.profile-about').textContent()) ?? '').includes(myAbout),
+    'the profile card shows the About Me text',
+  )
+  check(
+    ((await page.locator('.profile-pronouns').textContent()) ?? '').includes(myPron),
+    'the profile card shows the pronouns',
+  )
+  check(
+    ((await page.locator('.profile-name').textContent()) ?? '').includes(user),
+    'the profile card shows the username',
+  )
+  await shot('07d6-profile-card.png')
+  await page.keyboard.press('Escape')
+  await page.locator('.profile-card').waitFor({ state: 'detached', timeout: 4000 })
+  check((await page.locator('.profile-card').count()) === 0, 'Esc closes the profile card')
 
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')

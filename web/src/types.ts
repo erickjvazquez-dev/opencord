@@ -58,6 +58,9 @@ export interface ServerMember {
   statusEmoji?: string
   // Set (ISO timestamp) while the member is timed out (muted); absent = not muted.
   timeoutUntil?: string
+  // Profile (shown on the profile card): a longer About Me + short pronouns; absent = none.
+  about?: string
+  pronouns?: string
 }
 
 // A banned user as shown to an admin in the bans list (server moderation).

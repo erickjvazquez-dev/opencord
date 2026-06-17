@@ -256,6 +256,19 @@ export async function setMyStatus(token: string, status: string, statusEmoji = '
   }
 }
 
+// Set the caller's own profile: About Me + pronouns ("" clears each). Capped server-side.
+export async function setMyProfile(token: string, about: string, pronouns: string): Promise<void> {
+  const res = await fetch('/api/me/profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ about, pronouns }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not set profile')
+  }
+}
+
 // Set the caller's own presence state (online | idle | dnd | invisible). The server
 // normalizes any unknown value to "online".
 export async function setMyPresence(token: string, presence: string): Promise<void> {

@@ -41,6 +41,7 @@ import {
   timeoutServerMember,
   clearMemberTimeout,
   setMyStatus,
+  setMyProfile,
   setMyPresence,
   fetchUnreads,
   markChannelRead,
@@ -64,6 +65,7 @@ import { renderMarkdown } from '../markdown'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
 import { Settings } from './Settings'
+import { ProfileCard } from './ProfileCard'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -215,6 +217,11 @@ export function Chat({
   const [myStatus, setMyStatus_] = useState('')
   // The caller's own status emoji (synced alongside myStatus).
   const [myStatusEmoji, setMyStatusEmoji_] = useState('')
+  // The caller's own profile (About Me + pronouns), synced from their member row.
+  const [myAbout, setMyAbout_] = useState('')
+  const [myPronouns, setMyPronouns_] = useState('')
+  // The member whose profile card is open (clicked in the member list), or null.
+  const [profileMember, setProfileMember] = useState<ServerMember | null>(null)
   // The caller's own chosen presence (online|idle|dnd|invisible), synced from their
   // own member-list row (which reports the true self state).
   const [myPresence, setMyPresence_] = useState('online')
@@ -1189,6 +1196,22 @@ export function Chat({
     }
   }
 
+  // Save my profile (About Me + pronouns), then refresh the member list so my own card
+  // reflects it. Driven by the User Settings modal's My Account tab.
+  const saveProfile = async (about: string, pronouns: string) => {
+    try {
+      await setMyProfile(token, about, pronouns)
+      setMyAbout_(about)
+      setMyPronouns_(pronouns)
+      if (activeServerId) {
+        const members = await fetchServerMembers(token, Number(activeServerId))
+        setMemberList(members)
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not set profile')
+    }
+  }
+
   // Change my presence (online|idle|dnd|invisible). Optimistically update the picker,
   // then refresh the member list so the dot recolors immediately. `auto` marks an
   // automatic (inactivity) change; a manual change cancels auto-idle restoration.
@@ -1436,6 +1459,8 @@ export function Chat({
     if (!mine) return
     if ((mine.status ?? '') !== myStatus) setMyStatus_(mine.status ?? '')
     if ((mine.statusEmoji ?? '') !== myStatusEmoji) setMyStatusEmoji_(mine.statusEmoji ?? '')
+    if ((mine.about ?? '') !== myAbout) setMyAbout_(mine.about ?? '')
+    if ((mine.pronouns ?? '') !== myPronouns) setMyPronouns_(mine.pronouns ?? '')
     // Own row reports the true self presence (incl. invisible) — keep the picker synced.
     if (mine.presence && mine.presence !== myPresence) setMyPresence_(mine.presence)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2720,6 +2745,16 @@ export function Chat({
                     className={`member-list-row${mb.online ? '' : ' offline'}`}
                     data-member={mb.userId}
                     data-online={mb.online ? '1' : '0'}
+                    role="button"
+                    tabIndex={0}
+                    title={`View ${mb.username}'s profile`}
+                    onClick={() => setProfileMember(mb)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setProfileMember(mb)
+                      }
+                    }}
                   >
                     <span className="avatar-presence">
                       <Avatar token={token} userId={mb.userId} username={mb.username} />
@@ -2754,9 +2789,12 @@ export function Chat({
           myPresence={myPresence}
           myStatus={myStatus}
           myStatusEmoji={myStatusEmoji}
+          myAbout={myAbout}
+          myPronouns={myPronouns}
           avatarVersion={avatarVersion}
           onAvatarPicked={onAvatarPicked}
           onSaveStatus={saveStatus}
+          onSaveProfile={saveProfile}
           onChangePresence={changePresence}
           audioInputs={audioInputs}
           audioOutputs={audioOutputs}
@@ -2768,6 +2806,10 @@ export function Chat({
           onSetMasterVolume={(v) => voiceRef.current?.setMasterVolume(v)}
           onClose={() => setSettingsOpen(false)}
         />
+      )}
+
+      {profileMember && (
+        <ProfileCard member={profileMember} token={token} onClose={() => setProfileMember(null)} />
       )}
     </div>
   )

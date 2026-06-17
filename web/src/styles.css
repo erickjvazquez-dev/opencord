@@ -2181,6 +2181,110 @@ button:disabled {
   padding: 8px 12px;
   border-radius: 6px;
 }
+.settings-about {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  font: inherit;
+  line-height: 1.4;
+}
+.settings-profile-save {
+  margin-top: 10px;
+}
+
+/* ── Profile card (click a member) ──────────────────────────────────────────── */
+.profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 24px;
+}
+.profile-card {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.profile-close {
+  z-index: 1;
+}
+.profile-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 22px 20px 14px;
+  background: linear-gradient(180deg, rgba(88, 101, 242, 0.18), transparent);
+}
+.profile-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.avatar-profile {
+  width: 64px;
+  height: 64px;
+  font-size: 24px;
+}
+.profile-avatar-pip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--bg-elevated);
+}
+.profile-identity {
+  min-width: 0;
+}
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-pronouns {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.profile-status {
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 3px;
+}
+.profile-section {
+  padding: 6px 20px 20px;
+}
+.profile-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.profile-about {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.profile-empty {
+  padding: 6px 20px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.member-list-row[role='button'] {
+  cursor: pointer;
+}
 
 /* Voice & Video tab */
 .settings-device-select {

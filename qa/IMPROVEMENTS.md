@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 140) — Profile card; the iter-139 "grep before run" guardrail WORKED (caught a Save collision pre-run)
+
+Shipped **About Me + pronouns + a profile card** (full stack). **Component: profiles.** The headline is
+a process win: iter-139's reflection said "when a tick adds UI text that's a superstring of a common QA
+target, run `grep -rn "name: '<word>'" qa/` as part of the build, not after a crash." This tick I added
+a "**Save** profile" button — and the grep, run BEFORE the QA, immediately flagged that
+`browser.mjs:715`'s status `getByRole(name:'Save')` (non-exact) would now match BOTH "Save" and "Save
+profile". I fixed it to `exact:true` up front, and the QA passed first try. **The guardrail turned a
+guaranteed ~6-minute crash-debug-rerun loop into a 2-second grep + a one-line fix.** Lesson confirmed and
+now load-bearing: **a reflection becomes real only when a later tick executes it as a checklist step;
+this one did, and it paid off the first time it could.**
+
+Two reinforced patterns: (1) the centered-overlay-instead-of-positioned-popover choice kept the profile
+card simple + robust (reused `.settings-overlay`/Esc-close, no viewport-clamping math) — when a feature
+*can* be a centered card, prefer it over a positioned popover for a first slice. (2) The card reads the
+already-loaded member-list data (no new GET endpoint), so it's trivially consistent and the existing
+member-fetch covers it — same "derive from existing state" win as the tab badge (138) and mute (139).
+
+Also a Go-edit note: router.go's deep tab indentation made `Edit` fail on whitespace twice; a small
+python insertion (computing the indent from the anchor line + `gofmt` after) was the reliable fallback —
+for tab-indented Go in deeply-nested closures, prefer an anchor-and-insert script over hand-matched
+whitespace, then `gofmt -l` to confirm.
+
 ## 2026-06-17 (iter 139) — Per-channel mute; the substring-label collision bit AGAIN (and the guardrail that would've caught it)
 
 Shipped **per-channel notification mute** (full stack: schema → store → endpoints → UI → QA).

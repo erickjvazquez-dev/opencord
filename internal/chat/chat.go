@@ -105,6 +105,10 @@ type ServerMember struct {
 	Presence string `json:"presence,omitempty"`
 	// TimeoutUntil is set while the member is timed out (muted); nil/past = not muted.
 	TimeoutUntil *time.Time `json:"timeoutUntil,omitempty"`
+	// Profile (v0.5): a longer "About Me" bio + short pronouns, shown on the profile
+	// card. "" = none. React-escaped on render.
+	About    string `json:"about,omitempty"`
+	Pronouns string `json:"pronouns,omitempty"`
 }
 
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
@@ -1542,7 +1546,8 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, ''), COALESCE(u.status_emoji, ''),
 		        COALESCE(u.presence_state, 'online'),
-		        CASE WHEN m.timeout_until > now() THEN m.timeout_until END
+		        CASE WHEN m.timeout_until > now() THEN m.timeout_until END,
+		        COALESCE(u.about, ''), COALESCE(u.pronouns, '')
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
 		  ORDER BY (m.role = 'owner') DESC, (m.role = 'admin') DESC, u.username`, serverID)
@@ -1553,7 +1558,7 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil, &m.About, &m.Pronouns); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -1591,6 +1596,31 @@ func (s *Store) SetUserStatus(ctx context.Context, userID int64, status, emoji s
 	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE users SET status = $2, status_emoji = $3 WHERE id = $1`, userID, sVal, eVal)
+	return err
+}
+
+// maxAboutLen / maxPronounsLen bound the profile fields (Rule B). 190 matches Discord's
+// About Me; pronouns stay short. Values are React-escaped on render, never trusted as markup.
+const maxAboutLen = 190
+const maxPronounsLen = 40
+
+// SetUserProfile sets userID's About Me + pronouns: each is trimmed and rune-capped; an
+// empty/whitespace value clears that field (NULL). JWT-derived caller only (Rule B/C) —
+// there is no target-user parameter.
+func (s *Store) SetUserProfile(ctx context.Context, userID int64, about, pronouns string) error {
+	cap := func(v string, max int) *string {
+		v = strings.TrimSpace(v)
+		if r := []rune(v); len(r) > max {
+			v = string(r[:max])
+		}
+		if v == "" {
+			return nil
+		}
+		return &v
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE users SET about = $2, pronouns = $3 WHERE id = $1`,
+		userID, cap(about, maxAboutLen), cap(pronouns, maxPronounsLen))
 	return err
 }
 

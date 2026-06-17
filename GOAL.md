@@ -392,7 +392,14 @@ item from here as the structural milestones above land.
   (`users.status_emoji`, capped 16 runes, same `PUT /me/status` payload, React-escaped;
   renders in header + both member panels; store+browser tested, AI-vision verified — `🚀`
   before the line). Banners · activity ("playing X") still TODO
-- [ ] About me / pronouns / connections · per-server nicknames
+- [~] **About Me + pronouns + a profile card DONE (iter 140)** — set an About Me (≤190, Discord's
+  cap) + pronouns (≤40) in Settings → My Account (`PUT /me/profile`, trimmed/capped/clears,
+  JWT-derived, Rule B/C); they're carried on the member list (`users.about`/`pronouns` columns,
+  `ListServerMembers` selects them) and shown on a **profile card** — click a member → a centered card
+  overlay (Esc/overlay close) with avatar + presence pip, name, pronouns, custom status, and the About
+  Me bio (all React-escaped). Store integration test (set/trim/cap/clear + surfaces via members) +
+  browser QA (set in settings → click my row → card shows them) + AI-vision verified. Connections ·
+  per-server nicknames · profile card from a message author (currently member-list only) TODO
 - [~] Presence: **online/offline + idle/DnD/invisible DONE** — manual presence picker
   (header `<select>`); `users.presence_state`, effective-presence rule (others see
   invisible/disconnected as offline, you see your own true state — pure unit-tested),

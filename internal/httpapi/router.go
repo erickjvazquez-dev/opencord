@@ -70,6 +70,24 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				w.WriteHeader(http.StatusNoContent)
 			})
+			// Set the CALLER's own profile — About Me + pronouns (trimmed + capped in the
+			// store; empty clears). Rule B/C — bounded body, JWT-derived id, no target user.
+			r.Put("/me/profile", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				var in struct {
+					About    string `json:"about"`
+					Pronouns string `json:"pronouns"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				if err := store.SetUserProfile(r.Context(), me.ID, in.About, in.Pronouns); err != nil {
+					http.Error(w, `{"error":"could not set profile"}`, http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
 			// Set the CALLER's own presence state (online|idle|dnd|invisible). An
 			// unknown value normalizes to "online" (Rule B). Rule C — JWT-derived id.
 			r.Put("/me/presence", func(w http.ResponseWriter, r *http.Request) {

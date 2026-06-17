@@ -1770,3 +1770,24 @@ re-modelling). Per-user, derived from the JWT (Rule B/C); you can only mute a ch
   unmute restores) + browser `mute → header toggle flips` + realtime two-client (B mutes the server
   channel → A posts → B gets NO unread dot/tab badge; unmute → it returns).
 - **Verify:** go test + full browser/realtime/voice QA green, ship + railway up + rollout-verify.
+
+## User profiles: about-me + pronouns + a profile card (v0.5 — profiles)
+
+**Why:** the Profiles component has avatars/status/presence but no bio. Discord lets you set an
+"About Me" + pronouns and view anyone's profile card. Slice 1: set them in settings, view them by
+clicking a member (a centered card overlay — reuses the Settings overlay pattern, no fragile popover
+positioning). The card reads the already-loaded member-list data (no extra fetch); message-author
+trigger is a follow-up.
+
+- **Schema:** `ALTER TABLE users ADD COLUMN IF NOT EXISTS about TEXT; ... pronouns TEXT;` (idempotent).
+- **Store:** `ServerMember` gains `About`/`Pronouns` (member query selects them); `SetUserProfile(userID,
+  about, pronouns)` — trimmed + capped (about ≤ 190 runes like Discord, pronouns ≤ 40), empty→NULL,
+  JWT-derived caller only (Rule B/C).
+- **Router:** `PUT /me/profile` `{about, pronouns}`.
+- **Web:** `api.ts` `setMyProfile` + `ServerMember` type gains about/pronouns; Settings My Account adds
+  an **About Me** textarea + **Pronouns** input (+ Save → refresh member list). New `ProfileCard`
+  component (centered overlay, Esc/overlay-close) shows avatar, name, pronouns, presence dot, custom
+  status, and about (all React-escaped). Clicking a member row opens it.
+- **QA:** store/integration (SetUserProfile caps + clears; ListServerMembers returns them) + browser
+  (settings → set about/pronouns → click my member row → the card shows them) + AI-vision the card.
+- **Verify:** go test + full QA green, ship + railway up + rollout-verify.

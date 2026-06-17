@@ -25,9 +25,12 @@ export function Settings({
   myPresence,
   myStatus,
   myStatusEmoji,
+  myAbout,
+  myPronouns,
   avatarVersion,
   onAvatarPicked,
   onSaveStatus,
+  onSaveProfile,
   onChangePresence,
   audioInputs,
   audioOutputs,
@@ -44,9 +47,12 @@ export function Settings({
   myPresence: string
   myStatus: string
   myStatusEmoji: string
+  myAbout: string
+  myPronouns: string
   avatarVersion: number
   onAvatarPicked: (file: File | undefined) => void | Promise<void>
   onSaveStatus: (status: string, emoji: string) => void | Promise<void>
+  onSaveProfile: (about: string, pronouns: string) => void | Promise<void>
   onChangePresence: (next: string) => void | Promise<void>
   audioInputs: MediaDeviceInfo[]
   audioOutputs: MediaDeviceInfo[]
@@ -66,6 +72,23 @@ export function Settings({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  // Profile fields (About Me + pronouns), seeded from props with their own Save.
+  const [aboutText, setAboutText] = useState(myAbout)
+  const [pronounsText, setPronounsText] = useState(myPronouns)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+  const profileDirty = aboutText.trim() !== myAbout || pronounsText.trim() !== myPronouns
+  const saveProfile = async () => {
+    setProfileSaving(true)
+    setProfileSaved(false)
+    try {
+      await onSaveProfile(aboutText.trim(), pronounsText.trim())
+      setProfileSaved(true)
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   // Voice & Video: DSP toggles (seeded from localStorage) + a live mic-test meter.
   const [dsp, setDsp] = useState<AudioProcessing>(() => getAudioProcessing())
@@ -226,6 +249,8 @@ export function Settings({
   // Re-sync local fields if the status changes upstream (e.g. another tab/session).
   useEffect(() => setStatusText(myStatus), [myStatus])
   useEffect(() => setStatusEmoji(myStatusEmoji), [myStatusEmoji])
+  useEffect(() => setAboutText(myAbout), [myAbout])
+  useEffect(() => setPronounsText(myPronouns), [myPronouns])
 
   const dirty = statusText.trim() !== myStatus || statusEmoji.trim() !== myStatusEmoji
 
@@ -376,6 +401,45 @@ export function Settings({
                     <option value="invisible">Invisible</option>
                   </select>
                 </span>
+              </div>
+
+              {/* Profile: pronouns + About Me (shown on your profile card). */}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="settings-pronouns">
+                  Pronouns
+                </label>
+                <input
+                  id="settings-pronouns"
+                  className="settings-input"
+                  aria-label="pronouns"
+                  placeholder="e.g. they/them"
+                  maxLength={40}
+                  value={pronounsText}
+                  onChange={(e) => setPronounsText(e.target.value)}
+                />
+              </div>
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="settings-about">
+                  About Me
+                </label>
+                <textarea
+                  id="settings-about"
+                  className="settings-input settings-about"
+                  aria-label="about me"
+                  placeholder="Tell people a bit about yourself"
+                  maxLength={190}
+                  rows={3}
+                  value={aboutText}
+                  onChange={(e) => setAboutText(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="settings-btn primary settings-profile-save"
+                  onClick={() => void saveProfile()}
+                  disabled={profileSaving || !profileDirty}
+                >
+                  {profileSaving ? 'Saving…' : profileSaved && !profileDirty ? 'Saved' : 'Save profile'}
+                </button>
               </div>
             </section>
           )}
