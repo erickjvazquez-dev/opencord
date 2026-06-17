@@ -110,6 +110,14 @@ async function main() {
   await shot('03-message.png')
   check(await page.getByText(body).isVisible(), 'sent message appears')
   check(await page.locator('.avatar').first().isVisible(), 'avatar renders on the message')
+  // A Discord-style day divider sits above the first message of each calendar day.
+  // All QA messages are sent now, so the divider reads "Today".
+  const divider = page.locator('.day-divider').first()
+  check(await divider.isVisible(), 'a day divider renders above the messages')
+  check(
+    ((await divider.textContent()) ?? '').trim() === 'Today',
+    `today's divider reads "Today" (got "${((await divider.textContent()) ?? '').trim()}")`,
+  )
 
   // 3a — A second message from the same author groups (no repeated avatar/name).
   step('send a second message → it groups under the first')

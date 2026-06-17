@@ -1840,3 +1840,21 @@ with mute / push-to-talk / device hot-swap). This is its dedicated tick.
   send path, not just the UI; the mic sender + call survive the change; restore to 100%).
 - **Verify:** go build/vet/test + vitest + full browser+voice QA green, AI-vision the slider, ship +
   `railway up` + rollout-verify.
+
+## Date dividers in the message list (v0.5 — messaging parity)
+
+**Why:** Discord separates messages by calendar day with a centered date divider ("Today" /
+"Yesterday" / "June 17, 2026"). Opencord's message list ran days together with no separator — a
+visible parity + readability gap. Client-only, no backend.
+
+- **`web/src/dates.ts` (new):** `dayLabel(d, now=new Date())` → "Today" / "Yesterday" / full local
+  date. `now` injectable for tests. Unit-tested (`dates.test.ts`): Today/Yesterday boundaries, older
+  dates, and the month-boundary case (yesterday across the 1st).
+- **`Chat.tsx`:** in the message map, `newDay` = first message whose `createdAt.toDateString()` differs
+  from the previous (and the very first message). When true, render a `.day-divider` before the message
+  via a keyed `<Fragment>`. A new day ALSO breaks same-author grouping (Discord-faithful).
+- **`styles.css`:** `.day-divider` — the date centered on a hairline rule (`::before/::after` flex
+  lines), muted text, matching the dark theme.
+- **QA:** browser asserts a `.day-divider` renders and reads "Today" (all QA messages are sent now);
+  AI-vision verified the divider. Full browser+voice QA green.
+- **Verify:** tsc + vitest (27/27) + full QA green + AI-vision; ship + `railway up` + rollout-verify.

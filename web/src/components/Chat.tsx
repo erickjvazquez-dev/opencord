@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   addReaction,
   createChannel,
@@ -63,6 +63,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
+import { dayLabel } from '../dates'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
 import { Settings } from './Settings'
@@ -2463,17 +2464,27 @@ export function Chat({
             pins === null &&
             messages.map((m, i) => {
             const prev = i > 0 ? messages[i - 1] : null
+            // First message of a new calendar day (Discord-style date divider). The
+            // very first message also starts a day (prev === null).
+            const newDay =
+              !prev || new Date(m.createdAt).toDateString() !== new Date(prev.createdAt).toDateString()
             // Group consecutive messages from the same author within 5 min (Discord-style):
-            // hide the repeated avatar + name. A deleted message breaks the run.
+            // hide the repeated avatar + name. A deleted message OR a new day breaks the run.
             const grouped =
               !!prev &&
+              !newDay &&
               !m.deleted &&
               !prev.deleted &&
               prev.userId === m.userId &&
               new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000
             return (
+              <Fragment key={m.id}>
+              {newDay && (
+                <div className="day-divider" role="separator" aria-label={dayLabel(new Date(m.createdAt))}>
+                  <span>{dayLabel(new Date(m.createdAt))}</span>
+                </div>
+              )}
               <div
-                key={m.id}
                 id={`msg-${m.id}`}
                 className={`message${m.deleted ? ' deleted' : ''}${grouped ? ' grouped' : ''}${m.id === flashId ? ' flash' : ''}`}
               >
@@ -2597,6 +2608,7 @@ export function Chat({
                   )}
                 </div>
               </div>
+              </Fragment>
             )
           })}
           <div ref={bottomRef} />

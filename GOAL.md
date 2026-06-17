@@ -353,6 +353,9 @@ item from here as the structural milestones above land.
 ### Messaging
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators
 - [x] Reactions (emoji) — add/remove, per-viewer counts, live WS, client UI (quick palette + chips)
+- [x] Date dividers — Discord-style "Today" / "Yesterday" / full-date separators between calendar
+  days in the message list (iter 146): client-only `dayLabel` (unit-tested incl. month boundary), a
+  new day breaks same-author grouping; browser QA + AI-vision verified ("Today" divider renders).
 - [ ] Custom emoji · stickers · GIF picker
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
