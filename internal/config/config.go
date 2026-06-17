@@ -4,7 +4,11 @@
 package config
 
 import (
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -40,6 +44,12 @@ type Config struct {
 	TURNURL      string
 	TURNUsername string
 	TURNPassword string
+	// TURNSecret (OPENCORD_TURN_SECRET) opts into EPHEMERAL TURN auth: when set, each
+	// /voice/token mints short-lived HMAC credentials instead of the static
+	// username/password (coturn's use-auth-secret / TURN REST scheme). TURNTTL is how
+	// long each credential is valid (OPENCORD_TURN_TTL, default 12h).
+	TURNSecret string
+	TURNTTL    time.Duration
 }
 
 // IceServer is one WebRTC ICE server, shaped for the browser's
@@ -50,16 +60,38 @@ type IceServer struct {
 	Credential string `json:"credential,omitempty"`
 }
 
-// ICEServers returns the ICE servers for mesh WebRTC: the configured STUN (if any) plus
-// an optional TURN relay (if OPENCORD_TURN_URL is set). Empty list = host/LAN candidates
-// only. TURN credentials are returned only to authenticated callers (see /voice/token).
-func (c Config) ICEServers() []IceServer {
+// TurnCredentials makes ephemeral TURN REST-API credentials (coturn use-auth-secret):
+// username is "<expiry-unix>:<userID>" and credential is base64(HMAC-SHA1(secret,
+// username)). coturn re-derives the same HMAC from its shared static-auth-secret and
+// rejects the username once its embedded expiry passes — so a leaked credential is
+// short-lived and can't be forged without the secret (Rule C/15). SHA-1 here is the
+// coturn-mandated MAC for this scheme, not a hash of anything secret.
+func TurnCredentials(secret string, userID int64, expiresAt time.Time) (username, credential string) {
+	username = strconv.FormatInt(expiresAt.Unix(), 10) + ":" + strconv.FormatInt(userID, 10)
+	mac := hmac.New(sha1.New, []byte(secret))
+	mac.Write([]byte(username))
+	credential = base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return username, credential
+}
+
+// ICEServersForUser returns the ICE servers for mesh WebRTC: the configured STUN (if
+// any) plus an optional TURN relay (if OPENCORD_TURN_URL is set). When OPENCORD_TURN_SECRET
+// is set, the TURN credentials are SHORT-LIVED per-user HMAC creds (production-correct;
+// a leaked cred expires) instead of the static username/password. Empty list = host/LAN
+// candidates only. Credentials are returned only to authed callers (see /voice/token, Rule C).
+func (c Config) ICEServersForUser(userID int64, now time.Time) []IceServer {
 	out := []IceServer{}
 	if c.STUNURL != "" {
 		out = append(out, IceServer{URLs: c.STUNURL})
 	}
 	if c.TURNURL != "" {
-		out = append(out, IceServer{URLs: c.TURNURL, Username: c.TURNUsername, Credential: c.TURNPassword})
+		ts := IceServer{URLs: c.TURNURL}
+		if c.TURNSecret != "" {
+			ts.Username, ts.Credential = TurnCredentials(c.TURNSecret, userID, now.Add(c.TURNTTL))
+		} else {
+			ts.Username, ts.Credential = c.TURNUsername, c.TURNPassword
+		}
+		out = append(out, ts)
 	}
 	return out
 }
@@ -87,7 +119,20 @@ func Load() Config {
 		TURNURL:           env("OPENCORD_TURN_URL", ""),
 		TURNUsername:      env("OPENCORD_TURN_USERNAME", ""),
 		TURNPassword:      env("OPENCORD_TURN_PASSWORD", ""),
+		TURNSecret:        env("OPENCORD_TURN_SECRET", ""),
+		TURNTTL:           envDuration("OPENCORD_TURN_TTL", 12*time.Hour),
 	}
+}
+
+// envDuration parses a Go duration (e.g. "1h", "30m") from the env, falling back to def
+// on unset/invalid so a typo can't disable TURN auth silently.
+func envDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return def
 }
 
 func env(key, def string) string {

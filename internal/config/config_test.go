@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strconv"
 	"testing"
 	"time"
 )
@@ -14,6 +15,7 @@ func clearEnv(t *testing.T) {
 		"OPENCORD_ADDR", "PORT", "DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN",
 		"OPENCORD_SFU_URL", "OPENCORD_SFU_KEY", "OPENCORD_SFU_SECRET",
 		"OPENCORD_STUN_URL", "OPENCORD_TURN_URL", "OPENCORD_TURN_USERNAME", "OPENCORD_TURN_PASSWORD",
+		"OPENCORD_TURN_SECRET", "OPENCORD_TURN_TTL",
 	} {
 		t.Setenv(k, "")
 	}
@@ -21,35 +23,85 @@ func clearEnv(t *testing.T) {
 
 func TestICEServers(t *testing.T) {
 	clearEnv(t)
+	now := time.Unix(1_700_000_000, 0)
 
 	// Default: a public STUN, no TURN (current behavior; one-command stack, Rule A).
 	def := Load()
 	if def.STUNURL == "" {
 		t.Fatal("STUNURL should default to a public STUN")
 	}
-	ice := def.ICEServers()
+	ice := def.ICEServersForUser(7, now)
 	if len(ice) != 1 || ice[0].URLs != def.STUNURL || ice[0].Username != "" {
 		t.Fatalf("default ICEServers = %+v, want one STUN entry, no creds", ice)
 	}
 
-	// With TURN configured: STUN + a TURN entry carrying username/credential.
+	// With STATIC TURN configured: STUN + a TURN entry carrying the static creds.
 	t.Setenv("OPENCORD_TURN_URL", "turn:turn.example.com:3478")
 	t.Setenv("OPENCORD_TURN_USERNAME", "u1")
 	t.Setenv("OPENCORD_TURN_PASSWORD", "p1")
 	c := Load()
-	ice = c.ICEServers()
+	ice = c.ICEServersForUser(7, now)
 	if len(ice) != 2 {
 		t.Fatalf("ICEServers with TURN = %+v, want 2 (STUN + TURN)", ice)
 	}
 	turn := ice[1]
 	if turn.URLs != "turn:turn.example.com:3478" || turn.Username != "u1" || turn.Credential != "p1" {
-		t.Fatalf("TURN entry = %+v, want url+username+credential", turn)
+		t.Fatalf("static TURN entry = %+v, want url+username+credential", turn)
 	}
 
 	// STUN can be overridden (self-hoster's own); empty STUN + empty TURN = no servers.
 	none := Config{}
-	if got := none.ICEServers(); len(got) != 0 {
+	if got := none.ICEServersForUser(7, now); len(got) != 0 {
 		t.Fatalf("empty config ICEServers = %+v, want none (host/LAN only)", got)
+	}
+}
+
+// Ephemeral TURN: with OPENCORD_TURN_SECRET set, /voice/token must hand out SHORT-LIVED
+// HMAC creds (coturn use-auth-secret) instead of the static password — the username
+// embeds the expiry + user id and the credential is the HMAC re-derivable only with the
+// secret. Proves the scheme is deterministic, user-scoped, time-bounded, and unforgeable.
+func TestEphemeralTurnCredentials(t *testing.T) {
+	clearEnv(t)
+	now := time.Unix(1_700_000_000, 0)
+	t.Setenv("OPENCORD_TURN_URL", "turn:turn.example.com:3478")
+	t.Setenv("OPENCORD_TURN_USERNAME", "static-u")
+	t.Setenv("OPENCORD_TURN_PASSWORD", "static-p")
+	t.Setenv("OPENCORD_TURN_SECRET", "shared-coturn-secret")
+	t.Setenv("OPENCORD_TURN_TTL", "1h")
+	c := Load()
+	if c.TURNTTL != time.Hour {
+		t.Fatalf("TURNTTL = %v, want 1h", c.TURNTTL)
+	}
+
+	ice := c.ICEServersForUser(42, now)
+	if len(ice) != 2 {
+		t.Fatalf("ICEServers = %+v, want STUN + TURN", ice)
+	}
+	turn := ice[1]
+	// The secret must NOT be used as the static password — ephemeral creds replace it.
+	if turn.Credential == "static-p" || turn.Username == "static-u" {
+		t.Fatal("with OPENCORD_TURN_SECRET set, the STATIC username/password must not be used")
+	}
+	// username = "<expiry-unix>:<userID>"; expiry = now + TTL.
+	wantUser := strconv.FormatInt(now.Add(time.Hour).Unix(), 10) + ":42"
+	if turn.Username != wantUser {
+		t.Fatalf("ephemeral username = %q, want %q", turn.Username, wantUser)
+	}
+	// credential = base64(HMAC-SHA1(secret, username)) — deterministic + re-derivable.
+	wantUser2, wantCred := TurnCredentials("shared-coturn-secret", 42, now.Add(time.Hour))
+	if wantUser2 != turn.Username || wantCred != turn.Credential {
+		t.Fatalf("credential mismatch: got (%q,%q), want (%q,%q)", turn.Username, turn.Credential, wantUser2, wantCred)
+	}
+	// Unforgeable: the WRONG secret yields a different credential for the same username.
+	if _, forged := TurnCredentials("wrong-secret", 42, now.Add(time.Hour)); forged == turn.Credential {
+		t.Fatal("an attacker without the secret produced a matching credential — HMAC is not protecting it")
+	}
+	// User-scoped + time-bounded: a different user OR a different expiry → different creds.
+	if _, other := TurnCredentials("shared-coturn-secret", 99, now.Add(time.Hour)); other == turn.Credential {
+		t.Fatal("different user produced the same credential — creds are not user-scoped")
+	}
+	if _, later := TurnCredentials("shared-coturn-secret", 42, now.Add(2*time.Hour)); later == turn.Credential {
+		t.Fatal("different expiry produced the same credential — creds are not time-bounded")
 	}
 }
 

@@ -205,7 +205,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				me, _ := auth.UserFrom(r.Context())
 				// ICE servers (STUN + optional TURN) for the mesh path; returned to
 				// authed callers only so TURN creds don't leak (Rule C).
-				ice := cfg.ICEServers()
+				ice := cfg.ICEServersForUser(me.ID, time.Now())
 				if cfg.SFUURL == "" {
 					writeJSON(w, http.StatusOK, map[string]any{"sfu": false, "iceServers": ice})
 					return

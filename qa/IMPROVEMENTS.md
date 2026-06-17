@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 137) — Ephemeral TURN creds; rotating to the component furthest from its north star, + verifying a "gated-off-on-prod" change
+
+Shipped **ephemeral HMAC TURN credentials**. **Component: audio/security (toward the audio north star:
+reliable across hostile NATs).** After many UI ticks, the per-component-excellence rotation pointed at
+the component FURTHEST from its bar — audio (thousands-scale, any-NAT). I picked the concrete,
+self-contained, low-risk item on that path (`use-auth-secret`) rather than the big infra (cascaded
+SFUs). **Lesson — when one area's obvious wins are done, the per-component rotation is the tiebreaker:
+advance the component furthest from its north star with the smallest real step on its path, not the
+flashiest one.**
+
+A verification subtlety worth recording: **this change is gated OFF on prod (no `OPENCORD_TURN_SECRET`,
+Rule A) so it has NO observable surface on the live deploy** — the live `/voice/token` returns the same
+STUN-only payload on the old and new binaries. The loop's "grep the live JS bundle" rollout check
+doesn't apply (it's Go, not JS), and the version string is static, so I can't distinguish builds by
+behavior on prod. So I verified the FEATURE where it IS observable — a **local server booted with the
+secret**, hitting the real `POST /voice/token` and confirming `username:"<exp>:<uid>"` + an HMAC
+`credential` — and treat the prod step as "deploy + healthz + fresh container digest", explicitly
+noting the feature is prod-gated-off (honest Rule 14, not a false "verified on prod"). **Lesson — for a
+config-gated backend feature with no prod-observable surface, do the real E2E locally with the gate
+ON, and don't pretend the prod healthz check verified the feature; state what was and wasn't checked.**
+
+Also a small QA-mechanics catch: `/voice/token` is a **POST**, and my first E2E used GET → empty body
+→ confusing JSON-parse error. When a curl E2E returns empty/garbage, check the HTTP method/status (`-i`)
+before assuming the handler is broken.
+
+**Next:** the audio north star still wants a deployed coturn for a real symmetric-NAT E2E (currently
+only the cred-generation is tested, not actual relay traversal) — a future infra tick.
+
 ## 2026-06-17 (iter 136) — Auto-idle; choosing value/risk when the obvious wins are done, + a clean test hook for timers
 
 Shipped **auto-idle presence** (online→idle on inactivity, restore on activity). **Component: presence

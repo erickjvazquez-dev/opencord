@@ -252,7 +252,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   env → `iceServers` served via the authed voice/token round-trip → mesh
   RTCPeerConnections; degrades to STUN; free, Rule A). Config+endpoint tested, mesh E2E
   intact; **real symmetric-NAT traversal needs a deployed coturn** (not exercised
-  in-context). TODO: ephemeral/HMAC TURN creds; TURN for higher-bitrate screen video + SFU.
+  in-context). **Ephemeral/HMAC TURN creds DONE (iter 137)** — setting `OPENCORD_TURN_SECRET`
+  switches `/voice/token` from static TURN username/password to **short-lived per-user HMAC
+  credentials** (coturn's `use-auth-secret` / TURN REST scheme): `username = "<expiry-unix>:<userID>"`,
+  `credential = base64(HMAC-SHA1(secret, username))`, TTL `OPENCORD_TURN_TTL` (default 12h). A leaked
+  cred self-expires and can't be forged without the secret (Rule C/15). Unit-tested (deterministic,
+  user-scoped, time-bounded, unforgeable-without-secret) + live E2E (`POST /voice/token` returns
+  `username:"…:9", credential:"<hmac>"`); the static path + the no-TURN default are untouched (mesh QA
+  green). TODO: TURN for higher-bitrate screen video + SFU; deploy a real coturn for symmetric-NAT E2E.
 - [ ] **Built-in secure tunneling (free, local)** — let friends on other computers reach a
   self-hosted server without manual port-forwarding: an optional, free, self-hostable
   relay/tunnel (e.g. bundled reverse-tunnel) — "creating local servers for you and your
