@@ -1,4 +1,5 @@
 import React, { type ReactNode } from 'react'
+import { EmojiImg } from './components/EmojiImg'
 
 // A deliberately small, XSS-safe Markdown subset for chat messages. It returns
 // React elements (never an HTML string / dangerouslySetInnerHTML), so React
@@ -13,7 +14,7 @@ import React, { type ReactNode } from 'react'
 // ctx threads a key counter (siblings need unique keys), the viewer's own username
 // (so a mention of them can be highlighted), and the current server's custom-emoji
 // map (name → emoji id) through the recursion.
-type Ctx = { n: number; me?: string; emoji?: ReadonlyMap<string, number> }
+type Ctx = { n: number; me?: string; emoji?: ReadonlyMap<string, number>; token?: string }
 
 // Spoiler — hidden until clicked (Discord-style). Content is React-escaped.
 function Spoiler({ children }: { children?: ReactNode }): React.ReactElement {
@@ -107,15 +108,16 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
       // it here (not via `before`) means a later `:known:` in `after` still resolves.
       out.push(m[0])
     } else {
-      // React-elements only (no innerHTML): src is a fixed path with a numeric id, and
-      // the slug came from a strict [a-z0-9_] charset, so nothing is attacker-injectable.
+      // Auth-gated emoji bytes can't ride an <img src> (no Authorization header), so
+      // EmojiImg fetches them WITH the token and renders a blob URL. React-elements only
+      // (no innerHTML); the slug came from a strict [a-z0-9_] charset, so nothing is
+      // attacker-injectable.
       out.push(
-        React.createElement('img', {
+        React.createElement(EmojiImg, {
           key: `md${ctx.n++}`,
-          className: 'emoji-inline',
-          src: `/api/emoji/${id}`,
+          token: ctx.token ?? '',
+          id,
           alt: `:${name}:`,
-          title: `:${name}:`,
         }),
       )
     }
@@ -187,10 +189,10 @@ const FENCE = /```[^\n]*\n?([\s\S]*?)```/g
 
 export function renderMarkdown(
   text: string,
-  opts?: { me?: string; emoji?: ReadonlyMap<string, number> },
+  opts?: { me?: string; emoji?: ReadonlyMap<string, number>; token?: string },
 ): ReactNode {
   if (!text) return text
-  const ctx: Ctx = { n: 0, me: opts?.me, emoji: opts?.emoji }
+  const ctx: Ctx = { n: 0, me: opts?.me, emoji: opts?.emoji, token: opts?.token }
   const nodes: ReactNode[] = []
   let last = 0
   let m: RegExpExecArray | null

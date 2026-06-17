@@ -933,6 +933,13 @@ button:disabled {
   object-fit: contain;
   vertical-align: -5px;
 }
+/* Shown briefly while an emoji's bytes are being fetched (or on error): the literal
+   :name: text, muted, so the emoji is never invisible. */
+.emoji-fallback {
+  display: inline;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 .edited {
   font-size: 11px;
@@ -1155,9 +1162,14 @@ button:disabled {
 
 .emoji-picker {
   display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 2px;
   margin-top: 6px;
   padding: 4px;
+  max-width: 320px; /* wraps to rows when a server has many custom emoji */
+  max-height: 160px;
+  overflow-y: auto;
   width: fit-content;
   background: var(--bg-elevated);
   border: 1px solid var(--bg-input);
@@ -1165,6 +1177,9 @@ button:disabled {
 }
 
 .emoji-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   font-size: 18px;
@@ -1176,6 +1191,16 @@ button:disabled {
 
 .emoji-option:hover {
   background: var(--bg-input);
+}
+
+/* Custom-emoji image inside a reaction chip or the reaction palette (the base
+   .emoji-inline rule is scoped to .message .body, so size these contexts here). */
+.reaction .emoji-inline,
+.emoji-picker .emoji-option .emoji-inline {
+  height: 20px;
+  width: 20px;
+  object-fit: contain;
+  display: block;
 }
 
 .typing {

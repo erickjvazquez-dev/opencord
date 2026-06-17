@@ -248,6 +248,88 @@ func TestReactionsIntegration(t *testing.T) {
 	}
 }
 
+// TestCustomEmojiReactionsIntegration mirrors TestReactionsIntegration but for a
+// custom-emoji reaction, stored verbatim as the marker `custom:{id}` in the existing
+// reactions.emoji column (no schema/WS change — see validEmoji). It proves: the marker
+// is stored, aggregated (count 1, mine=true for the reactor), add is idempotent, remove
+// works, AND validEmoji accepts a well-formed marker while rejecting a non-numeric id,
+// an empty id, and an oversized one — all via the AddReaction → ErrInvalidEmoji path.
+func TestCustomEmojiReactionsIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+	m, err := store.Save(ctx, ch.ID, u.ID, u.Username, "react with a custom emoji")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// A plain-unicode reaction still works alongside the custom one (no regression).
+	if _, err := store.AddReaction(ctx, m.ID, u.ID, "👍"); err != nil {
+		t.Fatalf("unicode add: %v", err)
+	}
+
+	// Add the custom-emoji marker. The id need not reference a live emoji row — the
+	// marker is decoupled by design (a deleted emoji just renders broken), so we use a
+	// bare numeric id (mirrors the client sending `custom:{id}`).
+	const marker = "custom:7"
+	chID, err := store.AddReaction(ctx, m.ID, u.ID, marker)
+	if err != nil || chID != ch.ID {
+		t.Fatalf("add custom reaction: chID=%d err=%v", chID, err)
+	}
+	// Adding the same custom reaction again is idempotent (ON CONFLICT DO NOTHING).
+	if _, err := store.AddReaction(ctx, m.ID, u.ID, marker); err != nil {
+		t.Fatalf("idempotent custom add: %v", err)
+	}
+
+	// The reactor's view: the custom marker is present with count 1 and mine=true.
+	mine := reactionOf(t, store, ctx, ch.ID, u.ID, m.ID)
+	custom := findReaction(mine, marker)
+	if custom == nil || custom.Count != 1 || !custom.Mine {
+		t.Fatalf("reactor's custom view wrong: %+v (all: %+v)", custom, mine)
+	}
+	// A non-reactor sees the count but not mine.
+	other := reactionOf(t, store, ctx, ch.ID, u.ID+99999, m.ID)
+	otherCustom := findReaction(other, marker)
+	if otherCustom == nil || otherCustom.Count != 1 || otherCustom.Mine {
+		t.Fatalf("non-reactor's custom view wrong: %+v (all: %+v)", otherCustom, other)
+	}
+
+	// Toggling off removes only the custom marker; the unicode reaction survives.
+	if _, err := store.RemoveReaction(ctx, m.ID, u.ID, marker); err != nil {
+		t.Fatalf("remove custom: %v", err)
+	}
+	after := reactionOf(t, store, ctx, ch.ID, u.ID, m.ID)
+	if findReaction(after, marker) != nil {
+		t.Fatalf("custom reaction still present after remove: %+v", after)
+	}
+	if findReaction(after, "👍") == nil {
+		t.Fatalf("unicode reaction lost when removing the custom one: %+v", after)
+	}
+
+	// validEmoji (via AddReaction) REJECTS malformed markers. Each must return
+	// ErrInvalidEmoji and write nothing.
+	bad := map[string]string{
+		"non-numeric id":       "custom:abc",
+		"empty id":             "custom:",
+		"oversized numeric id": "custom:1234567890123456789012345", // 25 digits → rest>16 & total>24
+	}
+	for name, e := range bad {
+		if _, err := store.AddReaction(ctx, m.ID, u.ID, e); !errors.Is(err, chat.ErrInvalidEmoji) {
+			t.Fatalf("%s (%q): err = %v, want ErrInvalidEmoji", name, e, err)
+		}
+	}
+}
+
+// findReaction returns the summary for emoji in rs, or nil if absent.
+func findReaction(rs []chat.ReactionSummary, emoji string) *chat.ReactionSummary {
+	for i := range rs {
+		if rs[i].Emoji == emoji {
+			return &rs[i]
+		}
+	}
+	return nil
+}
+
 func reactionOf(t *testing.T, store *chat.Store, ctx context.Context, channelID, viewerID, msgID int64) []chat.ReactionSummary {
 	t.Helper()
 	msgs, err := store.Recent(ctx, channelID, viewerID, 50)
@@ -1006,10 +1088,10 @@ func TestUnreadChannelsIntegration(t *testing.T) {
 			t.Fatalf("post %q: %v", body, err)
 		}
 	}
-	post("hello @" + me.Username + " how are you")      // a real mention of me
-	post("hey @" + me.Username + "extra not a match")   // @me+extra → different token, NOT me
-	post("ping @everyone please")                        // @everyone counts
-	post("just a normal message with no ping")           // no mention
+	post("hello @" + me.Username + " how are you")    // a real mention of me
+	post("hey @" + me.Username + "extra not a match") // @me+extra → different token, NOT me
+	post("ping @everyone please")                     // @everyone counts
+	post("just a normal message with no ping")        // no mention
 	if got := mentions(mc.ID); got != 2 {
 		t.Fatalf("mention count = %d, want 2 (one @me + one @everyone; @me+suffix excluded)", got)
 	}
@@ -1261,9 +1343,9 @@ func TestRemoveServerMemberIntegration(t *testing.T) {
 
 	// --- forbidden / adversarial cases: none of these may remove anyone (Rule 15) ---
 	cases := []struct {
-		name           string
-		actor, target  int64
-		want           error
+		name          string
+		actor, target int64
+		want          error
 	}{
 		{"plain member can't kick", member.ID, admin.ID, chat.ErrForbidden},
 		{"non-member can't kick", stranger.ID, member.ID, chat.ErrForbidden},

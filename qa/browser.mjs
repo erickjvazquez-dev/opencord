@@ -718,15 +718,29 @@ async function main() {
   // inline emoji img is present in a message, with a src pointing at /api/emoji/.
   const emojiImg = page.locator('.message .body img.emoji-inline').last()
   await emojiImg.waitFor({ timeout: 8000 })
-  const emojiSrc = (await emojiImg.getAttribute('src')) || ''
+  // The src is now a blob: URL (the bytes are fetched WITH the bearer token and wrapped
+  // in an object URL — an auth-gated <img src> can't send the header), so assert the
+  // numeric emoji id via the data-emoji-id attribute instead of the src path.
+  const emojiId = (await emojiImg.getAttribute('data-emoji-id')) || ''
   const emojiAlt = (await emojiImg.getAttribute('alt')) || ''
   await shot('03i-custom-emoji.png')
   check(
     await emojiImg.isVisible(),
     ':qa_emoji: renders as an inline img.emoji-inline in the server channel',
   )
-  check(/\/api\/emoji\/\d+/.test(emojiSrc), `inline emoji src points at /api/emoji/{id} (got ${emojiSrc})`)
+  check(/^\d+$/.test(emojiId), `inline emoji carries a numeric data-emoji-id (got ${emojiId})`)
   check(emojiAlt === ':qa_emoji:', `inline emoji keeps its shortcode as alt text (got ${emojiAlt})`)
+  // The image must actually LOAD (decode), not just exist as an element — a broken
+  // emoji would render the alt text + a broken-image icon and pass the element checks
+  // above. This is the whole point of the auth-gated-blob fix: it MUST now load. Poll
+  // naturalWidth>0 (waiting for the decode) so this isn't a race against the download.
+  let emojiLoaded = false
+  for (let i = 0; i < 40; i++) {
+    emojiLoaded = await emojiImg.evaluate((img) => img.complete && img.naturalWidth > 0).catch(() => false)
+    if (emojiLoaded) break
+    await new Promise((r) => setTimeout(r, 200))
+  }
+  check(emojiLoaded, 'the inline emoji image actually LOADS (naturalWidth>0, not a broken image)')
 
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')
@@ -816,8 +830,8 @@ async function main() {
     'uploading via the UI adds a row to the emoji list',
   )
   check(
-    /\/api\/emoji\/\d+/.test((await uiEmojiRow.locator('.emoji-manager-img').getAttribute('src')) || ''),
-    'the manager row image src points at /api/emoji/{id}',
+    /^\d+$/.test((await uiEmojiRow.locator('.emoji-manager-img').getAttribute('data-emoji-id')) || ''),
+    'the manager row image carries a numeric data-emoji-id (src is now a blob: URL)',
   )
   // Close the panel and send `:ui_emoji:` in the server channel — NO page reload. The
   // upload invalidated the per-server cache, so the renderer must resolve it to an image.
@@ -834,8 +848,8 @@ async function main() {
     ':ui_emoji: renders as an inline img.emoji-inline live after a UI upload (NO page reload)',
   )
   check(
-    /\/api\/emoji\/\d+/.test((await uiEmojiImg.getAttribute('src')) || ''),
-    'the live-rendered emoji src points at /api/emoji/{id} (cache was invalidated, not reloaded)',
+    /^\d+$/.test((await uiEmojiImg.getAttribute('data-emoji-id')) || ''),
+    'the live-rendered emoji carries a numeric data-emoji-id (cache was invalidated, not reloaded)',
   )
 
   // 7d3f — Composer emoji picker (slice 3b): the 🙂 toggle appears in the composer because
@@ -881,6 +895,69 @@ async function main() {
   check(
     await pickedEmojiImg.isVisible(),
     'a message composed via the picker renders :ui_emoji: as an inline img.emoji-inline',
+  )
+
+  // 03l — Custom-emoji REACTION (slice over slice-3b): the active server has :ui_emoji:
+  // in its cache, so the per-message reaction palette now lists it AFTER the unicode quick
+  // emoji. Hover a message → react → pick the custom emoji → a reaction chip appears that
+  // contains an img.emoji-inline pointing at /api/emoji/{id} and is highlighted as .mine.
+  // Toggling it off removes the chip. The marker is stored verbatim as `custom:{id}` in the
+  // existing reactions column (no schema/WS change). (We're focused on the server channel
+  // with `ui_emoji` cached; the members panel is closed.)
+  step('hover message → react → pick the CUSTOM emoji → custom reaction chip appears (.mine) → toggle off')
+  // Post a fresh plain-text target message in the server channel (mirrors the 03b unicode
+  // reaction step — reacting to a known-text message avoids the bottom-edge hover-overlay
+  // interception). The custom emoji shows up in the palette because the active server has
+  // :ui_emoji: cached, independent of the message's own content.
+  await page.waitForTimeout(1200) // let the message rate-limiter refill
+  const customReactBody = 'react to me with a custom emoji'
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(customReactBody)
+  await page.getByRole('button', { name: 'Send' }).click()
+  const customReactMsg = page.locator('.message', { hasText: customReactBody }).first()
+  await customReactMsg.waitFor({ timeout: 8000 })
+  await customReactMsg.hover()
+  await customReactMsg.getByRole('button', { name: 'react' }).click()
+  const reactPalette = page.locator('.emoji-picker')
+  await reactPalette.waitFor({ timeout: 4000 })
+  const customOption = reactPalette.locator('.emoji-option[data-emoji-name="ui_emoji"]')
+  await customOption.waitFor({ timeout: 4000 })
+  check(
+    await customOption.locator('img.emoji-inline').isVisible(),
+    'the reaction palette lists the custom emoji as an img.emoji-inline option (after the unicode ones)',
+  )
+  await customOption.click()
+  // A reaction chip appears, highlighted as mine, holding the custom-emoji image.
+  const customChip = customReactMsg.locator('.reaction.mine', {
+    has: page.locator('img.emoji-inline'),
+  })
+  await customChip.waitFor({ timeout: 8000 })
+  await shot('03l-custom-reaction.png')
+  check(await customChip.isVisible(), 'a custom-emoji reaction chip appears, highlighted as mine')
+  const customChipImg = customChip.locator('img.emoji-inline')
+  const customChipId = (await customChipImg.getAttribute('data-emoji-id')) || ''
+  check(
+    /^\d+$/.test(customChipId),
+    `the custom reaction chip image carries a numeric data-emoji-id (got ${customChipId})`,
+  )
+  // Like the inline emoji, the chip image must actually LOAD (it's a token-fetched blob:
+  // URL now) — poll naturalWidth>0 so a broken image can't pass the element checks above.
+  let chipLoaded = false
+  for (let i = 0; i < 40; i++) {
+    chipLoaded = await customChipImg.evaluate((img) => img.complete && img.naturalWidth > 0).catch(() => false)
+    if (chipLoaded) break
+    await new Promise((r) => setTimeout(r, 200))
+  }
+  check(chipLoaded, 'the custom reaction chip image actually LOADS (naturalWidth>0, not a broken image)')
+  check(
+    (await customChip.locator('.rcount').textContent())?.trim() === '1',
+    'the custom reaction count shows 1',
+  )
+  // Toggle it off → the chip is removed (same opaque-marker toggle as a unicode reaction).
+  await customChip.click()
+  await customChip.waitFor({ state: 'detached', timeout: 8000 })
+  check(
+    (await customReactMsg.locator('.reaction.mine', { has: page.locator('img.emoji-inline') }).count()) === 0,
+    'toggling the custom reaction off removes the chip',
   )
 
   // Reopen the members panel → delete the emoji via the manager → its row disappears.

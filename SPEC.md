@@ -2018,3 +2018,28 @@ change is the highest-blast-radius in the codebase (core mesh). Recommend implem
 dedicated tick (delegate per the plan + careful review + the full two-client QA above) OR deferring in
 favour of higher-ROI broadly-used parity (custom-emoji reactions, role colors) — owner's call. Spec is
 ready either way.
+
+## Custom-emoji reactions + P1 fix: emoji images now actually load (iter 155)
+
+**Two things shipped together (the fix is the headline):**
+
+**P1 FIX — emoji images never loaded in a browser.** Custom-emoji code rendered raw
+`<img src="/api/emoji/{id}">`, but that endpoint is auth-gated (401 without a bearer token) and an
+`<img>` tag can't send the Authorization header → every emoji image 401'd → broken image. This
+affected the whole emoji feature (slices 2-3) and was MISSED for 4 ticks because the QA only asserted
+the `<img>` element EXISTED (+ src), never that it LOADED; AI-vision of the 1px-looking result was
+ambiguous. Caught this tick by a new `naturalWidth>0` QA assertion. Fix mirrors the existing
+`Avatar.tsx` pattern: new `web/src/components/EmojiImg.tsx` fetches the bytes WITH the token
+(`fetchAttachment`) → `URL.createObjectURL(blob)` → blob-URL `<img>`, cached by id. Wired into every
+emoji render site (markdown inline, manager, picker, reaction chip). Verified: the `naturalWidth>0`
+checks now PASS + AI-vision shows the emoji rendering as a visible image (was broken before).
+**QA lesson:** for any auth-gated image, assert it LOADS (`naturalWidth>0`), not just that the element
+exists — and prefer fetch+blob over `<img src>` for token-auth'd images.
+
+**FEATURE — custom-emoji reactions.** React to a message with a server's custom emoji, stored as a
+`custom:{id}` marker in the existing `reactions.emoji` TEXT column (no schema/WS change). Backend
+`validEmoji` accepts unicode (≤16) OR `custom:{1-16 digits}` (format-validated, bounded ≤24, XSS-safe —
+numeric id). Client: reaction palette lists the server's custom emoji after the unicode quick-set;
+chips render via `EmojiImg` for `custom:` markers. Go integration test (accept/reject cases) +
+browser E2E (react with a custom emoji → chip loads → toggle off). Verified: go test, vitest 39/39,
+full QA `browser=0 realtime=0 voice=0 search=0`.

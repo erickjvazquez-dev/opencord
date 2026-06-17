@@ -384,6 +384,12 @@ item from here as the structural milestones above land.
   composer 🙂 popover lists the server's emoji and inserts `:name:` at the caret (browser E2E +
   AI-vision; reaction palette untouched). **Custom emoji is FULLY complete (backend+render+manager+picker).**
   · stickers · GIF picker (later)
+  **+ custom-emoji REACTIONS (iter 155):** react with a server's custom emoji (`custom:{id}` marker in
+  the reactions emoji column; palette lists them; chips render the image). **+ P1 FIX (iter 155):** emoji
+  images NEVER loaded in-browser (raw `<img src=/api/emoji/{id}>` 401'd — img tags can't send the bearer
+  token); fixed via a new `EmojiImg` fetch+blob component (mirrors `Avatar`), wired into every emoji
+  render site. Caught by a new `naturalWidth>0` QA assertion (element-existence checks had missed it for
+  4 ticks). QA lesson logged: assert auth-gated images LOAD, not just exist.
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
   (React elements, no innerHTML); E2E + AI-vision verified.

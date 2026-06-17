@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { isValidElement, type ReactNode } from 'react'
 import { renderMarkdown } from './markdown'
+import { EmojiImg } from './components/EmojiImg'
 
 // renderMarkdown returns React elements (never an HTML string), so these tests walk
 // the element tree directly — no DOM library needed. flatten() collects every node;
@@ -24,13 +25,14 @@ function flatten(node: ReactNode): ReactNode[] {
   return out
 }
 
-// Every <img class="emoji-inline"> element in the tree.
+// Every <EmojiImg> element in the tree. Emoji are now rendered via the EmojiImg
+// component (it fetches the auth-gated bytes WITH the bearer token and renders a blob
+// URL — an <img src> can't send the header), so the markdown emits the component with
+// a numeric `id`, not a raw <img> with a `src`.
 function emojiImgs(node: ReactNode) {
   return flatten(node).filter(
     (n): n is React.ReactElement<Record<string, unknown>> =>
-      isValidElement(n) &&
-      n.type === 'img' &&
-      (n.props as { className?: string }).className === 'emoji-inline',
+      isValidElement(n) && n.type === EmojiImg,
   )
 }
 
@@ -42,13 +44,13 @@ function allText(node: ReactNode): string {
 }
 
 describe('renderMarkdown custom emoji (:name:)', () => {
-  it('renders a known :smile: as an inline img → /api/emoji/{id}', () => {
-    const out = renderMarkdown('hi :smile: there', { emoji: new Map([['smile', 7]]) })
+  it('renders a known :smile: as an EmojiImg with id 7 + the bearer token', () => {
+    const out = renderMarkdown('hi :smile: there', { emoji: new Map([['smile', 7]]), token: 'tok' })
     const imgs = emojiImgs(out)
     expect(imgs).toHaveLength(1)
-    expect(imgs[0].props.src).toBe('/api/emoji/7')
+    expect(imgs[0].props.id).toBe(7)
     expect(imgs[0].props.alt).toBe(':smile:')
-    expect(imgs[0].props.title).toBe(':smile:')
+    expect(imgs[0].props.token).toBe('tok')
     // The surrounding words survive as literal text.
     expect(allText(out)).toContain('hi ')
     expect(allText(out)).toContain(' there')
@@ -84,14 +86,14 @@ describe('renderMarkdown custom emoji (:name:)', () => {
     const out = renderMarkdown(':nope: then :smile:', { emoji: new Map([['smile', 7]]) })
     const imgs = emojiImgs(out)
     expect(imgs).toHaveLength(1)
-    expect(imgs[0].props.src).toBe('/api/emoji/7')
+    expect(imgs[0].props.id).toBe(7)
     expect(allText(out)).toContain(':nope:')
   })
 
   it('renders two known emoji in one message', () => {
     const out = renderMarkdown(':a1: and :b2:', { emoji: new Map([['a1', 3], ['b2', 4]]) })
     const imgs = emojiImgs(out)
-    expect(imgs.map((i) => i.props.src)).toEqual(['/api/emoji/3', '/api/emoji/4'])
+    expect(imgs.map((i) => i.props.id)).toEqual([3, 4])
   })
 
   it('does not corrupt a https:// URL or adjacent :: colons', () => {

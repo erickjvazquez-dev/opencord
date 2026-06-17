@@ -674,7 +674,26 @@ func (s *Store) EditMessage(ctx context.Context, id, userID int64, body string) 
 // ErrInvalidEmoji is returned when a reaction emoji is empty or too long.
 var ErrInvalidEmoji = errors.New("invalid emoji")
 
-func validEmoji(e string) bool { return len(e) >= 1 && len(e) <= 16 }
+// validEmoji accepts either a unicode emoji (1..16 bytes, the original rule) or a
+// custom-emoji marker `custom:{id}` where {id} is a numeric server_emoji id (the
+// marker is stored verbatim in reactions.emoji; the client renders it as the image
+// at /api/emoji/{id}). The overall length stays bounded ≤24 (Rule B) and the marker
+// format is validated server-side (rejects custom:abc, custom:, oversized). The id's
+// existence is deliberately NOT checked here — a deleted emoji just renders as a
+// graceful broken/empty image, which is acceptable.
+func validEmoji(e string) bool {
+	if len(e) < 1 || len(e) > 24 {
+		return false
+	}
+	if rest, ok := strings.CutPrefix(e, "custom:"); ok {
+		if len(rest) < 1 || len(rest) > 16 {
+			return false
+		}
+		_, err := strconv.ParseInt(rest, 10, 64)
+		return err == nil
+	}
+	return len(e) <= 16
+}
 
 // AddReaction records a (message, user, emoji) reaction (idempotent) and returns
 // the message's channel id for broadcasting. ErrMessageNotFound if the message is

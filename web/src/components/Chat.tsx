@@ -70,6 +70,7 @@ import { renderMarkdown } from '../markdown'
 import { dayLabel, shortTime, messageTimestamp } from '../dates'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
+import { EmojiImg } from './EmojiImg'
 import { Settings } from './Settings'
 import { ProfileCard } from './ProfileCard'
 import * as voiceSettings from '../voiceSettings'
@@ -2604,11 +2605,11 @@ export function Chat({
                   )}
                   {emojiManager.map((em) => (
                     <div key={em.id} className="emoji-manager-row">
-                      <img
-                        className="emoji-manager-img"
-                        src={`/api/emoji/${em.id}`}
+                      <EmojiImg
+                        token={token}
+                        id={em.id}
                         alt={`:${em.name}:`}
-                        title={`:${em.name}:`}
+                        className="emoji-manager-img"
                       />
                       <code className="emoji-manager-code">:{em.name}:</code>
                       <button
@@ -2678,7 +2679,7 @@ export function Chat({
                       <span className="author">{m.username}</span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji })}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}</div>
                   </div>
                 </div>
               ))}
@@ -2709,7 +2710,7 @@ export function Chat({
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
                     <div className="body">
-                      {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji })}
+                      {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}
                     </div>
                   </div>
                 </div>
@@ -2843,7 +2844,7 @@ export function Chat({
                       </button>
                     </div>
                   ) : (
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji })}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}</div>
                   )}
                   {!m.deleted && (m.attachments?.length ?? 0) > 0 && (
                     <AttachmentList token={token} attachments={m.attachments!} />
@@ -2862,6 +2863,23 @@ export function Chat({
                           {e}
                         </button>
                       ))}
+                      {/* The active server's custom emoji — react with one as `custom:{id}`. */}
+                      {activeEmoji &&
+                        activeEmoji.size > 0 &&
+                        [...activeEmoji.entries()].map(([name, id]) => (
+                          <button
+                            key={`custom:${id}`}
+                            className="emoji-option"
+                            title={`:${name}:`}
+                            data-emoji-name={name}
+                            onClick={() => {
+                              void toggleReaction(m, `custom:${id}`)
+                              setPickerFor(null)
+                            }}
+                          >
+                            <EmojiImg token={token} id={id} alt={`:${name}:`} />
+                          </button>
+                        ))}
                     </div>
                   )}
                   {!m.deleted && (m.reactions?.length ?? 0) > 0 && (
@@ -2875,7 +2893,15 @@ export function Chat({
                             aria-pressed={mine}
                             onClick={() => void toggleReaction(m, r.emoji)}
                           >
-                            <span className="emoji">{r.emoji}</span>
+                            {r.emoji.startsWith('custom:') ? (
+                              <EmojiImg
+                                token={token}
+                                id={Number(r.emoji.slice(7))}
+                                alt="custom emoji"
+                              />
+                            ) : (
+                              <span className="emoji">{r.emoji}</span>
+                            )}
                             <span className="rcount">{r.count}</span>
                           </button>
                         )
@@ -2999,7 +3025,7 @@ export function Chat({
                         insertEmojiShortcode(name)
                       }}
                     >
-                      <img className="emoji-inline" src={`/api/emoji/${id}`} alt={`:${name}:`} />
+                      <EmojiImg token={token} id={id} alt={`:${name}:`} />
                     </button>
                   ))}
                 </div>
