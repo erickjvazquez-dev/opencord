@@ -44,10 +44,18 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   Selectors preserved so realtime/voice QA stays green; new browser-QA assertion exercises the
   toggle. Browser QA `browser=0 realtime=0 voice=0 search=0`; AI-vision verified both modes;
   shipped + `railway up` + rollout verified.
-- [ ] **User Settings surface (Discord-style)** — a settings modal/page with a left-nav tab list,
-  replacing the scattered header controls. First tab **My Account**: avatar (upload/preview),
-  username, custom status + emoji, presence picker — consolidated in one place. A ⚙ entry point
-  near the user footer opens it; Esc/overlay closes.
+- [x] **User Settings surface (Discord-style)** DONE (iter 129) — new `Settings.tsx`: a fixed
+  overlay + modal with a left `settings-nav` tab rail (**My Account** active, **Voice & Video**
+  disabled "SOON" placeholder for slice 3). My Account consolidates what was scattered in the
+  header: avatar preview (with presence pip) + **Change Avatar**, read-only username, **custom
+  status + emoji** (text + emoji inputs + a Save button with a "Saved" confirm — replaces the old
+  double `window.prompt` flow), and the presence `<select>`. Header `.meta` cluster collapsed to a
+  compact `self-chip` (avatar + presence pip + username + ⚙) that opens it; **Esc + overlay-click +
+  ✕** all close. No new endpoints (reuses `PUT /me/status`, `PUT /me/presence`, `POST /avatar`).
+  QA migrated in lockstep (selectors moved header→modal; new ⚙-open/Esc-close assertion `07d0`);
+  browser QA `browser=0 realtime=0 voice=0 search=0`; AI-vision verified the modal (My Account),
+  the status-save flow, the avatar upload, and the mobile header (no overflow). Shipped + `railway
+  up` + rollout-verified.
 - [ ] **Voice & Video settings tab** — input device + output device, **input-volume + output-volume
   sliders**, a **mic test / input-sensitivity meter**, **noise-suppression + echo-cancellation +
   auto-gain toggles**, and **camera device + live preview**. Persist per-user (localStorage for

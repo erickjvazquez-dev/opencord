@@ -643,14 +643,31 @@ async function main() {
 
   await page.getByRole('button', { name: 'close' }).click()
 
-  // 7d2 — Custom status + emoji: set both via the header, see them render under your
-  // name in the member list, and reflected in the header button.
-  step('set a custom status + emoji → both show in the member list + header')
+  // 7d0 — User Settings modal opens from the header ⚙ and closes on Esc. The account
+  // controls (avatar, custom status + emoji, presence) now live inside it (Discord-style).
+  step('open User Settings via the ⚙ chip → modal renders; Esc closes it')
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  check(await page.locator('.settings-modal').isVisible(), 'User Settings modal opens from the ⚙ chip')
+  check(
+    await page.locator('.settings-tab.active', { hasText: 'My Account' }).isVisible(),
+    'My Account tab is active by default',
+  )
+  await shot('07d0-settings-open.png')
+  await page.keyboard.press('Escape')
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  check((await page.locator('.settings-modal').count()) === 0, 'Esc closes the settings modal')
+
+  // 7d2 — Custom status + emoji: set both inside the settings modal (My Account),
+  // Save → they render under your name in the member list.
+  step('settings → set a custom status + emoji → both show in the member list')
   const myStatus = 'shipping presence'
   const myStatusEmoji = '🚀'
-  statusEmojiAnswer = myStatusEmoji
-  promptAnswer = myStatus
-  await page.getByRole('button', { name: /set status/ }).click()
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.getByLabel('status emoji').fill(myStatusEmoji)
+  await page.getByLabel('custom status').fill(myStatus)
+  await page.locator('.settings-modal').getByRole('button', { name: 'Save' }).click()
   await page
     .locator('.member-list .member-status', { hasText: myStatus })
     .waitFor({ timeout: 8000 })
@@ -664,33 +681,22 @@ async function main() {
     ),
     'status emoji renders before the status line in the member list',
   )
-  check(
-    ((await page.locator('.status-edit').textContent()) ?? '').includes(myStatus),
-    'header status button reflects the current status',
-  )
-  check(
-    ((await page.locator('.status-edit .status-emoji').textContent()) ?? '').includes(myStatusEmoji),
-    'header status button shows the status emoji',
-  )
   await shot('07d2-status.png')
-  statusEmojiAnswer = '' // reset so later prompt-driven steps are unaffected
 
-  // 7d2b — Presence picker: choosing "Do Not Disturb" recolors the self dot (red)
-  // in the member list and the header pip; reset back to online afterwards.
-  step('set presence to Do Not Disturb → self dot + header pip recolor')
-  await page.locator('.presence-select').selectOption('dnd')
+  // 7d2b — Presence picker (in settings): choosing "Do Not Disturb" recolors the self
+  // dot (red) in the member list; reset back to online afterwards. Modal still open.
+  step('settings → set presence to Do Not Disturb → self dot recolors; reset online')
+  await page.locator('.settings-modal .presence-select').selectOption('dnd')
   await page.locator('.member-list .presence-dot.dnd').first().waitFor({ timeout: 8000 })
   check(
     await page.locator('.member-list .presence-dot.dnd').first().isVisible(),
     'self presence dot turns dnd (red) in the member list',
   )
-  check(
-    await page.locator('.presence-pip.presence-dnd').isVisible(),
-    'header presence pip reflects dnd',
-  )
   await shot('07d2b-presence.png')
-  await page.locator('.presence-select').selectOption('online') // reset for later steps
+  await page.locator('.settings-modal .presence-select').selectOption('online') // reset for later steps
   await page.locator('.member-list .presence-dot.online').first().waitFor({ timeout: 8000 })
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
 
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
@@ -743,19 +749,27 @@ async function main() {
   check(await pinsPanel.getByText(srvBody).isVisible(), 'pins panel lists the pinned message')
   await pinsPanel.getByRole('button', { name: /close/ }).click()
 
-  // 7i — Uploaded avatar: the viewer sets a profile picture via the header avatar
-  // button → the header shows the image immediately; after a reload, their message
-  // avatars render the image too (replacing initials everywhere).
-  step('upload an avatar via the header → header + message avatars become the image')
-  await page.locator('.meta input[type=file]').setInputFiles({
+  // 7i — Uploaded avatar: the viewer sets a profile picture via the settings modal
+  // (My Account → Change Avatar) → the settings preview + header chip show the image
+  // immediately; after a reload, their message avatars render the image too.
+  step('settings → upload an avatar → preview + header + message avatars become the image')
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.locator('.settings-modal input[type=file]').setInputFiles({
     name: 'avatar.png',
     mimeType: 'image/png',
     buffer: makePng(96, 96, [120, 90, 220]),
   })
-  const headerImg = page.locator('.self-avatar-btn .avatar-self.avatar-img')
+  const settingsImg = page.locator('.settings-avatar-preview .avatar-settings.avatar-img')
+  await settingsImg.waitFor({ timeout: 10000 })
+  check(await settingsImg.isVisible(), 'settings avatar preview becomes the uploaded image immediately')
+  await shot('07i-avatar-settings.png')
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  const headerImg = page.locator('.self-chip .avatar-self.avatar-img')
   await headerImg.waitFor({ timeout: 10000 })
   await shot('07i-avatar-header.png')
-  check(await headerImg.isVisible(), 'header avatar becomes the uploaded image immediately')
+  check(await headerImg.isVisible(), 'header chip avatar becomes the uploaded image')
   check(
     await headerImg.evaluate((el) => el.complete && el.naturalWidth > 0),
     'header avatar image actually decoded',
@@ -840,12 +854,15 @@ async function main() {
     'selecting a channel closes the drawer',
   )
 
-  // 8b — Mobile header controls: the always-shown user controls (presence picker +
-  // status + log out) must stay reachable and NOT cause horizontal overflow at phone
-  // width. Guards the responsive correctness of the presence picker added this cycle.
-  step('phone-width header: presence picker reachable, no horizontal overflow')
+  // 8b — Mobile header controls: the always-shown user controls (⚙ user-settings chip
+  // + log out) must stay reachable and NOT cause horizontal overflow at phone width.
+  // The presence/status controls moved into the settings modal this cycle.
+  step('phone-width header: ⚙ settings chip reachable, no horizontal overflow')
   await page.waitForTimeout(350) // let the drawer's slide-out transition settle for a clean shot
-  check(await page.locator('.presence-select').isVisible(), 'presence picker is reachable on mobile')
+  check(
+    await page.getByRole('button', { name: 'user settings' }).isVisible(),
+    'user-settings chip is reachable on mobile',
+  )
   check(await page.getByRole('button', { name: 'log out' }).isVisible(), 'log out is reachable on mobile')
   const mHeaderOverflow = await page
     .locator('.chat-header')

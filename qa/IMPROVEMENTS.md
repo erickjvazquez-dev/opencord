@@ -3,6 +3,35 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (iter 129) — User Settings modal; migrate QA selectors *in the same edit* as the UI move
+
+Shipped the **User Settings modal** (GOAL TOP-PRIORITY slice 2). **Component: UI →
+polished/Discord-faithful.** The risky part wasn't building the modal — it was that the
+change *relocates* controls the browser QA already drives (avatar file input, status button,
+presence `<select>`) out of the header and into the modal. A UI move like this silently
+breaks every QA step that still looks for the old selector, and those failures only surface
+~3 min into the boot. I migrated `qa/browser.mjs` in **lockstep** with the component edit
+(status/presence/avatar steps rewritten to open the modal first; header `.status-edit`/
+`.presence-pip` assertions dropped; `08b` mobile now checks the ⚙ chip not the presence
+picker) and added a **new `07d0`** step asserting the ⚙ opens the modal and **Esc** closes it.
+
+**Highest-value lesson — when a tick MOVES an element the QA already selects, treat the QA
+update as part of the same change-set, not a follow-up.** The failure mode is asymmetric: a
+moved selector doesn't error at edit time (tsc/vite are happy), only at QA-run time, and a
+green build can lull you into shipping a broken QA. The cheap guard already exists (`run.sh`
+`node --check`s every `.mjs` before boot) but that only catches *syntax*, not *stale
+selectors* — so the discipline has to be manual: grep `realtime.mjs`/`voice.mjs`/`browser.mjs`
+for every selector you're moving BEFORE running, which is exactly what caught that
+realtime/voice don't touch these (so only `browser.mjs` needed edits).
+
+**Loop-process improvement applied:** before moving any selector-bearing element, grep all QA
+`.mjs` for that selector and update every hit in the same edit. This tick did that and the
+full suite came up green first try (`browser=0 realtime=0 voice=0 search=0`).
+
+**Next QA-growth target (slice 3):** the Voice & Video settings tab — when built, the
+mic-test input-sensitivity meter + device pickers + toggles need a browser-QA flow (open tab
+→ pick device → meter moves → toggle persists across reload) and AI-vision on the panel.
+
 ## 2026-06-16 (tick 101) — Invite expiry; chose the clean-default over the prompt-churn version
 
 Shipped **invite expiry** (7-day default, enforced at redeem). **Component: security/servers

@@ -1593,7 +1593,13 @@ list, advanced one slice per tick alongside the loop's normal health/QA work.
 **Non-negotiables:** every slice stays self-hostable (Rule A — settings persist locally, no new paid
 service); inputs validated (Rule B); browser-QA + AI-vision verify the rendered result before "done".
 
-### Slice 2 — executable build plan (User Settings modal · My Account tab)
+### Slice 2 — executable build plan (User Settings modal · My Account tab) — SHIPPED iter 129
+
+Built as specced: `web/src/components/Settings.tsx` (overlay + modal + tab rail), header `.meta`
+collapsed to a `self-chip` ⚙ entry point, `editMyStatus` prompt-flow → plain `saveStatus(status,
+emoji)`, CSS for `.settings-*` + `.self-chip*`. QA selectors migrated (status/presence/avatar moved
+header→modal; new `07d0` ⚙-open + Esc-close). browser QA green; AI-vision verified. Next: slice 3
+(Voice & Video settings tab).
 
 Concrete plan captured at commit 1b97700 so a fresh-context tick builds it without re-discovery.
 Reuses existing handlers — NO new endpoints (`PUT /me/status`, `PUT /me/presence`, `POST /avatar`).

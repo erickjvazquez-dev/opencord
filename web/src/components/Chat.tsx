@@ -61,6 +61,7 @@ import type {
 import { renderMarkdown } from '../markdown'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
+import { Settings } from './Settings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
 
@@ -214,6 +215,9 @@ export function Chat({
   // The caller's own chosen presence (online|idle|dnd|invisible), synced from their
   // own member-list row (which reports the true self state).
   const [myPresence, setMyPresence_] = useState('online')
+  // User Settings overlay (⚙ in the header). Houses the account controls — avatar,
+  // custom status + emoji, presence — that used to live scattered in the header.
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // Unread channels → unread @-mention count (0 = unread, no mention). Sidebar dots +
   // red mention badges. Synced on load + a ~10s poll.
   const [unread, setUnread] = useState<Map<number, number>>(new Map())
@@ -253,7 +257,6 @@ export function Chat({
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const mentionRange = useRef<{ start: number; len: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
@@ -535,8 +538,6 @@ export function Chat({
       setAvatarVersion((v) => v + 1)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'could not upload avatar')
-    } finally {
-      if (avatarInputRef.current) avatarInputRef.current.value = ''
     }
   }
 
@@ -1126,19 +1127,13 @@ export function Chat({
       window.alert(err instanceof Error ? err.message : 'could not leave server')
     }
   }
-  const editMyStatus = async () => {
-    // Emoji first (optional), then the status line — two small prompts to match the
-    // app's existing prompt-driven affordances (channel topic, invites, etc.).
-    const emoji = window.prompt('Status emoji (optional, e.g. 🚀 — leave blank for none):', myStatusEmoji)
-    if (emoji === null) return // cancelled
-    const next = window.prompt('Set your status (leave blank to clear):', myStatus)
-    if (next === null) return // cancelled
-    const trimmed = next.trim()
-    const trimmedEmoji = emoji.trim()
+  // Save the caller's custom status + emoji (already trimmed by the caller). Driven by
+  // the User Settings modal's Save button (replaces the old window.prompt flow).
+  const saveStatus = async (status: string, emoji: string) => {
     try {
-      await setMyStatus(token, trimmed, trimmedEmoji)
-      setMyStatus_(trimmed)
-      setMyStatusEmoji_(trimmedEmoji)
+      await setMyStatus(token, status, emoji)
+      setMyStatus_(status)
+      setMyStatusEmoji_(emoji)
       // Refresh the active server's member list so the new status shows immediately.
       if (activeServerId) {
         const members = await fetchServerMembers(token, Number(activeServerId))
@@ -1674,51 +1669,31 @@ export function Chat({
           </form>
           <div className="meta">
             <span className={connected ? 'dot online' : 'dot offline'} />
-            {online} online ·
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              className="file-input-hidden"
-              onChange={(e) => void onAvatarPicked(e.target.files?.[0])}
-            />
+            {online} online
             <button
               type="button"
-              className="self-avatar-btn"
-              title="Change your avatar"
-              aria-label="change your avatar"
-              onClick={() => avatarInputRef.current?.click()}
+              className="self-chip"
+              title="User settings"
+              aria-label="user settings"
+              onClick={() => setSettingsOpen(true)}
             >
-              <Avatar
-                token={token}
-                userId={user.id}
-                username={user.username}
-                className="avatar avatar-self"
-                bust={avatarVersion}
-              />
-              <span>{user.username}</span>
-            </button>
-            <span className="presence-pill" title="Set your presence">
-              <span className={`presence-pip presence-${myPresence}`} />
-              <select
-                className="presence-select"
-                value={myPresence}
-                onChange={(e) => void changePresence(e.target.value)}
-                aria-label="set your presence"
-              >
-                <option value="online">Online</option>
-                <option value="idle">Idle</option>
-                <option value="dnd">Do Not Disturb</option>
-                <option value="invisible">Invisible</option>
-              </select>
-            </span>
-            <button
-              className="link status-edit"
-              onClick={() => void editMyStatus()}
-              title="Set your status"
-            >
-              {myStatusEmoji && <span className="status-emoji">{myStatusEmoji}</span>}
-              {myStatus ? `“${myStatus}”` : myStatusEmoji ? '' : 'set status'}
+              <span className="self-chip-avatar">
+                <Avatar
+                  token={token}
+                  userId={user.id}
+                  username={user.username}
+                  className="avatar avatar-self"
+                  bust={avatarVersion}
+                />
+                <span
+                  className={`presence-pip presence-${myPresence} self-chip-pip`}
+                  aria-hidden
+                />
+              </span>
+              <span className="self-chip-name">{user.username}</span>
+              <span className="self-chip-gear" aria-hidden>
+                ⚙
+              </span>
             </button>
             <button className="link" onClick={onLogout}>
               log out
@@ -2598,6 +2573,21 @@ export function Chat({
               </div>
             ))}
         </aside>
+      )}
+
+      {settingsOpen && (
+        <Settings
+          token={token}
+          user={user}
+          myPresence={myPresence}
+          myStatus={myStatus}
+          myStatusEmoji={myStatusEmoji}
+          avatarVersion={avatarVersion}
+          onAvatarPicked={onAvatarPicked}
+          onSaveStatus={saveStatus}
+          onChangePresence={changePresence}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
     </div>
   )
