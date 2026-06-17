@@ -1026,6 +1026,79 @@ func TestUnreadChannelsIntegration(t *testing.T) {
 	}
 }
 
+// Per-channel mute: a muted channel drops out of Unreads (so its sidebar dot/mention/tab
+// badge all vanish), is per-user, idempotent, and reversible.
+func TestChannelMuteIntegration(t *testing.T) {
+	store, pool, me := setup(t)
+	ctx := context.Background()
+	other := regUser(t, pool)
+
+	isUnread := func(id int64) bool {
+		u, err := store.Unreads(ctx, me.ID, me.Username)
+		if err != nil {
+			t.Fatalf("Unreads: %v", err)
+		}
+		for _, c := range u {
+			if c.ChannelID == id {
+				return true
+			}
+		}
+		return false
+	}
+	muted := func(uid int64) map[int64]bool {
+		ids, err := store.MutedChannelIDs(ctx, uid)
+		if err != nil {
+			t.Fatalf("MutedChannelIDs: %v", err)
+		}
+		m := map[int64]bool{}
+		for _, id := range ids {
+			m[id] = true
+		}
+		return m
+	}
+
+	ch, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	if _, err := store.Save(ctx, ch.ID, other.ID, other.Username, "noisy"); err != nil {
+		t.Fatalf("other posts: %v", err)
+	}
+	if !isUnread(ch.ID) {
+		t.Fatal("precondition: the channel should be unread before muting")
+	}
+
+	// Mute → no longer surfaces as unread, and shows in my muted list.
+	if err := store.MuteChannel(ctx, ch.ID, me.ID); err != nil {
+		t.Fatalf("MuteChannel: %v", err)
+	}
+	if isUnread(ch.ID) {
+		t.Fatal("a muted channel must NOT surface as unread")
+	}
+	if !muted(me.ID)[ch.ID] {
+		t.Fatal("MutedChannelIDs should list the muted channel")
+	}
+	// Idempotent: muting again is a no-op (no error, still exactly one mute).
+	if err := store.MuteChannel(ctx, ch.ID, me.ID); err != nil {
+		t.Fatalf("MuteChannel (idempotent): %v", err)
+	}
+	// Per-user: `other` did not mute it, so it's not in THEIR muted list.
+	if muted(other.ID)[ch.ID] {
+		t.Fatal("mute must be per-user — other's list must not include my mute")
+	}
+
+	// Unmute → it surfaces as unread again and leaves my muted list.
+	if err := store.UnmuteChannel(ctx, ch.ID, me.ID); err != nil {
+		t.Fatalf("UnmuteChannel: %v", err)
+	}
+	if !isUnread(ch.ID) {
+		t.Fatal("after unmuting, the channel should be unread again")
+	}
+	if muted(me.ID)[ch.ID] {
+		t.Fatal("after unmuting, the channel must leave the muted list")
+	}
+}
+
 func TestUserStatusIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

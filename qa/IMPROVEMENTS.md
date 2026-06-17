@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 139) — Per-channel mute; the substring-label collision bit AGAIN (and the guardrail that would've caught it)
+
+Shipped **per-channel notification mute** (full stack: schema → store → endpoints → UI → QA).
+**Component: notifications/chat.** It rode the existing unread pipeline (one `NOT EXISTS` clause makes
+the sidebar dots, mention badges, AND tab badge all respect mute) — the iter-138 lesson ("a new feature
+that's a new VIEW of existing state derives, doesn't re-model") applied again and kept it small.
+
+But the **substring-label collision bit me a SECOND time** (iter-131 was the first, with
+`getByLabel('camera')` vs `'camera preview'`): my new header button reads "🔔 mute", and voice.mjs's
+`getByRole('button', { name: 'mute' })` (the mic button) is non-exact, so it suddenly matched BOTH →
+strict-mode crash in a suite I didn't even edit. I'd written the lesson down twice and STILL re-hit it,
+which means a note isn't enough — **the real fix is a habit at feature-build time, not at test-debug
+time: whenever you add a button/label whose accessible name CONTAINS an existing one (mute ⊂ "🔔 mute",
+camera ⊂ "camera preview"), grep the QA for `name: '<word>'` BEFORE running and either make the existing
+selector exact/scoped or pick a non-overlapping label.** This tick I scoped the voice selector to its
+unambiguous class (`.voice-mute`) — class/testid selectors are collision-proof in a way role-name
+selectors aren't, so for buttons that share words, prefer a `data-testid`/class over `getByRole(name)`.
+
+**Process improvement to apply going forward:** when a tick adds UI text that's a superstring of common
+QA target names ("mute", "camera", "settings", "close"), run `grep -rn "name: '<word>'" qa/` as part of
+the build (not after a crash) — it's a 2-second check that prevents a ~6-minute QA-run-debug-rerun loop.
+
+Coverage note: the store integration test asserts the mute is per-USER (other's muted list excludes my
+mute) — the kind of cross-tenant check that matters once a row is keyed by user_id (Rule B).
+
 ## 2026-06-17 (iter 138) — Tab badge + closed the voiceSettings coverage gap I flagged last tick (acting on my own notes)
 
 Shipped the **browser tab unread/mention badge** AND closed the **`voiceSettings.ts` unit-test gap**

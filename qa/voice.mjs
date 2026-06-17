@@ -452,7 +452,9 @@ async function main() {
   )
 
   step('mute toggles the local mic label')
-  await a.getByRole('button', { name: 'mute' }).click()
+  // exact: the header "🔔 mute" channel toggle also contains "mute" — scope to the voice
+  // bar's mic button (its accessible name is exactly "mute") to avoid a strict-mode clash.
+  await a.locator('.voice-mute').click()
   check(
     (await a.locator('[data-voice-self]').filter({ hasText: 'muted' }).count()) > 0,
     "A's own chip shows muted after mute",

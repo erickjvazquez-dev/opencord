@@ -1748,3 +1748,25 @@ video pixels render in the existing tile regardless.
 - **Verify:** `go test ./...` (the voice-screen relay integration test still passes + a `kind` assertion),
   `npm run build`, full browser+voice QA green, AI-vision the camera tile, ship + `railway up` + rollout-verify.
 - **Slice 2 (next):** a parallel `cameraStream`/`voice-camera` path so screen + camera coexist; SFU video.
+
+## Per-channel notification mute (v0.5 — notifications)
+
+**Why:** Discord lets you mute a noisy channel so it stops nagging you. Reuses the existing
+unread pipeline — a muted channel simply drops out of the unread results, so the sidebar dots,
+mention badges, AND the browser-tab badge all auto-respect it (one server-side change, no client
+re-modelling). Per-user, derived from the JWT (Rule B/C); you can only mute a channel you can access.
+
+- **Schema (`internal/db/schema.sql`):** `channel_mutes(user_id, channel_id, PRIMARY KEY(user_id,
+  channel_id))` with `ON DELETE CASCADE` FKs — mirrors `channel_reads`. Idempotent (self-applies).
+- **Store (`internal/chat/chat.go`):** `MuteChannel`/`UnmuteChannel` (INSERT ON CONFLICT DO NOTHING /
+  DELETE), `MutedChannelIDs(userID)`; `Unreads` gains `AND NOT EXISTS (SELECT 1 FROM channel_mutes cm
+  WHERE cm.channel_id=c.id AND cm.user_id=$1)` so muted channels never surface as unread.
+- **Router:** `POST`/`DELETE /channels/{id}/mute` (access-gated via `CanAccessChannel` — a non-member
+  gets 403, can't mute someone else's private channel) and `GET /me/muted-channels` → `[]int64`.
+- **Web:** `api.ts` `muteChannel`/`unmuteChannel`/`fetchMutedChannels`; `Chat.tsx` tracks a `muted`
+  Set, fetches it on load, a header **mute/unmute** toggle for the current channel, and a 🔕 dim on
+  muted sidebar channels. The unread/tab badges need NO change — the server already excludes muted.
+- **QA:** store/integration test (mute excludes from Unreads; access-gated mute is 403 for a non-member;
+  unmute restores) + browser `mute → header toggle flips` + realtime two-client (B mutes the server
+  channel → A posts → B gets NO unread dot/tab badge; unmute → it returns).
+- **Verify:** go test + full browser/realtime/voice QA green, ship + railway up + rollout-verify.

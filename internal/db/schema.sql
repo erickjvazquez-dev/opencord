@@ -115,6 +115,14 @@ CREATE TABLE IF NOT EXISTS channel_reads (
     PRIMARY KEY (user_id, channel_id)
 );
 
+-- Per-channel notification mute (v0.5): a row here means userID muted channelID — it's
+-- excluded from their unread results (sidebar dots, mention badges, browser-tab badge).
+CREATE TABLE IF NOT EXISTS channel_mutes (
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_id BIGINT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, channel_id)
+);
+
 -- Servers / guilds (v0.2): channels can be grouped under a named server with its own
 -- membership. A channel with server_id IS NULL stays a global public room (the current
 -- behaviour); a channel with a server_id is visible only to that server's members.

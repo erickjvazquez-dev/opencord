@@ -44,6 +44,8 @@ import {
   setMyPresence,
   fetchUnreads,
   markChannelRead,
+  fetchMutedChannels,
+  setChannelMuted,
 } from '../api'
 import type {
   Channel,
@@ -228,6 +230,9 @@ export function Chat({
   // Unread channels → unread @-mention count (0 = unread, no mention). Sidebar dots +
   // red mention badges. Synced on load + a ~10s poll.
   const [unread, setUnread] = useState<Map<number, number>>(new Map())
+  // Channels the caller has muted: excluded from unread/mention/tab badges (server-side),
+  // dimmed in the sidebar, and reflected by the header mute toggle.
+  const [mutedChannels, setMutedChannels] = useState<Set<number>>(new Set())
   // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
@@ -1293,7 +1298,7 @@ export function Chat({
   const channelButton = (c: Channel) => (
     <button
       key={c.id}
-      className={`channel-item server-channel${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}`}
+      className={`channel-item server-channel${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}${mutedChannels.has(c.id) ? ' muted' : ''}`}
       onClick={() => selectChannel(c.id)}
     >
       <span className="hash">#</span>
@@ -1446,12 +1451,40 @@ export function Chat({
         .then((cs) => live && setUnread(new Map(cs.map((c) => [c.id, c.mentions]))))
         .catch(() => {})
     void load()
+    void fetchMutedChannels(token)
+      .then((ids) => live && setMutedChannels(new Set(ids)))
+      .catch(() => {})
     const timer = setInterval(load, 10000)
     return () => {
       live = false
       clearInterval(timer)
     }
   }, [token])
+
+  // Mute/unmute a channel for myself: optimistic toggle, then persist + refetch unreads so
+  // a now-muted channel's dot clears (or a now-unmuted one reappears) immediately.
+  const toggleChannelMute = async (id: number) => {
+    const willMute = !mutedChannels.has(id)
+    setMutedChannels((prev) => {
+      const next = new Set(prev)
+      if (willMute) next.add(id)
+      else next.delete(id)
+      return next
+    })
+    try {
+      await setChannelMuted(token, id, willMute)
+      const cs = await fetchUnreads(token)
+      setUnread(new Map(cs.map((c) => [c.id, c.mentions])))
+    } catch {
+      // Roll back the optimistic toggle on failure.
+      setMutedChannels((prev) => {
+        const next = new Set(prev)
+        if (willMute) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    }
+  }
 
   // Browser tab badge (Discord-style): reflect unread/mention state in document.title so
   // a backgrounded tab signals activity — "(N) • Opencord" when you have @mentions, a
@@ -1578,7 +1611,7 @@ export function Chat({
           {channels.map((c) => (
             <button
               key={c.id}
-              className={`channel-item${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}`}
+              className={`channel-item${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}${mutedChannels.has(c.id) ? ' muted' : ''}`}
               onClick={() => selectChannel(c.id)}
             >
               <span className="hash">#</span>
@@ -1598,7 +1631,7 @@ export function Chat({
           {dms.map((d) => (
             <button
               key={d.id}
-              className={`channel-item${d.id === channelId ? ' active' : ''}${isUnread(d.id) ? ' unread' : ''}`}
+              className={`channel-item${d.id === channelId ? ' active' : ''}${isUnread(d.id) ? ' unread' : ''}${mutedChannels.has(d.id) ? ' muted' : ''}`}
               onClick={() => selectChannel(d.id)}
             >
               <Avatar token={token} userId={d.user.id} username={d.user.username} className="dm-avatar" />
@@ -1740,6 +1773,20 @@ export function Chat({
           {channelId != null && (
             <button className="link pins-open" onClick={() => void openPins()}>
               pins
+            </button>
+          )}
+          {channelId != null && (
+            <button
+              className="link channel-mute-toggle"
+              onClick={() => void toggleChannelMute(channelId)}
+              title={
+                mutedChannels.has(channelId)
+                  ? 'Unmute this channel (show its notifications again)'
+                  : 'Mute this channel (no unread/mention/tab badges)'
+              }
+              data-muted={mutedChannels.has(channelId)}
+            >
+              {mutedChannels.has(channelId) ? '🔕 muted' : '🔔 mute'}
             </button>
           )}
           {channelId != null && !inCall && (

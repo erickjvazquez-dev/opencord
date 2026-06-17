@@ -868,6 +868,27 @@ async function main() {
     'activity restores the self presence pip to online',
   )
 
+  // 7d5 — Channel mute: the header toggle mutes/unmutes the current channel and dims it
+  // in the sidebar. (The actual unread-badge suppression is proven two-client in
+  // realtime.mjs; here we verify the toggle UI + the sidebar dim round-trip.)
+  step('mute the current channel via the header toggle → muted state + sidebar dim')
+  const muteToggle = page.locator('.channel-mute-toggle')
+  check((await muteToggle.getAttribute('data-muted')) === 'false', 'the channel starts unmuted')
+  await muteToggle.click()
+  await page.locator('.channel-mute-toggle[data-muted="true"]').waitFor({ timeout: 8000 })
+  check((await muteToggle.getAttribute('data-muted')) === 'true', 'the header toggle flips to muted')
+  check(
+    (await page.locator('.channel-item.server-channel.muted').count()) > 0,
+    'the muted channel is dimmed in the sidebar',
+  )
+  await shot('07d5-channel-muted.png')
+  await muteToggle.click() // unmute again (clean up so later steps see normal state)
+  await page.locator('.channel-mute-toggle[data-muted="false"]').waitFor({ timeout: 8000 })
+  check(
+    (await muteToggle.getAttribute('data-muted')) === 'false',
+    'unmuting flips the toggle back',
+  )
+
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
   await page.getByRole('button', { name: 'make read-only' }).click()

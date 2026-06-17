@@ -441,6 +441,33 @@ async function main() {
     `reading everything clears B's tab badge (got "${await b.title()}")`,
   )
 
+  // 7d — Channel mute: B mutes the server channel (B is viewing it), then goes to #general;
+  // A posts → B gets NO unread dot/badge and the tab title stays clear (mute suppresses it).
+  step('B mutes the server channel → A posts → no unread dot/tab badge for B')
+  await b.locator('.channel-mute-toggle').click() // B is viewing srvChan → mutes it
+  await b.locator('.channel-mute-toggle[data-muted="true"]').waitFor({ timeout: 8000 })
+  await b.locator('.channel-list .channel-item', { hasText: 'general' }).first().click() // away
+  await b.getByPlaceholder('Message #general').waitFor({ timeout: 8000 })
+  const mutedPing = 'muted ping ' + sfx
+  await a.getByPlaceholder(new RegExp('Message #' + srvChan)).fill(mutedPing)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(mutedPing).waitFor({ timeout: 8000 })
+  await b.waitForTimeout(12000) // wait out the ~10s unread poll — prove the dot never appears
+  check(
+    (await bSrvChanBtn.locator('.unread-dot').count()) === 0 &&
+      (await bSrvChanBtn.locator('.mention-badge').count()) === 0,
+    'a muted channel shows NO unread dot/badge even after a new message',
+  )
+  check((await b.title()) === 'Opencord', 'a muted channel does not badge the tab title')
+  // Open it (still muted), then unmute via the toggle so later steps see normal state.
+  await bSrvChanBtn.click()
+  await b.locator('.channel-mute-toggle[data-muted="true"]').click() // unmute
+  await b.locator('.channel-mute-toggle[data-muted="false"]').waitFor({ timeout: 8000 })
+  check(
+    (await b.locator('.channel-mute-toggle').getAttribute('data-muted')) === 'false',
+    'unmuting the channel flips the header toggle back',
+  )
+
   // 7h — Timeout (moderation): A (owner) temporarily mutes B, then clears it. B stays a
   // member (the ban below still has a target). The "muted member can't post" guarantee is
   // proven server-side by the Go integration test; here we verify the timeout UI — the

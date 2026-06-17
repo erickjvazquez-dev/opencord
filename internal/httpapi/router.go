@@ -118,6 +118,49 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				w.WriteHeader(http.StatusNoContent)
 			})
+			// Mute / unmute a channel for myself — a muted channel stops surfacing as
+			// unread (sidebar dot, mention badge, tab badge). Access-gated (Rule B/C: you
+			// can only mute a channel you can read; identity from the JWT, never the body).
+			r.Post("/channels/{id}/mute", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				if ok, err := store.CanAccessChannel(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				if err := store.MuteChannel(r.Context(), id, me.ID); err != nil {
+					http.Error(w, `{"error":"could not mute"}`, http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
+			r.Delete("/channels/{id}/mute", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				if err := store.UnmuteChannel(r.Context(), id, me.ID); err != nil {
+					http.Error(w, `{"error":"could not unmute"}`, http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
+			// The channels I've muted (so the client renders the muted dim + toggle state).
+			r.Get("/muted-channels", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				ids, err := store.MutedChannelIDs(r.Context(), me.ID)
+				if err != nil {
+					http.Error(w, `{"error":"could not load muted channels"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"channels": ids})
+			})
 			// Update a server channel — posting policy ('everyone'|'admins') and/or
 			// topic. Admins only. Fields are optional (pointers): each is applied only
 			// when present, so old {postPolicy} clients keep working.

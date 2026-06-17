@@ -226,6 +226,22 @@ export async function markChannelRead(token: string, channelId: number): Promise
   }).catch(() => {})
 }
 
+// The ids of channels the caller has muted (a muted channel never shows unread/mention/tab badges).
+export async function fetchMutedChannels(token: string): Promise<number[]> {
+  const res = await fetch('/api/muted-channels', { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return []
+  const data = (await res.json()) as { channels?: number[] }
+  return data.channels ?? []
+}
+
+// Mute or unmute a channel for the caller (POST = mute, DELETE = unmute).
+export async function setChannelMuted(token: string, channelId: number, muted: boolean): Promise<void> {
+  await fetch(`/api/channels/${channelId}/mute`, {
+    method: muted ? 'POST' : 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
 // Set the caller's own custom status + optional emoji ("" clears each). The server
 // trims + caps both.
 export async function setMyStatus(token: string, status: string, statusEmoji = ''): Promise<void> {

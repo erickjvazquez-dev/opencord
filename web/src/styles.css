@@ -339,6 +339,11 @@ button:disabled {
   color: var(--text);
 }
 
+/* A muted channel is dimmed (Discord-style) — it still shows, just de-emphasised, and
+   its unread/mention badges are suppressed server-side. The active channel stays full. */
+.channel-item.muted:not(.active) {
+  opacity: 0.55;
+}
 .channel-item.active {
   background: var(--bg-input);
   color: #fff;

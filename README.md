@@ -107,6 +107,9 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `PATCH`  | `/api/channels/{id}`           | bearer | Channel settings `{postPolicy?, topic?, slowmodeSeconds?}` (admin) |
 | `POST`   | `/api/channels/{id}/read`      | bearer | Mark a channel read (clears its unread/mention badge) |
 | `GET`    | `/api/unreads`                 | bearer | Your channels with unread + @mention counts    |
+| `POST`   | `/api/channels/{id}/mute`      | bearer | Mute a channel (stops its unread/mention/tab badge) |
+| `DELETE` | `/api/channels/{id}/mute`      | bearer | Unmute a channel                               |
+| `GET`    | `/api/muted-channels`          | bearer | Ids of the channels you've muted               |
 | `GET`    | `/api/dms`                     | bearer | List your direct-message channels              |
 | `POST`   | `/api/dms`                     | bearer | Open/get a DM with `{username}`                |
 | `GET`    | `/api/servers`                 | bearer | List servers you belong to                     |

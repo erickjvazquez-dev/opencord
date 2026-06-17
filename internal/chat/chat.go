@@ -804,6 +804,43 @@ func (s *Store) MarkChannelRead(ctx context.Context, channelID, userID int64) er
 	return err
 }
 
+// MuteChannel mutes channelID for userID — it stops surfacing as unread (Unreads excludes
+// it). Idempotent. The caller is responsible for the access check (you can only mute a
+// channel you can read).
+func (s *Store) MuteChannel(ctx context.Context, channelID, userID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO channel_mutes (user_id, channel_id) VALUES ($1, $2)
+		 ON CONFLICT (user_id, channel_id) DO NOTHING`, userID, channelID)
+	return err
+}
+
+// UnmuteChannel removes userID's mute on channelID. Idempotent (a no-op if not muted).
+func (s *Store) UnmuteChannel(ctx context.Context, channelID, userID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM channel_mutes WHERE user_id = $1 AND channel_id = $2`, userID, channelID)
+	return err
+}
+
+// MutedChannelIDs returns the ids of every channel userID has muted, so the client can
+// render the muted state (a 🔕 dim + the right header toggle).
+func (s *Store) MutedChannelIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT channel_id FROM channel_mutes WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // ChannelUnread is one channel's unread state for a user: the channel is unread (it's
 // only returned when it has unread messages) and Mentions counts the unread messages
 // that @-mention the user (incl. @everyone/@here) — drives the red mention badge.
@@ -843,6 +880,10 @@ func (s *Store) Unreads(ctx context.Context, userID int64, username string) ([]C
 		                SELECT 1 FROM channel_members m
 		                 WHERE m.channel_id = c.id AND m.user_id = $1))
 		        )
+		    -- A muted channel never surfaces as unread (sidebar dot, mention badge, tab badge).
+		    AND NOT EXISTS (
+		          SELECT 1 FROM channel_mutes cm
+		           WHERE cm.channel_id = c.id AND cm.user_id = $1)
 		  GROUP BY c.id`, userID, pattern)
 	if err != nil {
 		return nil, err

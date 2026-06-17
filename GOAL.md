@@ -444,7 +444,13 @@ item from here as the structural milestones above land.
   @mentions (N = the count), `● Opencord` for plain unreads, plain `Opencord` when all
   read; excludes the channel you're viewing; resets on logout. Reuses the existing unread
   map (no new state/endpoint); two-client realtime QA asserts the three title states.
-  Per-channel/server mute · DM notifications · web push TODO
+  **Per-channel mute DONE (iter 139)** — mute a noisy channel and it stops surfacing as unread: a
+  `channel_mutes(user_id, channel_id)` table + `Unreads` gains `NOT EXISTS (channel_mutes)`, so the
+  sidebar dots, mention badges, AND the tab badge ALL vanish from one server-side change.
+  `POST`/`DELETE /channels/{id}/mute` (access-gated, Rule B/C) + `GET /me/muted-channels`; a header
+  🔔/🔕 toggle + a sidebar dim. Store integration test (excludes from Unreads, per-user, idempotent,
+  reversible) + browser toggle + two-client realtime (B mutes → A posts → B gets NO dot/tab badge).
+  Server-level mute · DM notifications · web push TODO
 
 ### Platform / Integrations
 - [ ] Bot/API + webhooks + slash commands · OAuth2 app authorization
