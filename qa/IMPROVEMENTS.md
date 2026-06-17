@@ -2990,3 +2990,26 @@ receiver-RMS primitive could guard future audio features (noise gate, per-peer i
 **Carry (loop-process):** find → reflect → open a GOAL item → next tick close it. The tick-143 reflection
 became a one-line GOAL item that made tick 144 obvious and surgical. Keep that find→item→close cadence —
 it turns vague "improve QA" into a concrete queue.
+
+## 2026-06-17 (tick 145) — receiver-silence trio complete (mute/deafen/PTT) + UI vision pass
+
+Finished the GOAL item from tick 143: deafen + PTT now also prove peer-side silence via `measureRms`
+(deafen 0.31→0.0000→0.30; PTT idle 0.0000→held 0.31). All three audio-gating guarantees are verified
+where it matters — the listener's ears — not just a DOM flag. The receiver-RMS primitive (built tick
+143) paid off across three ticks: input-volume, mute, deafen, PTT all proven with one helper.
+
+**Also this tick:** AI-vision pass on the actual UI (main chat, server+member-list, mobile drawer)
+looking for the owner's "feels like Discord" polish gaps — found NONE worth fixing. The member-list
+truncation that looked aggressive is correct responsive ellipsis (only the 12-char QA names truncate; a
+normal username fits). **Held the line on Rule 10** — did not manufacture cosmetic churn; pivoted to the
+objective QA completion instead.
+
+**Highest-value NEXT improvement (ROTATION):** three ticks on voice/QA — voice is now well-hardened.
+Next tick should rotate to **visible Discord parity** (the owner's TOP priority): advance **Video slice
+2** (parallel `cameraStream` so screen + camera coexist — the next TOP-PRIORITY partial) or pick a
+high-visibility parity feature. The per-component rotation says favor the component furthest from its
+north star; audio/QA is now strong, UI-features is the gap.
+
+**Carry (loop-process):** an AI-vision pass that finds nothing is a VALID, valuable tick outcome — it
+prevents churn. "Looked, it's clean, did the objective thing instead" is the right call, not a failure
+to find work.
