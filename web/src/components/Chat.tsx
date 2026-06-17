@@ -216,6 +216,12 @@ export function Chat({
   // The caller's own chosen presence (online|idle|dnd|invisible), synced from their
   // own member-list row (which reports the true self state).
   const [myPresence, setMyPresence_] = useState('online')
+  // Auto-idle: refs the inactivity timer reads/writes without re-subscribing. `auto`
+  // tracks whether the CURRENT idle was set by us (so activity restores online) vs a
+  // manual idle (which we must not override).
+  const myPresenceRef = useRef(myPresence)
+  myPresenceRef.current = myPresence
+  const autoIdledRef = useRef(false)
   // User Settings overlay (⚙ in the header). Houses the account controls — avatar,
   // custom status + emoji, presence — that used to live scattered in the header.
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -1179,8 +1185,10 @@ export function Chat({
   }
 
   // Change my presence (online|idle|dnd|invisible). Optimistically update the picker,
-  // then refresh the member list so the dot recolors immediately.
-  const changePresence = async (next: string) => {
+  // then refresh the member list so the dot recolors immediately. `auto` marks an
+  // automatic (inactivity) change; a manual change cancels auto-idle restoration.
+  const changePresence = async (next: string, auto = false) => {
+    if (!auto) autoIdledRef.current = false
     const prev = myPresence
     setMyPresence_(next)
     try {
@@ -1191,9 +1199,43 @@ export function Chat({
       }
     } catch (err) {
       setMyPresence_(prev)
-      window.alert(err instanceof Error ? err.message : 'could not set presence')
+      if (!auto) window.alert(err instanceof Error ? err.message : 'could not set presence')
     }
   }
+  // Always-fresh reference for the inactivity timer (avoids a stale-closure presence).
+  const changePresenceRef = useRef(changePresence)
+  changePresenceRef.current = changePresence
+
+  // Auto-idle (Discord-style): after a stretch of no activity, drop online → idle; on
+  // the next activity restore online. Never overrides a manual idle/dnd/invisible — it
+  // only transitions a presence WE set automatically. The threshold is overridable via
+  // window.__ocIdleMs (browser QA shortens it; defaults to 10 min like Discord).
+  useEffect(() => {
+    if (!token) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const onActivity = () => {
+      if (autoIdledRef.current) {
+        autoIdledRef.current = false
+        void changePresenceRef.current('online', true)
+      }
+      if (timer) clearTimeout(timer)
+      // Read the threshold on each re-arm so it can be tuned live (browser QA shortens it).
+      const idleMs = (window as unknown as { __ocIdleMs?: number }).__ocIdleMs ?? 10 * 60 * 1000
+      timer = setTimeout(() => {
+        if (myPresenceRef.current === 'online') {
+          autoIdledRef.current = true
+          void changePresenceRef.current('idle', true)
+        }
+      }, idleMs)
+    }
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel']
+    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true }))
+    onActivity() // arm the timer now
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, onActivity))
+      if (timer) clearTimeout(timer)
+    }
+  }, [token])
 
   // Create a channel, optionally inside a category (categoryId).
   const addServerChannel = async (serverId: number, categoryId?: number) => {

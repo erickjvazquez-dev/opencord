@@ -839,6 +839,35 @@ async function main() {
   await page.getByRole('button', { name: 'close settings' }).click()
   await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
 
+  // 7d4 — Auto-idle (presence): with the threshold shortened, a quiet stretch flips the
+  // self presence pip online → idle (amber); the next activity restores online. The pip
+  // lives on the header user chip and reflects myPresence everywhere.
+  step('auto-idle: inactivity → presence idle; activity → online')
+  // Shorten the idle threshold, then a single activity re-arms the timer at the new value.
+  await page.evaluate(() => {
+    window.__ocIdleMs = 1500
+  })
+  await page.mouse.move(4, 4)
+  // Stay quiet (no input events) past the threshold → auto-idle should fire.
+  await page.locator('.self-chip-pip.presence-idle').waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.self-chip-pip.presence-idle').isVisible(),
+    'after inactivity the self presence pip turns idle (amber)',
+  )
+  await shot('07d4-auto-idle.png')
+  // Activity → auto-restore to online. Restore a long threshold first so later steps
+  // (which have their own waits) are never auto-idled.
+  await page.evaluate(() => {
+    window.__ocIdleMs = 9_999_999
+  })
+  await page.mouse.move(20, 20)
+  await page.mouse.move(40, 40)
+  await page.locator('.self-chip-pip.presence-online').waitFor({ timeout: 8000 })
+  check(
+    await page.locator('.self-chip-pip.presence-online').isVisible(),
+    'activity restores the self presence pip to online',
+  )
+
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
   await page.getByRole('button', { name: 'make read-only' }).click()

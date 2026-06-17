@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 136) — Auto-idle; choosing value/risk when the obvious wins are done, + a clean test hook for timers
+
+Shipped **auto-idle presence** (online→idle on inactivity, restore on activity). **Component: presence
++ UI.** The interesting part this tick was the DECISION, not the code. After ~7 feature ticks the
+TOP-PRIORITY UI list is substantially delivered, and the literal remaining sub-items were all poor
+value/risk: input mic-gain (niche setting, a 2nd consecutive voice-pipeline refactor right after last
+tick's transceiver bug), video slice 2 (niche screen+camera-at-once, changes the working `ontrack`
+classification), and radius-normalization (measured 27 hardcoded radii — but unifying them would
+visibly ALTER the established, fine-looking design = churn by my own iter-133 rule). **Lesson — "advance
+the priority each tick" does NOT mean "force the next literal checkbox even when it's low-value or
+risky." When the obvious high-value/low-risk wins in a priority area are done, the right move is the
+highest value-per-risk REAL feature, and to write down WHY the riskier checkboxes were deferred (so the
+deferral is a decision, not avoidance). Forcing a niche pipeline refactor just to tick a box is how you
+ship regressions for no user benefit.**
+
+QA-technique win: **a live-tunable threshold makes a long timer testable without faking time.** Auto-idle
+fires after ~10 min — untestable directly. Instead of mocking timers, the code reads
+`window.__ocIdleMs` on each re-arm, so the browser QA sets it to 1500ms, does ONE activity to re-arm,
+stays quiet (Playwright's `waitFor` polls via CDP and generates NO input events, so "quiet" is real),
+asserts the amber pip, then sets it huge again so later steps with their own waits never auto-idle.
+**Lesson — for time-threshold features, expose the threshold as a live-read tunable (not a mount-time
+constant) so a test can shorten it for one window and restore it; and lean on the fact that
+Playwright's waiting is event-silent to simulate genuine inactivity.**
+
+**Next QA-growth target:** `voiceSettings.ts` (localStorage layer under devices/DSP/output-volume/camera)
+has ZERO unit tests despite being load-bearing for 4 features — add vitest for its defaults, clamping,
+and the readBool('0') semantics next low-risk tick.
+
 ## 2026-06-17 (iter 135) — Video calling; the two-client QA caught a real WebRTC bug a single client never could
 
 Shipped **mesh video calling (camera) — slice 1**, the biggest remaining Discord-parity feature, by

@@ -390,7 +390,13 @@ item from here as the structural milestones above land.
   (header `<select>`); `users.presence_state`, effective-presence rule (others see
   invisible/disconnected as offline, you see your own true state — pure unit-tested),
   `PUT /me/presence`; member-list dot colored green/amber/red/grey in both panels.
-  Store+http+browser tested, AI-vision verified (red DnD dot). Auto-idle-on-inactivity TODO
+  Store+http+browser tested, AI-vision verified (red DnD dot). **Auto-idle-on-inactivity DONE
+  (iter 136)** — a frontend inactivity timer (mousemove/key/wheel/touch; ~10min, like Discord)
+  drops `online → idle` after a quiet stretch and restores `online` on the next activity; it ONLY
+  transitions a presence the timer itself set (a manual idle/dnd/invisible is never overridden — a
+  manual change cancels auto-restore). No backend (reuses `PUT /me/presence`). The threshold is
+  live-tunable via `window.__ocIdleMs` so browser QA `07d4` shortens it: quiet → the self pip turns
+  amber (idle), activity → online; AI-vision verified the amber pip on the header chip + member list.
 
 ### Roles & Permissions
 - [ ] Roles (hierarchy, colors, icons, mentionable)
