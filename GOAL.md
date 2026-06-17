@@ -362,6 +362,9 @@ item from here as the structural milestones above land.
 - [x] Discord-style header timestamp (iter 148) — message headers now read "Today at 9:31 AM"
   (`messageTimestamp` = relative day + compact time, no seconds) across the main list, search results,
   and pins; unit-tested + browser QA asserts the format + AI-vision verified.
+- [x] "Start of channel" intro (iter 149) — Discord-style welcome block atop every channel/DM
+  scrollback (round #/@ icon + "Welcome to #general!" + "This is the start of the #general channel.";
+  DM variant); browser QA asserts it + AI-vision verified (composes with the Today divider).
 - [ ] Custom emoji · stickers · GIF picker
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe

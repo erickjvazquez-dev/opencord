@@ -2459,6 +2459,21 @@ export function Chat({
               ))}
             </div>
           )}
+          {membersOf === null && searchResults === null && pins === null && (
+            <div className="channel-intro">
+              <div className="channel-intro-icon" aria-hidden>
+                {activeDM ? '@' : '#'}
+              </div>
+              <h2 className="channel-intro-title">
+                {activeDM ? activeDM.user.username : `Welcome to #${activeChannelName ?? ''}!`}
+              </h2>
+              <p className="channel-intro-sub">
+                {activeDM
+                  ? `This is the beginning of your direct message history with @${activeDM.user.username}.`
+                  : `This is the start of the #${activeChannelName ?? ''} channel.`}
+              </p>
+            </div>
+          )}
           {membersOf === null &&
             searchResults === null &&
             pins === null &&

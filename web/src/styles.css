@@ -657,6 +657,34 @@ button:disabled {
   gap: 14px;
 }
 
+/* Discord-style "start of channel" intro at the top of the scrollback. */
+.channel-intro {
+  padding: 16px 4px 8px;
+}
+.channel-intro-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--bg-elevated, #2b2d31);
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.channel-intro-title {
+  margin: 0 0 4px;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.channel-intro-sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
 /* Discord-style day divider: the date centered on a hairline rule between days. */
 .day-divider {
   display: flex;

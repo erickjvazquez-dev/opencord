@@ -1885,3 +1885,17 @@ seconds; it shows "Today at 8:53 AM". Now consistent with the compact gutter `sh
   timeout-deadline string is left as-is (different semantic).
 - **QA:** browser asserts the header reads `^Today at H:MM` with no `H:MM:SS`; AI-vision verified.
 - **Verify:** tsc + vitest (31/31) + full QA green + AI-vision; ship + `railway up` + rollout-verify.
+
+## "Start of channel" intro (v0.5 — messaging parity)
+
+**Why:** Discord shows a welcome block at the top of every channel/DM scrollback ("Welcome to
+#general! · This is the start of the #general channel."). Opencord's list started cold at the first
+message. Most visible on a freshly created channel/DM (empty → it's all you see). Client-only.
+
+- **`Chat.tsx`:** above the message map (same `membersOf/searchResults/pins === null` guard), a
+  `.channel-intro` block — a round `#`/`@` icon + title + subtitle. DM variant: "@username" +
+  "This is the beginning of your direct message history with @username."
+- **`styles.css`:** `.channel-intro*` — 68px round elevated icon, 28px bold title, muted subtitle.
+- **QA:** browser asserts `.channel-intro` renders with "Welcome to #general" + "start of the #general
+  channel"; AI-vision verified the block (icon + title + subtitle, sits above the Today divider).
+- **Verify:** tsc + full QA green + AI-vision; ship + `railway up` + rollout-verify.

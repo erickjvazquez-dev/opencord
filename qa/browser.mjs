@@ -125,6 +125,14 @@ async function main() {
     /^Today at \d{1,2}:\d{2}/.test(headTime) && !/:\d{2}:\d{2}/.test(headTime),
     `header time is "Today at H:MM" with no seconds (got "${headTime}")`,
   )
+  // Discord-style "start of channel" intro sits at the top of the scrollback.
+  const intro = page.locator('.channel-intro')
+  check(await intro.isVisible(), 'channel intro renders at the top of the message list')
+  const introTxt = ((await intro.textContent()) ?? '').trim()
+  check(
+    introTxt.includes('Welcome to #general') && introTxt.includes('start of the #general channel'),
+    `intro welcomes the channel (got "${introTxt.slice(0, 80)}")`,
+  )
 
   // 3a — A second message from the same author groups (no repeated avatar/name).
   step('send a second message → it groups under the first')
