@@ -306,6 +306,7 @@ async function main() {
   // chip; undeafen restores. Verified by reading the elements' .muted directly.
   step('deafen: mutes every remote audio + flags self chip; undeafen restores')
   const deafenBtn = a.locator('.voice-deafen')
+  const rmsBeforeDeafen = await measureRms(b, aIdOnB)
   await deafenBtn.click()
   check((await deafenBtn.getAttribute('data-deafened')) === 'true', 'deafen toggles on')
   const allMuted = await a.evaluate(() =>
@@ -317,12 +318,26 @@ async function main() {
     'self chip shows "deafened"',
   )
   await a.screenshot({ path: join(SHOTS, 'voice-05-deafened.png') })
+  // Deafen ALSO forces your mic off ("silence everyone, also mutes your mic") — prove
+  // the peer stops hearing A, not just that A stops hearing others.
+  await new Promise((r) => setTimeout(r, 1300))
+  const rmsDeafened = await measureRms(b, aIdOnB)
+  check(
+    rmsBeforeDeafen - rmsDeafened > 0.003 && rmsDeafened < rmsBeforeDeafen * 0.5,
+    `deafen also silences A's mic on B (before ${rmsBeforeDeafen.toFixed(4)} → deafened ${rmsDeafened.toFixed(4)})`,
+  )
   await deafenBtn.click()
   check((await deafenBtn.getAttribute('data-deafened')) === 'false', 'undeafen toggles off')
   const noneMuted = await a.evaluate(() =>
     [...document.querySelectorAll('audio[data-voice-audio]')].every((au) => !au.muted),
   )
   check(noneMuted, 'undeafen unmutes every remote audio element')
+  await new Promise((r) => setTimeout(r, 1300))
+  const rmsUndeafened = await measureRms(b, aIdOnB)
+  check(
+    rmsUndeafened - rmsDeafened > 0.003 && rmsUndeafened > 0.003,
+    `undeafen restores A's mic on B (deafened ${rmsDeafened.toFixed(4)} → ${rmsUndeafened.toFixed(4)})`,
+  )
 
   // The voice bar is dense (roster + speaking ring + volume + 2 device selectors +
   // mute/deafen/leave); guard that it wraps cleanly on a phone instead of clipping.
@@ -348,9 +363,21 @@ async function main() {
   check((await talk.count()) > 0, 'PTT on shows the Hold-to-talk button')
   check((await a.locator('.voice-mute').count()) === 0, 'PTT on hides the mute button')
   check((await talk.getAttribute('data-transmitting')) === 'false', 'not transmitting until held')
+  // PTT on + not held = mic gated off → the peer must hear silence (prove on B, not
+  // just the data-transmitting flag).
+  await new Promise((r) => setTimeout(r, 1300))
+  const rmsPttIdle = await measureRms(b, aIdOnB)
+  check(rmsPttIdle < 0.02, `PTT on + not held → B hears ~silence from A (RMS ${rmsPttIdle.toFixed(4)})`)
   await talk.dispatchEvent('pointerdown')
   check((await talk.getAttribute('data-transmitting')) === 'true', 'holding Talk transmits')
   await a.screenshot({ path: join(SHOTS, 'voice-05-ptt-talking.png') })
+  // Holding Talk opens the mic → the peer hears A again.
+  await new Promise((r) => setTimeout(r, 1300))
+  const rmsPttHeld = await measureRms(b, aIdOnB)
+  check(
+    rmsPttHeld - rmsPttIdle > 0.003 && rmsPttHeld > 0.003,
+    `holding Talk opens A's mic on B (idle ${rmsPttIdle.toFixed(4)} → held ${rmsPttHeld.toFixed(4)})`,
+  )
   await talk.dispatchEvent('pointerup')
   check((await talk.getAttribute('data-transmitting')) === 'false', 'releasing Talk stops transmitting')
 

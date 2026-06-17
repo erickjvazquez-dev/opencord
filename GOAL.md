@@ -491,13 +491,14 @@ item from here as the structural milestones above land.
   (exit 0) rather than false-red. Proven to catch a "match-all" regression (operators
   silently ignored → 5 of 7 assertions trip); green on prod (7 msgs) and on the local
   gate (14 msgs).
-- [~] **Prove mute/PTT/deafen by RECEIVER silence (not just the UI label)** — **MUTE DONE (iter 144):**
-  `qa/voice.mjs` now proves two-client that A muting drops B's decoded inbound RMS for A from audible to
-  **0.0000** and unmute restores it (~0.31) — the "am I really muted?" guarantee is now verified at the
-  peer, not just the self-chip label (also reconfirms slice-3d's capture gain node didn't break mute).
-  Reuses the `measureRms(page, audioId)` helper (decoded inbound RMS via an AnalyserNode). **Still TODO:**
-  the same receiver-silence proof for **PTT** (releasing Talk → B hears silence; holding → audible) and
-  **deafen** (deafen forces A's mic off → B hears silence).
+- [x] **Prove mute/PTT/deafen by RECEIVER silence (not just the UI label)** — DONE (iters 144–145):
+  `qa/voice.mjs` proves all three audio-gating guarantees two-client via the `measureRms(page, audioId)`
+  helper (decoded inbound RMS through an AnalyserNode), each measured at B for A's track:
+  **mute** 0.31 → **0.0000** → 0.24 (unmute); **deafen** ("also mutes your mic") 0.31 → **0.0000** →
+  0.30 (undeafen); **PTT** idle (on, not held) **0.0000** → held 0.31. The silenced state is exactly
+  0.0000 (true silence at the peer), so "the UI says muted" is now "the peer provably hears nothing" —
+  the most safety-critical voice guarantee. Also reconfirms slice-3d's capture gain node didn't break
+  any of them. The receiver-RMS primitive is now reusable for future audio features (noise gate, per-peer input).
 
 ---
 
