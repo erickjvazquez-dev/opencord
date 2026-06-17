@@ -7,6 +7,7 @@ import type {
   Message,
   Server,
   ServerBan,
+  ServerEmoji,
   ServerMember,
   User,
 } from './types'
@@ -397,6 +398,16 @@ export async function fetchServerChannels(token: string, serverId: number): Prom
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error('could not load server channels')
+  return res.json()
+}
+
+// List a server's custom emoji (members). Drives `:name:` → inline image rendering;
+// the names are server-scoped, so this is fetched per active server.
+export async function listServerEmoji(token: string, serverId: number): Promise<ServerEmoji[]> {
+  const res = await fetch(`/api/servers/${serverId}/emoji`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('could not load server emoji')
   return res.json()
 }
 

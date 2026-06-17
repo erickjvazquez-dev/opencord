@@ -5,14 +5,15 @@ import React, { type ReactNode } from 'react'
 // escapes all text and only a fixed set of safe tags/components is ever emitted:
 //
 //   ```fenced code```   `inline code`   **bold**   *italic*  _italic_
-//   ~~strike~~   ||spoiler||   @mention   and  > blockquote  lines
+//   ~~strike~~   ||spoiler||   @mention   :custom_emoji:   and  > blockquote  lines
 //
 // Anything else — including raw HTML like <script>…</script> — renders as literal
 // text (Rule B: treat message bodies as hostile; never inject markup from them).
 
-// ctx threads a key counter (siblings need unique keys) and the viewer's own
-// username (so a mention of them can be highlighted) through the recursion.
-type Ctx = { n: number; me?: string }
+// ctx threads a key counter (siblings need unique keys), the viewer's own username
+// (so a mention of them can be highlighted), and the current server's custom-emoji
+// map (name → emoji id) through the recursion.
+type Ctx = { n: number; me?: string; emoji?: ReadonlyMap<string, number> }
 
 // Spoiler — hidden until clicked (Discord-style). Content is React-escaped.
 function Spoiler({ children }: { children?: ReactNode }): React.ReactElement {
@@ -34,7 +35,7 @@ type InlineRule = {
   re: RegExp
   el?: string | React.ComponentType<{ children?: ReactNode }>
   literal?: boolean
-  kind?: 'mention' | 'link'
+  kind?: 'mention' | 'link' | 'emoji'
 }
 
 // Order matters: inline code first (its content is literal), then spoiler, then
@@ -51,6 +52,10 @@ const INLINE_RULES: InlineRule[] = [
   { re: /\*([^*\n]+)\*/, el: 'em' },
   { re: /_([^_\n]+)_/, el: 'em' },
   { re: /@([A-Za-z0-9_]{2,32})/, kind: 'mention' },
+  // Custom emoji `:slug:` — charset matches the backend's ValidEmojiName (lowercase
+  // a-z, 0-9, _; 2–32). The {2,} minimum means `::` never matches. It only becomes an
+  // image when the slug is in the current server's emoji map; otherwise it stays literal.
+  { re: /:([a-z0-9_]{2,32}):/, kind: 'emoji' },
 ]
 
 // renderInline applies the earliest matching inline rule and recurses into both the
@@ -94,6 +99,26 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
     // `mention-all` class distinguishes them in the DOM.
     const cls = isMe ? 'mention mention-me' : isAll ? 'mention mention-me mention-all' : 'mention'
     out.push(React.createElement('span', { key: `md${ctx.n++}`, className: cls }, '@' + name))
+  } else if (rule.kind === 'emoji') {
+    const name = m[1]
+    const id = ctx.emoji?.get(name)
+    if (id == null) {
+      // Unknown name (or no map) → leave the literal `:name:` text untouched. Emitting
+      // it here (not via `before`) means a later `:known:` in `after` still resolves.
+      out.push(m[0])
+    } else {
+      // React-elements only (no innerHTML): src is a fixed path with a numeric id, and
+      // the slug came from a strict [a-z0-9_] charset, so nothing is attacker-injectable.
+      out.push(
+        React.createElement('img', {
+          key: `md${ctx.n++}`,
+          className: 'emoji-inline',
+          src: `/api/emoji/${id}`,
+          alt: `:${name}:`,
+          title: `:${name}:`,
+        }),
+      )
+    }
   } else {
     const children = rule.literal ? [m[1]] : renderInline(m[1], ctx)
     out.push(React.createElement(rule.el as string, { key: `md${ctx.n++}` }, ...children))
@@ -160,9 +185,12 @@ function renderBlocks(text: string, ctx: Ctx): ReactNode[] {
 // parsing; their contents are literal.
 const FENCE = /```[^\n]*\n?([\s\S]*?)```/g
 
-export function renderMarkdown(text: string, opts?: { me?: string }): ReactNode {
+export function renderMarkdown(
+  text: string,
+  opts?: { me?: string; emoji?: ReadonlyMap<string, number> },
+): ReactNode {
   if (!text) return text
-  const ctx: Ctx = { n: 0, me: opts?.me }
+  const ctx: Ctx = { n: 0, me: opts?.me, emoji: opts?.emoji }
   const nodes: ReactNode[] = []
   let last = 0
   let m: RegExpExecArray | null

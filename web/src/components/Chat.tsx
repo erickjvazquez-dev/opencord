@@ -16,6 +16,7 @@ import {
   fetchChannels,
   fetchDMs,
   fetchServerChannels,
+  listServerEmoji,
   fetchPins,
   fetchServerMembers,
   fetchServers,
@@ -173,6 +174,10 @@ export function Chat({
   const [serverChannels, setServerChannels] = useState<Record<number, Channel[]>>({})
   // Per-server channel categories (Discord-style collapsible groups), keyed by server id.
   const [serverCategories, setServerCategories] = useState<Record<number, ChannelCategory[]>>({})
+  // Per-server custom-emoji maps (emoji name → id), keyed by server id and cached so we
+  // don't refetch on every channel switch within the same server. `:name:` only renders
+  // as an image when the name is in the ACTIVE server's map; #general and DMs have none.
+  const [serverEmoji, setServerEmoji] = useState<Record<number, Map<string, number>>>({})
   // Category ids the viewer has collapsed in the sidebar (client-only UI state).
   const [collapsedCats, setCollapsedCats] = useState<Set<number>>(new Set())
   const [channelId, setChannelId] = useState<number | null>(null)
@@ -1437,6 +1442,9 @@ export function Chat({
   const canPost = (!activeIsReadOnly || canModerate) && !iAmTimedOut
   // Pinning matches the server's rule: admins in a server channel, any member elsewhere.
   const canPin = !activeServerChannel || canModerate
+  // The active server's custom-emoji map (name → id), used to render `:name:` inline.
+  // Undefined for #general / DMs (no server) so `:name:` stays literal there.
+  const activeEmoji = activeServerId ? serverEmoji[Number(activeServerId)] : undefined
 
   // Load the persistent member list when viewing a server channel (Discord shows it
   // for servers, not DMs / the global channel). Polls so a member who joins/leaves or
@@ -1459,6 +1467,25 @@ export function Chat({
       clearInterval(timer)
     }
   }, [activeServerId, token])
+
+  // Fetch the active server's custom emoji once and cache it by server id (don't refetch
+  // on every channel switch within the same server). Drives `:name:` → inline image.
+  useEffect(() => {
+    if (!activeServerId) return
+    const sid = Number(activeServerId)
+    if (serverEmoji[sid]) return // already cached
+    let live = true
+    listServerEmoji(token, sid)
+      .then((list) => {
+        if (!live) return
+        const map = new Map(list.map((e) => [e.name, e.id]))
+        setServerEmoji((cur) => ({ ...cur, [sid]: map }))
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [activeServerId, token, serverEmoji])
 
   // Keep my own status label + emoji in sync from whichever member list includes me.
   useEffect(() => {
@@ -2421,7 +2448,7 @@ export function Chat({
                       <span className="author">{m.username}</span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji })}</div>
                   </div>
                 </div>
               ))}
@@ -2452,7 +2479,7 @@ export function Chat({
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
                     <div className="body">
-                      {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}
+                      {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji })}
                     </div>
                   </div>
                 </div>
@@ -2586,7 +2613,7 @@ export function Chat({
                       </button>
                     </div>
                   ) : (
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username })}</div>
+                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji })}</div>
                   )}
                   {!m.deleted && (m.attachments?.length ?? 0) > 0 && (
                     <AttachmentList token={token} attachments={m.attachments!} />

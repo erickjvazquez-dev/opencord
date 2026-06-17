@@ -63,6 +63,17 @@ export interface ServerMember {
   pronouns?: string
 }
 
+// A custom emoji owned by a server. Server-scoped: a `:name:` only renders as an
+// image when that name exists in the CURRENT server's set; the image bytes are served
+// (bearer-authed) from /api/emoji/{id}.
+export interface ServerEmoji {
+  id: number
+  serverId: number
+  name: string
+  createdBy: number
+  createdAt: string
+}
+
 // A banned user as shown to an admin in the bans list (server moderation).
 export interface ServerBan {
   userId: number

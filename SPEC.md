@@ -1924,3 +1924,23 @@ picker/upload UI.
   unauth 401. Witnessed passing on a real Postgres + the real router; build/vet/gofmt/full-suite green.
 - **Next:** slice 2 — client renders `:name:` as the emoji image (markdown + a server-emoji fetch);
   slice 3 — emoji picker + server-settings upload/delete UI.
+
+## Custom server emoji — client `:name:` rendering (v0.5, slice 2)
+
+**Why:** slice 1 shipped the backend; slice 2 makes `:name:` render as the emoji image in messages.
+Server-scoped: only renders for names in the CURRENT server's emoji set (literal text in #general/DMs).
+
+- **`api.ts`:** `listServerEmoji(token, serverId)` → `ServerEmoji[]`.
+- **`Chat.tsx`:** per-server emoji cache (`Record<serverId, Map<name,id>>`), fetched once per server,
+  empty for non-server views; the active map is threaded into all 3 `renderMarkdown` call sites.
+- **`markdown.tsx`:** new inline rule `:([a-z0-9_]{2,32}):` (matches backend `ValidEmojiName`) →
+  `React.createElement('img', {className:'emoji-inline', src:`/api/emoji/${id}`, alt/title:`:name:`})`
+  ONLY when `opts.emoji.get(name)` returns an id; unknown names stay literal (so a later known emoji
+  still resolves). **XSS-safe:** React elements only (no innerHTML), numeric-id src, strict charset.
+- **`styles.css`:** `.emoji-inline` 22×22 inline, baseline-aligned.
+- **Tests:** `markdown.test.tsx` (8 cases: known→img, unknown/empty/no-map→literal, bad-name/UPPER
+  literal, doesn't corrupt URLs/`::`, composes with bold). browser.mjs E2E: owner uploads an emoji via
+  the API → sends `:qa_emoji:` → asserts `img.emoji-inline` src `/api/emoji/{id}` + alt; screenshot.
+- **Verify (done):** tsc + vitest 39/39 + full QA green (no markdown regression across all message
+  types) + AI-vision (shortcode renders as an inline image); ship + `railway up` + rollout-verify.
+- **Next:** slice 3 — emoji picker (insert `:name:`) + server-settings upload/delete UI + live refetch.

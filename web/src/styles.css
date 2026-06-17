@@ -926,6 +926,13 @@ button:disabled {
   color: #d9a200;
   background: rgba(217, 162, 0, 0.18);
 }
+/* Inline custom emoji (`:name:` → /api/emoji/{id}); sized to sit on the text baseline. */
+.message .body .emoji-inline {
+  height: 22px;
+  width: 22px;
+  object-fit: contain;
+  vertical-align: -5px;
+}
 
 .edited {
   font-size: 11px;

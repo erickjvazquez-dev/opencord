@@ -665,6 +665,69 @@ async function main() {
   )
   await page.getByRole('button', { name: 'clear' }).click()
 
+  // 7i — Custom emoji: as the server owner, upload a custom emoji via the API (multipart
+  // POST /api/servers/{id}/emoji), then post `:qa_emoji:` in the server channel and assert
+  // it renders as an inline <img class="emoji-inline"> from /api/emoji/{id}. Server-scoped:
+  // the name only resolves to an image inside the server that owns it.
+  step('upload a custom emoji → :qa_emoji: renders as an inline image in the server channel')
+  // Do the upload in the page so it shares the origin + the token in localStorage. We
+  // pass the PNG as base64 and rebuild a Blob; the server derives the uploader from JWT.
+  const emojiUpload = await page.evaluate(async (pngB64) => {
+    const token = localStorage.getItem('opencord.token')
+    if (!token) return { ok: false, why: 'no token' }
+    const auth = { Authorization: 'Bearer ' + token }
+    // Find the "qa server" we created earlier and grab its id.
+    const servers = await fetch('/api/servers', { headers: auth }).then((r) => r.json())
+    const srv = (servers || []).find((s) => s.name === 'qa server')
+    if (!srv) return { ok: false, why: 'qa server not found' }
+    // base64 → bytes → PNG Blob.
+    const bin = atob(pngB64)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    const form = new FormData()
+    form.append('name', 'qa_emoji')
+    form.append('file', new Blob([bytes], { type: 'image/png' }), 'qa_emoji.png')
+    const res = await fetch(`/api/servers/${srv.id}/emoji`, {
+      method: 'POST',
+      headers: auth, // no Content-Type — the browser sets the multipart boundary
+      body: form,
+    })
+    const body = await res.json().catch(() => ({}))
+    return { ok: res.ok || res.status === 201, status: res.status, serverId: srv.id, body }
+  }, PNG_FIXTURE.toString('base64'))
+  check(emojiUpload.ok, `custom emoji uploads via the API (status ${emojiUpload.status})`)
+  check(
+    !!emojiUpload.body && emojiUpload.body.name === 'qa_emoji',
+    'upload returns the created emoji record (name=qa_emoji)',
+  )
+  // The client caches each server's emoji map once (so it doesn't refetch on every
+  // channel switch). This server's map was already cached (empty) before the upload, so
+  // reload the page — a real user reopening the app picks up newly-added emoji — which
+  // clears the in-memory cache; the session persists via localStorage (token + user).
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByPlaceholder(/Message #/).waitFor({ timeout: 15000 })
+  // Re-enter the server channel and let the fresh per-server emoji fetch settle (and the
+  // message rate-limiter refill).
+  await page.getByRole('button', { name: new RegExp(srvChan) }).click()
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).waitFor({ timeout: 8000 })
+  await page.waitForTimeout(1500)
+  // Post a message containing the shortcode in the server channel.
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).fill('react with :qa_emoji: now')
+  await page.getByRole('button', { name: 'Send' }).click()
+  // The literal text shouldn't appear as `:qa_emoji:` — it becomes an image. Assert the
+  // inline emoji img is present in a message, with a src pointing at /api/emoji/.
+  const emojiImg = page.locator('.message .body img.emoji-inline').last()
+  await emojiImg.waitFor({ timeout: 8000 })
+  const emojiSrc = (await emojiImg.getAttribute('src')) || ''
+  const emojiAlt = (await emojiImg.getAttribute('alt')) || ''
+  await shot('03i-custom-emoji.png')
+  check(
+    await emojiImg.isVisible(),
+    ':qa_emoji: renders as an inline img.emoji-inline in the server channel',
+  )
+  check(/\/api\/emoji\/\d+/.test(emojiSrc), `inline emoji src points at /api/emoji/{id} (got ${emojiSrc})`)
+  check(emojiAlt === ':qa_emoji:', `inline emoji keeps its shortcode as alt text (got ${emojiAlt})`)
+
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')
   await page
