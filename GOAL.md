@@ -491,12 +491,13 @@ item from here as the structural milestones above land.
   (exit 0) rather than false-red. Proven to catch a "match-all" regression (operators
   silently ignored → 5 of 7 assertions trip); green on prod (7 msgs) and on the local
   gate (14 msgs).
-- [ ] **Prove mute/PTT/deafen by RECEIVER silence (not just the UI label)** — currently mute/PTT/
-  deafen are checked only via the self-chip label + `track.enabled`; we never confirm the *other*
-  browser actually receives silence. Tick 143 added `measureRms(page, audioId)` to `qa/voice.mjs`
-  (decoded inbound RMS via an AnalyserNode) — reuse it: assert two-client that when A mutes / releases
-  PTT, B's decoded inbound RMS for A drops to ~0 and rises again on unmute. Turns "the UI says muted"
-  into "the peer provably hears nothing" — the most safety-critical voice guarantee.
+- [~] **Prove mute/PTT/deafen by RECEIVER silence (not just the UI label)** — **MUTE DONE (iter 144):**
+  `qa/voice.mjs` now proves two-client that A muting drops B's decoded inbound RMS for A from audible to
+  **0.0000** and unmute restores it (~0.31) — the "am I really muted?" guarantee is now verified at the
+  peer, not just the self-chip label (also reconfirms slice-3d's capture gain node didn't break mute).
+  Reuses the `measureRms(page, audioId)` helper (decoded inbound RMS via an AnalyserNode). **Still TODO:**
+  the same receiver-silence proof for **PTT** (releasing Talk → B hears silence; holding → audible) and
+  **deafen** (deafen forces A's mic off → B hears silence).
 
 ---
 

@@ -534,13 +534,36 @@ async function main() {
     'B no longer sees A’s camera tile',
   )
 
-  step('mute toggles the local mic label')
+  // Mute must not just flip a label — the PEER must actually receive silence. Prove it
+  // on B's decoded inbound stream (reusing measureRms): A audible → mute → ~silence →
+  // unmute → audible again. This is the most safety-critical voice guarantee ("am I
+  // really muted?"), previously only checked via the self-chip text.
+  step('mute actually silences A on the receiver (B), not just the local label')
+  const rmsBeforeMute = await measureRms(b, aIdOnB)
   // exact: the header "🔔 mute" channel toggle also contains "mute" — scope to the voice
   // bar's mic button (its accessible name is exactly "mute") to avoid a strict-mode clash.
-  await a.locator('.voice-mute').click()
+  await a.locator('.voice-mute').click() // → muted
   check(
     (await a.locator('[data-voice-self]').filter({ hasText: 'muted' }).count()) > 0,
     "A's own chip shows muted after mute",
+  )
+  await new Promise((r) => setTimeout(r, 1300)) // let the muted (silent) frames reach B
+  const rmsMuted = await measureRms(b, aIdOnB)
+  check(rmsBeforeMute > 0.003, `A is audible on B before mute (RMS ${rmsBeforeMute.toFixed(4)})`)
+  check(
+    rmsBeforeMute - rmsMuted > 0.003 && rmsMuted < rmsBeforeMute * 0.5,
+    `mute drops A's mic on B to ~silence (before ${rmsBeforeMute.toFixed(4)} → muted ${rmsMuted.toFixed(4)})`,
+  )
+  await a.locator('.voice-mute').click() // → unmuted
+  check(
+    (await a.locator('[data-voice-self]').filter({ hasText: 'muted' }).count()) === 0,
+    "A's own chip clears the muted flag after unmute",
+  )
+  await new Promise((r) => setTimeout(r, 1300)) // let live audio resume to B
+  const rmsUnmuted = await measureRms(b, aIdOnB)
+  check(
+    rmsUnmuted - rmsMuted > 0.003 && rmsUnmuted > 0.003,
+    `unmute restores A's mic on B (muted ${rmsMuted.toFixed(4)} → unmuted ${rmsUnmuted.toFixed(4)})`,
   )
 
   // One peer leaving must collapse only its own links — the remaining pair stays up.
