@@ -3029,3 +3029,20 @@ the time entirely). Tiny, visible, client-only. Bigger parity items still open: 
 
 **Carry (loop-process):** when adding a small pure helper inside a giant component, extract it to its
 own module so the test doesn't drag in the whole component tree — cheap testability, clean blast radius.
+
+## 2026-06-17 (tick 147) — hover timestamp on grouped messages (parity polish)
+
+Shipped tick 146's noted follow-up: grouped continuation rows now reveal a compact gutter time
+("8:53 AM", no seconds) on hover, Discord-style. Added `shortTime` to the same `dates.ts` module
+(dayLabel's neighbour) — the extraction from tick 146 keeps paying off (two tested date helpers, no
+Chat import in tests). Browser QA proves the opacity 0→1 reveal + HH:MM format; AI-vision verified the
+revealed gutter time against the real render. Shipped + railway up + rollout-verified.
+
+**Highest-value NEXT improvement:** the message HEADER still shows full time with seconds
+("8:53:23 AM") via `toLocaleTimeString()` — now inconsistent with the new compact `shortTime`. Discord
+shows "Today at 8:53 AM". Tiny follow-up: use `shortTime` (and a relative-day prefix) in the header too.
+Bigger parity items still open: custom emoji (server :name:, self-hostable like avatars), Video slice 2.
+
+**Loop-process note (context):** 5 substantive ticks this session (143–147), all clean, no regressions,
+state tracked accurately in GOAL.md/IMPROVEMENTS.md/heartbeat. Not degrading yet, so NOT clearing — but
+watching for any slip next tick (per Step-0 judgment-trigger). Durable state means a clear is cheap if needed.
