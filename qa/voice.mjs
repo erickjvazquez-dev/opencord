@@ -219,6 +219,89 @@ async function main() {
   await a.getByRole('button', { name: 'close settings' }).click()
   await a.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
 
+  // Input (mic) volume (User Settings → Voice & Video) scales how loud peers hear A —
+  // it's spliced as a gain node into A's CAPTURE chain, so it must change what B
+  // RECEIVES, not just A's UI. Prove it on B's inbound stream: measure the decoded RMS
+  // of A's mic track on B at input 100% (audible tone) vs 0% (silence). RMS is read off
+  // the MediaStream via an analyser, independent of any playback .volume — so this
+  // isolates the send-side gain. (Lowering A's input must NOT touch C's track.)
+  step('input volume (settings) scales A’s mic as heard by B (capture-chain gain)')
+  const aIdOnB = await b
+    .locator(`[aria-label="volume for ${userA}"]`)
+    .getAttribute('data-volume-for')
+  const measureRms = (page, audioId, ms = 900) =>
+    page.evaluate(
+      async ({ id, ms }) => {
+        const au = document.querySelector(`audio[data-voice-audio="${id}"]`)
+        const stream = au && au.srcObject
+        if (!stream) return -1
+        const ctx = new AudioContext()
+        try {
+          await ctx.resume()
+        } catch {
+          /* autoplay policy already relaxed in QA */
+        }
+        const src = ctx.createMediaStreamSource(stream)
+        const an = ctx.createAnalyser()
+        an.fftSize = 2048
+        src.connect(an)
+        const buf = new Uint8Array(an.fftSize)
+        let peak = 0
+        const end = Date.now() + ms
+        while (Date.now() < end) {
+          an.getByteTimeDomainData(buf)
+          let sum = 0
+          for (let i = 0; i < buf.length; i++) {
+            const x = (buf[i] - 128) / 128
+            sum += x * x
+          }
+          peak = Math.max(peak, Math.sqrt(sum / buf.length))
+          await new Promise((r) => setTimeout(r, 50))
+        }
+        try {
+          await ctx.close()
+        } catch {
+          /* already closed */
+        }
+        return peak
+      },
+      { id: audioId, ms },
+    )
+  check(aIdOnB != null, `found A’s inbound mic track id on B (got ${aIdOnB})`)
+  // Baseline: A's input volume defaults to 100% (fresh context) → B hears the tone.
+  const rmsFull = await measureRms(b, aIdOnB)
+  // Drive A's input volume to 0% via the settings slider, let it propagate, re-measure.
+  await a.getByRole('button', { name: 'user settings' }).click()
+  await a.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await a.locator('.settings-tab', { hasText: 'Voice & Video' }).click()
+  const ivSlider = a.getByLabel('input volume', { exact: true })
+  await ivSlider.waitFor({ timeout: 8000 })
+  await ivSlider.evaluate(setRangeNative, 0)
+  await a.screenshot({ path: join(SHOTS, 'voice-07-input-volume.png') })
+  await new Promise((r) => setTimeout(r, 1500)) // encode → network → jitter buffer
+  const rmsZero = await measureRms(b, aIdOnB)
+  check(rmsFull > 0.003, `B hears A's mic at input 100% (RMS ${rmsFull.toFixed(4)} > 0)`)
+  check(
+    rmsFull - rmsZero > 0.003 && rmsZero < rmsFull * 0.6,
+    `input 0% drops A's mic on B (full ${rmsFull.toFixed(4)} → zero ${rmsZero.toFixed(4)})`,
+  )
+  // C's track on B must be unaffected by A lowering A's OWN input (isolation check).
+  const cIdOnB = await b
+    .locator(`[aria-label="volume for ${userC}"]`)
+    .getAttribute('data-volume-for')
+  const rmsCWhileAZero = await measureRms(b, cIdOnB)
+  check(
+    rmsCWhileAZero > 0.005,
+    `C's mic on B stays audible while A's input is 0 (RMS ${rmsCWhileAZero.toFixed(4)} > 0)`,
+  )
+  // Restore A's input to 100% and confirm persistence; the call survives the change.
+  await ivSlider.evaluate(setRangeNative, 100)
+  const ivStored = await a.evaluate(() => localStorage.getItem('opencord.voice.inputVolume'))
+  check(ivStored === '1', `input volume persists (restored to 1, got ${ivStored})`)
+  await a.getByRole('button', { name: 'close settings' }).click()
+  await a.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  check(await waitForRemoteTracks(b, 2), 'B still has both inbound mic tracks after the input-volume change')
+
   // Deafen: silences ALL incoming audio (mutes every remote <audio>) + flags the self
   // chip; undeafen restores. Verified by reading the elements' .muted directly.
   step('deafen: mutes every remote audio + flags self chip; undeafen restores')

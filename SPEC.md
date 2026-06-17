@@ -1811,3 +1811,32 @@ want to click someone IN the chat. Slice 2: clicking a message's avatar/name ope
   (set `about`/`pronouns` to `<img onerror>` / `<script>` → the card renders the LITERAL text, no exec)
   + integration test (`GET /users/{id}/profile` returns public fields, 404 for missing, auth-required).
 - **Verify:** go test + full QA green, ship + railway up + rollout-verify.
+
+## Voice & Video — input (mic) volume slider (TOP PRIORITY slice 3d)
+
+**Why:** the Voice & Video tab has an Output Volume slider (how loud you hear others) but no **Input
+Volume** — the Discord control for how loud *you* sound to everyone. Deferred from slice 3c because,
+unlike playback-only output volume, mic gain must be spliced into the live capture chain (interacts
+with mute / push-to-talk / device hot-swap). This is its dedicated tick.
+
+- **`voiceSettings.ts`:** `getInputVolume()` / `setInputVolume(v)` — 0..1, default 1 (=unchanged),
+  clamped, corrupt→1. Mirrors the output-volume pair; localStorage key `opencord.voice.inputVolume`.
+- **`voice.ts` (capture chain):** a `GainNode` spliced AFTER capture — `raw mic → MediaStreamSource →
+  micSendGain → MediaStreamDestination → micSendTrack`, exactly the proven `buildScreenSendAudio`
+  pattern. Peers receive `micSendTrack` (gain-scaled), not the raw track. `setInputVolume(v)` sets
+  `micSendGain.gain.value` live (mid-call). Degrades safely: if Web Audio is unavailable
+  `buildMicSend` returns the raw track so the mic still works. **Mute/PTT/deafen unchanged** — they
+  still toggle `track.enabled` on the RAW source track (`localStream`); a disabled source feeds
+  silence through the gain node, so peers get silence exactly as before. **Hot-swap** (`setInputDevice`)
+  rebuilds the gain chain from the new mic and `replaceTrack`s the new `micSendTrack` on every mic
+  sender (no renegotiation). `stop()` tears down the gain node + send track. Seeded from
+  `getInputVolume()` so a new call starts at the persisted level.
+- **`Settings.tsx` / `Chat.tsx`:** an Input Volume `<input type=range>` (aria-label "input volume")
+  above Mic Test, persisting via `setInputVolume` and applying live to the active call through a new
+  `onSetInputVolume` prop → `voiceRef.current.setInputVolume(v)`.
+- **QA:** vitest (voiceSettings clamp/default/corrupt) + browser (slider renders + persists across a
+  modal remount) + **two-client voice** (set sender A's input volume to 100% → B's inbound mic RMS is
+  audible; set it to 0% → B's inbound RMS drops to ~silence → the gain is really wired through the
+  send path, not just the UI; the mic sender + call survive the change; restore to 100%).
+- **Verify:** go build/vet/test + vitest + full browser+voice QA green, AI-vision the slider, ship +
+  `railway up` + rollout-verify.

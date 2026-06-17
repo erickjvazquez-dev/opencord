@@ -8,6 +8,7 @@ const IN_KEY = 'opencord.voice.inputDeviceId'
 const OUT_KEY = 'opencord.voice.outputDeviceId'
 const CAM_KEY = 'opencord.voice.cameraDeviceId'
 const VOL_KEY = 'opencord.voice.outputVolume'
+const IVOL_KEY = 'opencord.voice.inputVolume'
 const NS_KEY = 'opencord.voice.noiseSuppression'
 const EC_KEY = 'opencord.voice.echoCancellation'
 const AGC_KEY = 'opencord.voice.autoGainControl'
@@ -69,6 +70,19 @@ export function getOutputVolume(): number {
 }
 export function setOutputVolume(v: number): void {
   write(VOL_KEY, String(Math.min(1, Math.max(0, v))))
+}
+
+// Input (mic) volume (0..1, default 1 = unchanged). Scales how loud every peer
+// hears YOU, applied as a gain node in the capture chain (voice.ts). Mirrors the
+// output-volume pair.
+export function getInputVolume(): number {
+  const raw = read(IVOL_KEY)
+  if (raw === null) return 1
+  const n = parseFloat(raw)
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1
+}
+export function setInputVolume(v: number): void {
+  write(IVOL_KEY, String(Math.min(1, Math.max(0, v))))
 }
 
 export function getAudioProcessing(): AudioProcessing {

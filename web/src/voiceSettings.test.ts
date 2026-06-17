@@ -25,6 +25,9 @@ describe('voiceSettings defaults (nothing stored)', () => {
   it('output volume defaults to 1 (unchanged)', () => {
     expect(vs.getOutputVolume()).toBe(1)
   })
+  it('input volume defaults to 1 (unchanged)', () => {
+    expect(vs.getInputVolume()).toBe(1)
+  })
   it('DSP toggles default ON (same high-quality capture as before opt-out)', () => {
     expect(vs.getAudioProcessing()).toEqual({ ns: true, ec: true, agc: true })
   })
@@ -53,6 +56,27 @@ describe('voiceSettings output volume clamping', () => {
   it('falls back to 1 on a corrupt stored value', () => {
     globalThis.localStorage.setItem('opencord.voice.outputVolume', 'not-a-number')
     expect(vs.getOutputVolume()).toBe(1)
+  })
+})
+
+describe('voiceSettings input volume clamping', () => {
+  it('clamps into [0,1] on set AND on get', () => {
+    vs.setInputVolume(0.5)
+    expect(vs.getInputVolume()).toBe(0.5)
+    vs.setInputVolume(2) // above range
+    expect(vs.getInputVolume()).toBe(1)
+    vs.setInputVolume(-1) // below range
+    expect(vs.getInputVolume()).toBe(0)
+  })
+  it('falls back to 1 on a corrupt stored value', () => {
+    globalThis.localStorage.setItem('opencord.voice.inputVolume', 'not-a-number')
+    expect(vs.getInputVolume()).toBe(1)
+  })
+  it('is independent of output volume (separate keys)', () => {
+    vs.setInputVolume(0.3)
+    vs.setOutputVolume(0.9)
+    expect(vs.getInputVolume()).toBe(0.3)
+    expect(vs.getOutputVolume()).toBe(0.9)
   })
 })
 

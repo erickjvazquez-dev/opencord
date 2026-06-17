@@ -2826,6 +2826,7 @@ export function Chat({
           onChangeOutputDevice={changeOutputDevice}
           onRefreshDevices={refreshDevices}
           onSetMasterVolume={(v) => voiceRef.current?.setMasterVolume(v)}
+          onSetInputVolume={(v) => voiceRef.current?.setInputVolume(v)}
           onClose={() => setSettingsOpen(false)}
         />
       )}

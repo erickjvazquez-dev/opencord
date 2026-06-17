@@ -8,6 +8,8 @@ import {
   setCameraDeviceId,
   getOutputVolume,
   setOutputVolume,
+  getInputVolume,
+  setInputVolume,
   type AudioProcessing,
 } from '../voiceSettings'
 
@@ -40,6 +42,7 @@ export function Settings({
   onChangeOutputDevice,
   onRefreshDevices,
   onSetMasterVolume,
+  onSetInputVolume,
   onClose,
 }: {
   token: string
@@ -62,6 +65,7 @@ export function Settings({
   onChangeOutputDevice: (id: string) => void
   onRefreshDevices: () => void | Promise<void>
   onSetMasterVolume: (volume: number) => void
+  onSetInputVolume: (volume: number) => void
   onClose: () => void
 }) {
   const [tab, setTab] = useState<Tab>('account')
@@ -112,6 +116,14 @@ export function Settings({
     setOutputVolumeState(v)
     setOutputVolume(v)
     onSetMasterVolume(v)
+  }
+
+  // Input (mic) volume (0..1) — how loud peers hear you; persisted + applied live.
+  const [inputVolume, setInputVolumeState] = useState(() => getInputVolume())
+  const changeInputVolume = (v: number) => {
+    setInputVolumeState(v)
+    setInputVolume(v)
+    onSetInputVolume(v)
   }
 
   // Esc closes the modal (Discord-style).
@@ -503,6 +515,23 @@ export function Settings({
                   value={Math.round(outputVolume * 100)}
                   aria-label="output volume"
                   onChange={(e) => changeOutputVolume(Number(e.target.value) / 100)}
+                />
+              </div>
+
+              {/* Input volume — mic gain, how loud peers hear you, applied live. */}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="settings-input-volume">
+                  Input Volume — {Math.round(inputVolume * 100)}%
+                </label>
+                <input
+                  id="settings-input-volume"
+                  className="settings-slider"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(inputVolume * 100)}
+                  aria-label="input volume"
+                  onChange={(e) => changeInputVolume(Number(e.target.value) / 100)}
                 />
               </div>
 

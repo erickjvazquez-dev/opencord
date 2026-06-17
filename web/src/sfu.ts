@@ -190,6 +190,12 @@ export class SfuSession implements VoiceTransport {
     })
   }
 
+  // Input (mic) volume (0..1) — not yet applied on the SFU path (LiveKit has no
+  // simple live mic-gain hook; a follow-up when SFU voice is productionized). The
+  // mesh path applies it live via a capture gain node; the value still persists in
+  // voiceSettings either way. No-op here, like the SFU screen-audio controls above.
+  setInputVolume(_volume: number): void {}
+
   // No-op: the SFU has its own signaling; channel-WS voice frames aren't used here.
   handle(_ev: VoiceInbound): void {}
 

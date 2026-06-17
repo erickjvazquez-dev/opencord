@@ -9,7 +9,7 @@
 // re-renders. Chat.tsx owns one instance per call, feeds it relayed frames, and
 // renders the roster it emits.
 
-import { getAudioProcessing, getOutputVolume, getCameraDeviceId } from './voiceSettings'
+import { getAudioProcessing, getOutputVolume, getInputVolume, getCameraDeviceId } from './voiceSettings'
 
 // A peer's effective playback volume = their personal volume scaled by the master
 // output volume, clamped to [0,1]. Pure so it can be unit-tested.
@@ -59,6 +59,8 @@ export interface VoiceTransport {
   setPeerVolume(id: number, volume: number): void
   // Master output volume (0..1) — scales how loud you hear every peer.
   setMasterVolume(volume: number): void
+  // Input (mic) volume (0..1) — scales how loud every peer hears you.
+  setInputVolume(volume: number): void
   setPushToTalk(enabled: boolean): void
   setTransmitting(on: boolean): void
   // ── Screen share ──────────────────────────────────────────────────────────
@@ -210,6 +212,13 @@ interface Peer {
 export class VoiceSession {
   private peers = new Map<number, Peer>()
   private localStream: MediaStream | null = null
+  // The gain-scaled mic track actually published to peers (raw mic → micSendGain →
+  // destination → micSendTrack). Lets setInputVolume scale how loud peers hear YOU
+  // live. localStream still holds the RAW track so mute/PTT keep toggling its
+  // `.enabled` (a disabled source feeds silence through the gain node).
+  private micSendTrack: MediaStreamTrack | null = null
+  private micSendGain: GainNode | null = null
+  private micSendGainValue = getInputVolume()
   private muted = false
   // Deafened: all incoming audio is silenced AND the local mic is forced off.
   private deafened = false
@@ -283,6 +292,10 @@ export class VoiceSession {
       return
     }
     this.startVad()
+    // Build the gain-scaled send track now that startVad has created the audio
+    // context. Falls back to the raw track if Web Audio is unavailable.
+    const raw = this.localStream.getAudioTracks()[0]
+    this.micSendTrack = raw ? this.buildMicSend(raw) : null
     this.send({ type: 'voice-join' })
   }
 
@@ -362,17 +375,27 @@ export class VoiceSession {
     const next = await navigator.mediaDevices.getUserMedia(audioConstraints(deviceId))
     const track = next.getAudioTracks()[0]
     if (!track) return
-    // Match the current mute / push-to-talk state on the freshly captured track.
+    // Match the current mute / push-to-talk state on the freshly captured (raw) track.
     track.enabled = this.pttEnabled ? this.transmitting : !this.muted
+    // Rebuild the gain-scaled send track from the new mic, then hot-swap THAT onto
+    // every mic sender (no renegotiation) so input volume survives a device change.
+    const prevSendTrack = this.micSendTrack
+    this.micSendGain = null
+    this.micSendTrack = this.buildMicSend(track)
     for (const peer of this.peers.values()) {
       // The mic sender — never the screen-audio sender (also kind 'audio').
       const sender = peer.pc
         .getSenders()
         .find((s) => s.track?.kind === 'audio' && s.track !== this.screenSendAudioTrack)
       if (sender) {
-        await sender.replaceTrack(track)
+        await sender.replaceTrack(this.micSendTrack)
         void this.tuneSender(sender)
       }
+    }
+    // Stop the previous processed send track only if it wasn't the raw track itself
+    // (degraded mode), which the old localStream teardown below already stops.
+    if (prevSendTrack && prevSendTrack !== this.localStream?.getAudioTracks()[0]) {
+      prevSendTrack.stop()
     }
     this.localStream?.getTracks().forEach((t) => t.stop())
     this.localStream = next
@@ -406,6 +429,14 @@ export class VoiceSession {
     }
   }
 
+  // Input (mic) volume (0..1) — scale how loud peers hear YOU, live, by setting the
+  // capture-chain gain node. 0 = silent (like a soft mute), 1 = unchanged. Persisted
+  // by the caller; survives a mic device hot-swap (the chain is rebuilt with this value).
+  setInputVolume(volume: number): void {
+    this.micSendGainValue = Math.min(1, Math.max(0, volume))
+    if (this.micSendGain) this.micSendGain.gain.value = this.micSendGainValue
+  }
+
   currentInputDevice(): string | undefined {
     return this.inputDeviceId
   }
@@ -426,6 +457,13 @@ export class VoiceSession {
     void this.audioCtx?.close().catch(() => {})
     this.audioCtx = null
     for (const id of [...this.peers.keys()]) this.dropPeer(id)
+    // Tear down the mic-send gain chain (the audio context close above frees the
+    // nodes; stop the processed track if it's distinct from the raw mic track).
+    if (this.micSendTrack && this.micSendTrack !== this.localStream?.getAudioTracks()[0]) {
+      this.micSendTrack.stop()
+    }
+    this.micSendTrack = null
+    this.micSendGain = null
     this.localStream?.getTracks().forEach((t) => t.stop())
     this.localStream = null
     this.emitRoster()
@@ -597,6 +635,27 @@ export class VoiceSession {
     this.emitRoster()
   }
 
+  // Build the outgoing mic track: raw capture → GainNode → destination, so
+  // setInputVolume scales how loud peers hear us, live. The raw track stays in
+  // localStream (mute/PTT toggle its `.enabled` — a disabled source feeds silence
+  // through the gain node). Falls back to the raw track if Web Audio is absent so
+  // the mic always works.
+  private buildMicSend(raw: MediaStreamTrack): MediaStreamTrack {
+    const ctx = this.audioCtx
+    if (!ctx) return raw
+    try {
+      const src = ctx.createMediaStreamSource(new MediaStream([raw]))
+      const gain = ctx.createGain()
+      gain.gain.value = this.micSendGainValue
+      const dest = ctx.createMediaStreamDestination()
+      src.connect(gain).connect(dest)
+      this.micSendGain = gain
+      return dest.stream.getAudioTracks()[0] ?? raw
+    } catch {
+      return raw
+    }
+  }
+
   // Build the outgoing screen-audio track: raw capture → GainNode → destination,
   // so setScreenSendGain scales it live. Also wires the sharer's local monitor
   // element (muted by default). Falls back to the raw track if Web Audio is absent.
@@ -750,11 +809,12 @@ export class VoiceSession {
     this.peers.set(id, peer)
     this.applySink(audioEl)
 
-    // Send our mic to this peer. Adding a track schedules negotiationneeded.
-    this.localStream?.getTracks().forEach((t) => {
-      const sender = pc.addTrack(t, this.localStream!)
+    // Send our (gain-scaled) mic to this peer, grouped under the local stream so the
+    // receiver classifies it as the mic (not the screen). Adding schedules negotiation.
+    if (this.micSendTrack && this.localStream) {
+      const sender = pc.addTrack(this.micSendTrack, this.localStream)
       void this.tuneSender(sender)
-    })
+    }
     // If we're already sharing our screen, publish it to this (new) peer too.
     if (this.screenStream) this.addScreenTracksToPeer(peer)
 

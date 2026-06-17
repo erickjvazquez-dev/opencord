@@ -768,6 +768,19 @@ async function main() {
   await page.getByLabel('output volume').fill('50')
   const volStored = await page.evaluate(() => localStorage.getItem('opencord.voice.outputVolume'))
   check(volStored === '0.5', `output volume persists to localStorage (got ${volStored})`)
+  // Input (mic) volume slider: render + drag to 40% + assert it persisted, and that it
+  // re-reads from localStorage on a modal remount (close + reopen the Voice & Video tab).
+  check(await page.getByLabel('input volume').isVisible(), 'input-volume slider renders')
+  await page.getByLabel('input volume').fill('40')
+  const ivolStored = await page.evaluate(() => localStorage.getItem('opencord.voice.inputVolume'))
+  check(ivolStored === '0.4', `input volume persists to localStorage (got ${ivolStored})`)
+  await page.getByRole('button', { name: 'close settings' }).click()
+  await page.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+  await page.getByRole('button', { name: 'user settings' }).click()
+  await page.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await page.locator('.settings-tab', { hasText: 'Voice & Video' }).click()
+  const ivolReread = await page.getByLabel('input volume').inputValue()
+  check(ivolReread === '40', `input volume re-reads from localStorage on remount (got ${ivolReread})`)
   // Flip noise suppression OFF (defaults on) — it must land in localStorage and the
   // UI must re-read it on remount. (No page reload: that would drop the server-channel
   // context the next steps need; localStorage + modal remount proves the round-trip.)
