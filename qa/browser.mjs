@@ -717,6 +717,11 @@ async function main() {
     await page.getByLabel('input device').isVisible() && (await page.getByLabel('output device').isVisible()),
     'input + output device pickers render',
   )
+  // Output volume slider: render + drag to 50% + assert it persisted to localStorage.
+  check(await page.getByLabel('output volume').isVisible(), 'output-volume slider renders')
+  await page.getByLabel('output volume').fill('50')
+  const volStored = await page.evaluate(() => localStorage.getItem('opencord.voice.outputVolume'))
+  check(volStored === '0.5', `output volume persists to localStorage (got ${volStored})`)
   // Flip noise suppression OFF (defaults on) — it must land in localStorage and the
   // UI must re-read it on remount. (No page reload: that would drop the server-channel
   // context the next steps need; localStorage + modal remount proves the round-trip.)

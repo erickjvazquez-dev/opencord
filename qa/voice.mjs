@@ -195,6 +195,30 @@ async function main() {
   }, vpid)
   check(Math.abs(vol - 0.4) < 0.05, `slider at 40% sets that peer's audio volume to ~0.4 (got ${vol})`)
 
+  // Master output volume (User Settings → Voice & Video) rescales live peer playback,
+  // composing with the per-user volume: master 50% × peer 40% → effective ~0.2.
+  step('master output volume (settings) rescales live peer playback')
+  const setRangeNative = (el, v) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+    setter.call(el, String(v))
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  await a.getByRole('button', { name: 'user settings' }).click()
+  await a.locator('.settings-modal').waitFor({ timeout: 8000 })
+  await a.locator('.settings-tab', { hasText: 'Voice & Video' }).click()
+  const mvSlider = a.getByLabel('output volume', { exact: true })
+  await mvSlider.waitFor({ timeout: 8000 })
+  await mvSlider.evaluate(setRangeNative, 50)
+  const mvol = await a.evaluate((id) => {
+    const au = document.querySelector(`audio[data-voice-audio="${id}"]`)
+    return au ? au.volume : -1
+  }, vpid)
+  check(Math.abs(mvol - 0.2) < 0.05, `master 50% × peer 40% → peer audio ~0.2 (got ${mvol})`)
+  // Restore master to 100% so later checks see the per-user 0.4 again, then close.
+  await mvSlider.evaluate(setRangeNative, 100)
+  await a.getByRole('button', { name: 'close settings' }).click()
+  await a.locator('.settings-modal').waitFor({ state: 'detached', timeout: 4000 })
+
   // Deafen: silences ALL incoming audio (mutes every remote <audio>) + flags the self
   // chip; undeafen restores. Verified by reading the elements' .muted directly.
   step('deafen: mutes every remote audio + flags self chip; undeafen restores')

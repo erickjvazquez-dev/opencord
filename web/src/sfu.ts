@@ -13,6 +13,8 @@ import type {
   RemoteTrackPublication,
 } from 'livekit-client'
 import type { VoiceInbound, VoicePeer, VoiceTransport } from './voice'
+import { effectiveVolume } from './voice'
+import { getOutputVolume } from './voiceSettings'
 
 // What POST /api/voice/token returns when the SFU is configured.
 export interface SfuToken {
@@ -64,6 +66,8 @@ export class SfuSession implements VoiceTransport {
   private stopped = false
   // Chosen per-peer playback volumes (id → 0..1), re-applied as participants join.
   private volumes = new Map<number, number>()
+  // Master output volume (0..1) — scales every peer's playback on top of their own.
+  private masterVolume = getOutputVolume()
   // Attached remote audio elements (id → <audio>), for playback + per-peer volume.
   private audioEls = new Map<number, HTMLAudioElement>()
   // Recently-active speaker identities, most-recent first (sticky top-N selection).
@@ -174,8 +178,16 @@ export class SfuSession implements VoiceTransport {
     const v = Math.min(1, Math.max(0, volume))
     this.volumes.set(id, v)
     const el = this.audioEls.get(id)
-    if (el) el.volume = v
+    if (el) el.volume = effectiveVolume(v, this.masterVolume)
     this.emitRoster()
+  }
+
+  // Master output volume (0..1) — rescale every attached peer's playback immediately.
+  setMasterVolume(volume: number): void {
+    this.masterVolume = Math.min(1, Math.max(0, volume))
+    this.audioEls.forEach((el, id) => {
+      el.volume = effectiveVolume(this.volumes.get(id) ?? 1, this.masterVolume)
+    })
   }
 
   // No-op: the SFU has its own signaling; channel-WS voice frames aren't used here.
@@ -208,7 +220,7 @@ export class SfuSession implements VoiceTransport {
     const el = track.attach() as HTMLAudioElement
     el.dataset.voiceAudio = String(id)
     el.style.display = 'none'
-    el.volume = this.volumes.get(id) ?? 1
+    el.volume = effectiveVolume(this.volumes.get(id) ?? 1, this.masterVolume)
     el.muted = this.deafened // a track arriving while deafened stays silent
     document.body.appendChild(el)
     this.audioEls.get(id)?.remove()

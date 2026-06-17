@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-16 (iter 132) — Output volume; split a feature along its RISK seam, and verify each layer where it lives
+
+Shipped the **output (master) volume slider** (Voice & Video slice 3c) and explicitly **deferred** the
+input/mic-gain slider to its own tick. **Component: UI + audio.** The reusable lesson is about
+*scoping a listed feature*: GOAL.md bundled "input + output volume sliders" as one item, but they have
+**very different risk profiles** — output volume is playback-only (`el.volume = peerVol * master`, can't
+break the connection), while input gain needs a `GainNode` spliced into the capture chain that the
+mute/PTT/device-hot-swap logic all mutate. Shipping them together would have put a risky pipeline
+change on the same tick as a trivial one. **Lesson — when a backlog item bundles sub-parts, split it
+along the RISK seam, not just the feature seam: ship the low-risk half now, isolate the invasive half
+to a tick where it gets full attention + adversarial care.**
+
+The QA half reinforced a coverage principle: this behavior **can't be tested in `browser.mjs`** (one
+client → no peers → no peer `<audio>` to scale). So I verified it at the right layer for each claim:
+the **math** in a vitest unit (`effectiveVolume`, incl. clamp + master-0), the **UI + persistence** in
+`browser.mjs` (slider renders, `localStorage==='0.5'`), and the **live composition** in the two-client
+`voice.mjs` (open settings mid-call → master 50% × per-user 40% → peer audio 0.2). **Lesson — match
+each claim to the cheapest test that can actually exercise it; don't try to force a peer-dependent
+assertion into the single-client suite (it'd silently never run).**
+
+**Next QA-growth target (slice 3d):** input mic-gain — when built, QA it by asserting the capture
+`GainNode.gain.value` tracks the slider AND that mute/PTT still gate correctly *through* the gain (the
+exact interaction that makes it risky), two-client.
+
 ## 2026-06-16 (iter 131) — Camera preview; two QA-robustness bugs the *fake media* exposed
 
 Shipped the **camera device + live preview** (Voice & Video slice 3b). **Component: UI → polished +

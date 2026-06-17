@@ -1661,6 +1661,21 @@ preview"` would otherwise collide on substring), `waitForFunction(videoWidth>0)`
 `.cam-preview.live` toggles, Stop tears it down. AI-vision verified the fake-device preview. **Slice 3c
 TODO:** input/output volume sliders.
 
+### Slice 3c — Voice & Video tab · output (master) volume slider — SHIPPED iter 132
+
+`voiceSettings.ts` gains `getOutputVolume()/setOutputVolume()` (0..1, default 1). A pure
+`effectiveVolume(peerVol, master)` (exported from `voice.ts`, clamped to [0,1], vitest-tested) is the
+master-scaling math. Both transports gain `setMasterVolume(v)` (added to the `VoiceTransport`
+interface): `VoiceSession` + `SfuSession` re-apply `el.volume = effectiveVolume(peerVol, master)` to
+every attached peer `<audio>` immediately, and apply it at peer-attach + in `setPeerVolume`; the field
+seeds from `getOutputVolume()`. `Settings.tsx` adds an Output Volume `<input type=range>` →
+`setOutputVolume` + `onSetMasterVolume` (Chat routes that to `voiceRef.current.setMasterVolume`).
+Playback-only ⇒ never touches the race-sensitive sender/negotiation code. QA: browser `07d3` (slider
+renders + persists `outputVolume==='0.5'`); voice.mjs two-client (master 50% × per-user 40% → peer
+audio ~0.2, proving live composition); vitest `voice.test.ts` (4 cases incl. clamp + master-0 mute).
+**Slice 3d TODO:** input volume / mic-gain — needs a `GainNode` spliced into capture (mute/PTT/hot-swap
+interaction), so it's its own careful tick.
+
 Concrete plan captured at commit 1b97700 so a fresh-context tick builds it without re-discovery.
 Reuses existing handlers — NO new endpoints (`PUT /me/status`, `PUT /me/presence`, `POST /avatar`).
 

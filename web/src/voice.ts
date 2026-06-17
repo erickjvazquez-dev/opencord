@@ -9,7 +9,13 @@
 // re-renders. Chat.tsx owns one instance per call, feeds it relayed frames, and
 // renders the roster it emits.
 
-import { getAudioProcessing } from './voiceSettings'
+import { getAudioProcessing, getOutputVolume } from './voiceSettings'
+
+// A peer's effective playback volume = their personal volume scaled by the master
+// output volume, clamped to [0,1]. Pure so it can be unit-tested.
+export function effectiveVolume(peerVolume: number, masterVolume: number): number {
+  return Math.min(1, Math.max(0, peerVolume * masterVolume))
+}
 
 // Frames we send up the channel WS. The server stamps `from` and rebroadcasts.
 export type VoiceFrame =
@@ -46,6 +52,8 @@ export interface VoiceTransport {
   setInputDevice(deviceId?: string): Promise<void>
   setOutputDevice(deviceId: string): void
   setPeerVolume(id: number, volume: number): void
+  // Master output volume (0..1) — scales how loud you hear every peer.
+  setMasterVolume(volume: number): void
   setPushToTalk(enabled: boolean): void
   setTransmitting(on: boolean): void
   // ── Screen share ──────────────────────────────────────────────────────────
@@ -195,6 +203,9 @@ export class VoiceSession {
   // every peer's <audio> sink; input is the constraint for capture.
   private inputDeviceId: string | undefined
   private outputDeviceId = ''
+  // Master output volume (0..1) — scales every peer's playback on top of their
+  // personal volume. Seeded from the persisted Voice & Video setting.
+  private masterVolume = getOutputVolume()
   // Voice-activity detection: a shared AudioContext, an analyser on the local mic,
   // a sampling timer, and the local speaking state (debounced like peers').
   private audioCtx: AudioContext | null = null
@@ -361,8 +372,16 @@ export class VoiceSession {
     const peer = this.peers.get(id)
     if (!peer) return
     peer.volume = Math.min(1, Math.max(0, volume))
-    peer.audioEl.volume = peer.volume
+    peer.audioEl.volume = effectiveVolume(peer.volume, this.masterVolume)
     this.emitRoster()
+  }
+
+  // Master output volume (0..1) — rescale every peer's live playback immediately.
+  setMasterVolume(volume: number): void {
+    this.masterVolume = Math.min(1, Math.max(0, volume))
+    for (const peer of this.peers.values()) {
+      peer.audioEl.volume = effectiveVolume(peer.volume, this.masterVolume)
+    }
   }
 
   currentInputDevice(): string | undefined {
@@ -702,7 +721,7 @@ export class VoiceSession {
       }
       // Otherwise it's the mic.
       peer.audioEl.srcObject = stream
-      peer.audioEl.volume = peer.volume
+      peer.audioEl.volume = effectiveVolume(peer.volume, this.masterVolume)
       void peer.audioEl.play().catch(() => {})
       // Tap the remote stream for the speaking meter.
       if (stream) peer.analyser = this.makeAnalyser(stream)

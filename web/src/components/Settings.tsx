@@ -6,6 +6,8 @@ import {
   setAudioProcessing,
   getCameraDeviceId,
   setCameraDeviceId,
+  getOutputVolume,
+  setOutputVolume,
   type AudioProcessing,
 } from '../voiceSettings'
 
@@ -34,6 +36,7 @@ export function Settings({
   onChangeInputDevice,
   onChangeOutputDevice,
   onRefreshDevices,
+  onSetMasterVolume,
   onClose,
 }: {
   token: string
@@ -52,6 +55,7 @@ export function Settings({
   onChangeInputDevice: (id: string) => void
   onChangeOutputDevice: (id: string) => void
   onRefreshDevices: () => void | Promise<void>
+  onSetMasterVolume: (volume: number) => void
   onClose: () => void
 }) {
   const [tab, setTab] = useState<Tab>('account')
@@ -78,6 +82,14 @@ export function Settings({
   const [camTesting, setCamTesting] = useState(false)
   const camStreamRef = useRef<MediaStream | null>(null)
   const videoElRef = useRef<HTMLVideoElement>(null)
+
+  // Master output volume (0..1) — persisted + applied live to the current call.
+  const [outputVolume, setOutputVolumeState] = useState(() => getOutputVolume())
+  const changeOutputVolume = (v: number) => {
+    setOutputVolumeState(v)
+    setOutputVolume(v)
+    onSetMasterVolume(v)
+  }
 
   // Esc closes the modal (Discord-style).
   useEffect(() => {
@@ -411,6 +423,23 @@ export function Settings({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Output volume — master playback level, applied live to the call. */}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="settings-output-volume">
+                  Output Volume — {Math.round(outputVolume * 100)}%
+                </label>
+                <input
+                  id="settings-output-volume"
+                  className="settings-slider"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(outputVolume * 100)}
+                  aria-label="output volume"
+                  onChange={(e) => changeOutputVolume(Number(e.target.value) / 100)}
+                />
               </div>
 
               {/* Mic test — live input-sensitivity meter from the selected device. */}

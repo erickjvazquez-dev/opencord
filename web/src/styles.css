@@ -2220,6 +2220,15 @@ button:disabled {
   color: var(--text-muted);
   font-size: 13px;
 }
+.settings-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.settings-slider:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
 
 @media (max-width: 640px) {
   .settings-modal {

@@ -69,7 +69,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   preview driven by `getUserMedia({video})` ("Test Camera" / "Stop Camera"), full teardown on
   stop/tab-switch/unmount, live device hot-swap. Browser QA `07d3c` (picker renders, preview decodes
   the fake-device frames `videoWidth>0`, container goes `.live`, stop tears it down); AI-vision verified.
-  **Still TODO (slice 3c):** input/output **volume sliders**.
+  **Slice 3c DONE (iter 132): output (master) volume slider** — a 0–100% slider (persisted in
+  `voiceSettings`) wired LIVE through both transports (`VoiceSession` + `SfuSession`
+  `setMasterVolume`): a pure `effectiveVolume(peerVol, master)` (vitest-tested, clamped) scales every
+  peer's `<audio>` playback on top of their personal volume. Two-client voice QA proves it composes
+  live (master 50% × peer 40% → 0.2); browser QA proves the slider renders + persists; AI-vision
+  verified. **Still TODO (slice 3d):** input **volume / mic-gain** slider — deferred because it needs a
+  `GainNode` spliced into the capture chain (interacts with mute/PTT/hot-swap), unlike playback-only
+  output volume; do it carefully on its own tick.
 - [ ] **Appearance / general polish pass** — consistent spacing + hover/active/focus states,
   visible focus rings (a11y, keep the axe-core scan green), and an overall "feels like Discord"
   sweep across sidebar / header / chat / member list.

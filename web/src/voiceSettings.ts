@@ -7,6 +7,7 @@
 const IN_KEY = 'opencord.voice.inputDeviceId'
 const OUT_KEY = 'opencord.voice.outputDeviceId'
 const CAM_KEY = 'opencord.voice.cameraDeviceId'
+const VOL_KEY = 'opencord.voice.outputVolume'
 const NS_KEY = 'opencord.voice.noiseSuppression'
 const EC_KEY = 'opencord.voice.echoCancellation'
 const AGC_KEY = 'opencord.voice.autoGainControl'
@@ -56,6 +57,18 @@ export function getCameraDeviceId(): string {
 }
 export function setCameraDeviceId(id: string): void {
   write(CAM_KEY, id)
+}
+
+// Master output volume (0..1, default 1 = unchanged). Scales how loud you hear
+// every peer, on top of each peer's individual volume.
+export function getOutputVolume(): number {
+  const raw = read(VOL_KEY)
+  if (raw === null) return 1
+  const n = parseFloat(raw)
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1
+}
+export function setOutputVolume(v: number): void {
+  write(VOL_KEY, String(Math.min(1, Math.max(0, v))))
 }
 
 export function getAudioProcessing(): AudioProcessing {
