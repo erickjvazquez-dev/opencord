@@ -3132,3 +3132,27 @@ impl; review + browser-QA + AI-vision. That completes the custom-emoji feature.
 
 **Loop-process note (context):** 10 ticks; delegation kept this one lean-ish. Still not forcing a clear
 (re-arm fragile); the <20% auto-clear remains the net. Continue delegating big slices.
+
+## 2026-06-17 (tick 152) — custom emoji COMPLETE (slice 3a manager UI)
+
+Shipped the admin emoji manager (list/upload/delete in the members/server-settings panel) with live
+cache invalidation (`:name:` resolves immediately after a UI upload — no reload). Delegated impl;
+reviewed (admin-gating, multipart, cache refresh) + independently verified (build, vitest 39/39) +
+AI-vision (Discord-like, integrated) + prod-verified. **Custom emoji is now done end-to-end across 3
+slices** (150 backend → 151 render → 152 manager), each delegated, each reviewed+verified+shipped by me.
+
+**3-slice delegation retro:** breaking a big feature into backend/render/manager slices, each
+delegated to a fresh agent context while the main loop stays reviewer/verifier/shipper, worked
+extremely well — shipped ~1400 lines of feature across 3 ticks without my context ballooning or a
+single regression. This is the template for big features in a long session.
+
+**Highest-value NEXT (rotate to a fresh area — emoji is done):**
+- **Custom-emoji reactions** — natural extension: let users REACT with the custom emoji we now have
+  (reactions currently store unicode strings; would need to carry an emoji id). Medium.
+- **Video slice 2** (screen+camera coexist) — the remaining TOP-PRIORITY partial. Complex (WebRTC).
+- **Emoji picker** (slice 3b) — minor convenience (insert `:name:` from a palette).
+Pick per per-component rotation; emoji-reactions builds on fresh momentum, video advances TOP PRIORITY.
+
+**Loop-process note (context):** 11 ticks; FEATURE-COMPLETE checkpoint (cleanest possible stopping
+point). Delegation kept per-tick growth modest + no degradation, so continuing with the 30-min cadence
+rather than a disruptive forced-clear; the <20% auto-clear net has room to fire between ticks if needed.
