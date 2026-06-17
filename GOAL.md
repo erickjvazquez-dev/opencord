@@ -356,6 +356,9 @@ item from here as the structural milestones above land.
 - [x] Date dividers — Discord-style "Today" / "Yesterday" / full-date separators between calendar
   days in the message list (iter 146): client-only `dayLabel` (unit-tested incl. month boundary), a
   new day breaks same-author grouping; browser QA + AI-vision verified ("Today" divider renders).
+- [x] Hover timestamp on grouped messages (iter 147) — grouped continuation rows reveal a compact
+  gutter time ("8:53 AM", no seconds) on hover (`shortTime` unit-tested; opacity 0→1); browser QA
+  asserts the reveal + AI-vision verified the rendered gutter time.
 - [ ] Custom emoji · stickers · GIF picker
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
   `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe

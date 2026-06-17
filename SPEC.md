@@ -1858,3 +1858,17 @@ visible parity + readability gap. Client-only, no backend.
 - **QA:** browser asserts a `.day-divider` renders and reads "Today" (all QA messages are sent now);
   AI-vision verified the divider. Full browser+voice QA green.
 - **Verify:** tsc + vitest (27/27) + full QA green + AI-vision; ship + `railway up` + rollout-verify.
+
+## Hover timestamp on grouped messages (v0.5 — messaging parity)
+
+**Why:** grouped continuation rows hide the avatar/name/time (Discord-style), which loses *when* each
+line was sent. Discord reveals a compact timestamp in the gutter on hover. Client-only.
+
+- **`dates.ts`:** `shortTime(d)` → compact "9:41 AM" / "21:41" (hour:minute, no seconds, viewer locale).
+  Unit-tested (HH:MM present, seconds absent).
+- **`Chat.tsx`:** the grouped branch's `.avatar-spacer` now holds `<span class="hover-time">{shortTime}</span>`.
+- **`styles.css`:** `.hover-time` is muted 10px, right-aligned in the 38px gutter, `opacity:0` →
+  `opacity:1` on `.message.grouped:hover` (matches the existing `.msg-actions` hover reveal).
+- **QA:** browser asserts the gutter time exists, reads HH:MM (no seconds), and reveals on hover
+  (computed opacity 0 → 1); AI-vision verified the revealed "8:53 AM" gutter time.
+- **Verify:** tsc + vitest (29/29) + full QA green + AI-vision; ship + `railway up` + rollout-verify.

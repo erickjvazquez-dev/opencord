@@ -132,6 +132,21 @@ async function main() {
     'consecutive same-author message is grouped',
   )
   check((await grouped.locator('.avatar').count()) === 0, 'grouped message hides the repeated avatar')
+  // Discord-style: a grouped row hides the name/time but reveals a compact gutter
+  // timestamp on hover (opacity 0 → 1). Assert it exists, reads HH:MM, and reveals.
+  const hoverTime = grouped.locator('.hover-time')
+  check((await hoverTime.count()) === 1, 'grouped message has a gutter hover-time')
+  const gtText = ((await hoverTime.textContent()) ?? '').trim()
+  check(/\d{1,2}:\d{2}/.test(gtText), `gutter time shows HH:MM, no seconds (got "${gtText}")`)
+  const opacityIdle = Number(await hoverTime.evaluate((el) => getComputedStyle(el).opacity))
+  await grouped.hover()
+  await new Promise((r) => setTimeout(r, 150))
+  await shot('03a2-hover-time.png')
+  const opacityHover = Number(await hoverTime.evaluate((el) => getComputedStyle(el).opacity))
+  check(
+    opacityIdle < 0.5 && opacityHover > 0.9,
+    `hover reveals the gutter time (idle ${opacityIdle} → hover ${opacityHover})`,
+  )
 
   // 3c — Markdown renders to safe elements; raw HTML is escaped (XSS guard, Rule B/15).
   step('send a markdown + <script> + link message → bold/code/link render, script stays literal')

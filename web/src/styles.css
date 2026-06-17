@@ -718,6 +718,23 @@ button:disabled {
 .avatar-spacer {
   width: 38px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Discord-style: a compact timestamp appears in the gutter when you hover a grouped
+   continuation row (which otherwise hides the avatar + name + time). */
+.hover-time {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.08s ease;
+}
+.message.grouped:hover .hover-time {
+  opacity: 1;
 }
 
 .avatar {

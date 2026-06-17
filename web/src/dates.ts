@@ -11,3 +11,9 @@ export function dayLabel(d: Date, now: Date = new Date()): string {
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
   return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
 }
+
+// Compact time for the message gutter (Discord shows HH:MM with no seconds, e.g.
+// "9:41 AM" / "21:41"). Uses the viewer's locale.
+export function shortTime(d: Date): string {
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}

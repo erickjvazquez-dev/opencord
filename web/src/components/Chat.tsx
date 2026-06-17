@@ -63,7 +63,7 @@ import type {
   User,
 } from '../types'
 import { renderMarkdown } from '../markdown'
-import { dayLabel } from '../dates'
+import { dayLabel, shortTime } from '../dates'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
 import { Settings } from './Settings'
@@ -2489,7 +2489,11 @@ export function Chat({
                 className={`message${m.deleted ? ' deleted' : ''}${grouped ? ' grouped' : ''}${m.id === flashId ? ' flash' : ''}`}
               >
                 {grouped ? (
-                  <div className="avatar-spacer" aria-hidden />
+                  // Grouped continuation rows hide the avatar/name; Discord surfaces a
+                  // compact timestamp in the gutter on hover so you can still place the message.
+                  <div className="avatar-spacer">
+                    <span className="hover-time">{shortTime(new Date(m.createdAt))}</span>
+                  </div>
                 ) : (
                   <button
                     type="button"

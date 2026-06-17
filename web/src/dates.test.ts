@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayLabel } from './dates'
+import { dayLabel, shortTime } from './dates'
 
 describe('dayLabel (Discord-style day divider)', () => {
   const now = new Date('2026-06-17T15:00:00')
@@ -24,5 +24,17 @@ describe('dayLabel (Discord-style day divider)', () => {
     const firstOfMonth = new Date('2026-07-01T10:00:00')
     expect(dayLabel(new Date('2026-06-30T22:00:00'), firstOfMonth)).toBe('Yesterday')
     expect(dayLabel(new Date('2026-07-01T01:00:00'), firstOfMonth)).toBe('Today')
+  })
+})
+
+describe('shortTime (gutter hover timestamp)', () => {
+  it('shows hour:minute and omits seconds (locale-robust)', () => {
+    const s = shortTime(new Date('2026-06-17T09:41:30'))
+    expect(s).toMatch(/\d{1,2}:\d{2}/) // has hour:minute
+    expect(s).not.toContain(':30') // no seconds component (would be ":30")
+  })
+  it('renders a non-empty string for midnight and noon', () => {
+    expect(shortTime(new Date('2026-06-17T00:00:00')).length).toBeGreaterThan(0)
+    expect(shortTime(new Date('2026-06-17T12:00:00')).length).toBeGreaterThan(0)
   })
 })
