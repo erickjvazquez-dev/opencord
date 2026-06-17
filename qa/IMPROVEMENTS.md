@@ -3065,3 +3065,22 @@ on-stop.sh auto-clear bridge: it fires `/clear` at ctx<20% AND re-arms `/loop` i
 ScheduleWakeup) — so a *forced* judgment-clear would break the 30-min idle pace. Since I'm not
 degrading and the <20% safety net is wired, NOT forcing a clear; the mechanical floor is handled
 automatically. Verified the cadence/clear interaction so future ticks don't mis-fire it.
+
+## 2026-06-17 (tick 149) — "start of channel" intro (message-area parity now rich)
+
+Shipped the Discord welcome block atop every channel/DM scrollback (round #/@ icon + "Welcome to
+#general!" + start-of-channel subtitle; DM variant). Composes with the date divider + header
+timestamp + hover time from 146–148 — the message area now reads distinctly Discord. Browser QA +
+AI-vision verified. Kept the tick small/low-risk on purpose given the longer session.
+
+**Highest-value NEXT improvement — commit to the big one:** message-area polish is now rich enough;
+build **custom emoji**, BACKEND-FIRST as slice 1 so it's self-contained + testable even mid-session:
+DB table (custom_emoji: server_id, name, uploader, image), store CRUD with validation (name unique
+per server + format, image type/size — Rule 15 adversarial: non-member upload, oversized/non-image,
+name path-traversal), HTTP upload/list/serve/delete endpoints, Go integration tests, curl-verify. Then
+slice 2 = client `:name:` markdown render, slice 3 = picker + upload UI. Spec-first in SPEC.md (Rule D).
+
+**Loop-process note (context):** 7 clean ticks, no degradation. Deliberately did 2 small wins (148/149)
+while cautious about a big feature in a long context — but that caution shouldn't stall the roadmap, so
+next tick commits to custom-emoji slice 1 (a backend slice is safe to do as a contained unit). Not
+forcing a clear (re-arm is fragile; the <20% auto-clear is the safety net).
