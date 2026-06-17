@@ -27,6 +27,34 @@ tunnel, paid cloud only for 24/7 hosting.**
 
 ---
 
+## TOP PRIORITY — UI/UX Discord parity (owner-set 2026-06-17)
+
+**Owner directive (2026-06-17): drive the UI to Discord's polish bar.** Each tick, advance the
+highest unchecked item BELOW before pulling from `## Now` / `## Next` / the parity backlog — but
+keep doing the loop's normal health/QA/security work *alongside* it (don't drop the gates). Every
+UI slice ships the usual way: spec-first (`SPEC.md`), build the minimal Discord-faithful thing,
+then **browser QA + AI-vision verify** the rendered result before "done" (Rule 14). Today the
+account/voice controls are scattered in the 2604-LOC `Chat.tsx` header + voice bar; there is no
+settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settings + UI polish".
+
+- [ ] **Login / register page redesign** (`web/src/components/Auth.tsx`) — Discord-quality:
+  branded layout + clear visual hierarchy, inline validation + error states, loading state,
+  password show/hide, responsive at mobile width. (today: a bare centered username/password card)
+- [ ] **User Settings surface (Discord-style)** — a settings modal/page with a left-nav tab list,
+  replacing the scattered header controls. First tab **My Account**: avatar (upload/preview),
+  username, custom status + emoji, presence picker — consolidated in one place. A ⚙ entry point
+  near the user footer opens it; Esc/overlay closes.
+- [ ] **Voice & Video settings tab** — input device + output device, **input-volume + output-volume
+  sliders**, a **mic test / input-sensitivity meter**, **noise-suppression + echo-cancellation +
+  auto-gain toggles**, and **camera device + live preview**. Persist per-user (localStorage for
+  device/toggle prefs; they're device-specific). (today: only in-call device pickers exist, no
+  sliders/test/toggles/camera)
+- [ ] **Appearance / general polish pass** — consistent spacing + hover/active/focus states,
+  visible focus rings (a11y, keep the axe-core scan green), and an overall "feels like Discord"
+  sweep across sidebar / header / chat / member list.
+- [ ] **(stretch) Video calling** — camera on/off in a voice channel with live video tiles for each
+  participant (beyond the existing screen share); mesh first, SFU path after.
+
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 

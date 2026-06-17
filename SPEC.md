@@ -1555,3 +1555,40 @@ no DB) cover the mapping incl. invisible-while-connected → offline and hostile
 caller sees their own dnd/idle/invisible, a disconnected member reads offline, a bogus value
 normalizes to online, and an unauthenticated set is 401. Browser QA `07d2b` sets DnD via the
 picker and asserts the self dot turns red in the member list AND the header pip recolors.
+
+## User Settings + UI polish (v0.5 — UX Discord parity, owner-set 2026-06-17)
+
+**Why:** owner directive — bring the UI to Discord's polish bar. Today the login page is a bare
+card (`Auth.tsx`), and all account/voice controls are scattered in the 2604-LOC `Chat.tsx` header +
+voice bar; there's no settings surface. Tracked as the GOAL.md "TOP PRIORITY — UI/UX Discord parity"
+list, advanced one slice per tick alongside the loop's normal health/QA work.
+
+**Scope (one shippable slice per tick; each browser-QA + AI-vision verified, Rule 14):**
+
+1. **Login / register redesign** (`Auth.tsx`, `styles.css`) — Discord-quality: branded layout,
+   visual hierarchy, inline validation + error/loading states, password show/hide, mobile-responsive.
+   No backend change (same `login`/`register` calls). Browser QA: register → land in app; bad creds →
+   inline error; AI-vision the polished card.
+
+2. **User Settings modal — "My Account" tab** (new `Settings.tsx`, `styles.css`, wire from
+   `Chat.tsx`) — a Discord-style overlay with a left tab-nav. Move avatar upload/preview, username,
+   custom status + emoji, and the presence picker out of the header and into it; a ⚙ entry point by
+   the user footer opens it, Esc/overlay-click closes. No new endpoints (reuses `PUT /me/status`,
+   `PUT /me/presence`, `POST /avatar`). Browser QA: open settings → change status → see it reflect.
+
+3. **Voice & Video settings tab** — input/output device pickers (lift the existing in-call ones into
+   settings), **input + output volume sliders**, a **mic-test input-sensitivity meter** (Web Audio
+   level from the selected input), **noise-suppression / echo-cancellation / auto-gain toggles**
+   (applied to `getUserMedia` constraints), **camera device + live `<video>` preview**. Persist
+   per-user in `localStorage` (device ids + toggles are client/device-specific; no backend). Wire the
+   chosen constraints into `voice.ts`/`sfu.ts` capture. Browser QA: open tab → pick device →
+   mic-test meter moves → toggles persist across reload; AI-vision the panel.
+
+4. **Appearance / general polish pass** — spacing, hover/active states, visible focus rings (keep the
+   axe-core a11y scan green), consistent component styling across sidebar/header/chat/member list.
+
+5. **(stretch) Video calling** — camera on/off + per-participant video tiles in a voice channel
+   (mesh first, SFU after), reusing the screen-share tile plumbing.
+
+**Non-negotiables:** every slice stays self-hostable (Rule A — settings persist locally, no new paid
+service); inputs validated (Rule B); browser-QA + AI-vision verify the rendered result before "done".
