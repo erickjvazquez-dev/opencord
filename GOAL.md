@@ -82,8 +82,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   consistent, theme-matched 2px accent ring under **keyboard** focus (never on a mouse click), replacing
   the inconsistent/near-invisible browser default across sidebar/header/chat/member list. CSS-only,
   axe-core stays 0-violations; new browser-QA `3f3` Tabs to a button and asserts a visible outline;
-  AI-vision verified the ring. **Still TODO:** consistent spacing + hover/active-state sweep; broader
-  "feels like Discord" pass.
+  AI-vision verified the ring. **Press (:active) feedback DONE (iter 134):** the app had 31 `:hover`
+  rules but ZERO `:active` ones — added a global press dim (`opacity:.8`, + `brightness(.9)` on filled
+  accent buttons) so every button/link gives tactile feedback on press; deliberately NOT a `transform`
+  (a positional nudge moves the element on mousedown and breaks pointer/Playwright click-stability —
+  caught by QA). New browser-QA `3f4` holds a button and asserts it dims. **Still TODO:** consistent
+  spacing sweep; broader "feels like Discord" pass.
 - [ ] **(stretch) Video calling** — camera on/off in a voice channel with live video tiles for each
   participant (beyond the existing screen share); mesh first, SFU path after.
 

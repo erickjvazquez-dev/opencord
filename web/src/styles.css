@@ -58,6 +58,23 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
+/* ── Global press (:active) feedback ────────────────────────────────────────
+   The app had hover states but ZERO press feedback. A subtle dim on press gives
+   every button/link a tactile, Discord-like response regardless of whether it has
+   a background (opacity dims filled buttons AND transparent text buttons alike).
+   NOTE: deliberately NOT a transform — a positional nudge on :active moves the
+   element during mousedown and breaks click-stability in Playwright/real pointers. */
+button:active,
+a:active,
+[role='button']:active {
+  opacity: 0.8;
+}
+.composer button:active,
+.auth-submit:active,
+.settings-btn.primary:active {
+  filter: brightness(0.9);
+}
+
 /* ── Auth ─────────────────────────────────────────────────────────────── */
 .auth {
   height: 100%;

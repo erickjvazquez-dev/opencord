@@ -267,6 +267,24 @@ async function main() {
   )
   await shot('03f3-focus-ring.png')
 
+  // 3f4 — Press (:active) feedback: holding the pointer down on a button must dim it
+  // (opacity < 1). The app had hover states but ZERO press feedback before this;
+  // assert a held button is visibly pressed, then release. (Uses opacity, not a
+  // transform — a positional nudge would move the element and break the click.)
+  step('press feedback: a held button dims (:active)')
+  const pressBtn = page.getByRole('button', { name: /general/ }).first()
+  await pressBtn.hover()
+  await page.mouse.down()
+  const pressed = await pressBtn.evaluate((el) => {
+    const s = getComputedStyle(el)
+    return { opacity: parseFloat(s.opacity), filter: s.filter }
+  })
+  await page.mouse.up()
+  check(
+    pressed.opacity < 1 || pressed.filter !== 'none',
+    `a held button shows :active feedback (got ${JSON.stringify(pressed)})`,
+  )
+
   const msg = page.locator('.message', { hasText: body }).first()
 
   // 3b — React with 👍 (add): a highlighted chip with count 1 appears (live WS).

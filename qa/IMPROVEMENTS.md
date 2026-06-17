@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-17 (iter 134) — Press feedback; the QA CAUGHT a CSS regression that would've shipped (and the cause is a reusable trap)
+
+Shipped global **press (`:active`) feedback** and, more importantly, the browser QA **caught a real
+regression my own change introduced before it could ship.** **Component: UI → polished.** I'd measured
+the gap correctly (31 `:hover` rules, 0 `:active`) and reached for the intuitive press effect —
+`transform: translateY(1px)` (a tactile nudge). Build was green, types fine. But the full browser-QA
+run **crashed on the very first registration click** with a 30s `locator.click` timeout. Root cause:
+**a `:active` transform moves the element during mousedown, and Playwright's click-stability check (and
+real pointer hit-testing) treats the element as moving out from under the cursor → the click never
+completes.** Fix: use a NON-positional press cue (`opacity`/`filter`), which dims without moving the
+hit box.
+
+Two durable lessons:
+1. **Never use a positional `transform` for `:active` press feedback.** It breaks pointer clicks (test
+   automation AND, more subtly, real fast clicks). Press cues must be paint-only: opacity, filter,
+   background, box-shadow — never transform/margin/top that move the hit target mid-click.
+2. **This is the strongest evidence yet that the full browser QA gate earns its ~3 min.** `go
+   build`/`tsc`/`vitest`/`go test` were ALL green — a pure-CSS interaction regression is invisible to
+   every non-browser gate. Only Playwright driving the real rendered UI caught it. Reaffirms the loop
+   rule: a green non-browser suite is the floor, never the proof (Rule 14). I nearly had a "build's
+   green, ship it" moment; the gate stopped a broken-registration deploy.
+
+**Process improvement applied:** when a tick changes interaction CSS (`:hover`/`:active`/`:focus`/
+`transform` on interactive elements), the browser QA is MANDATORY this tick (not the every-3rd-tick
+cadence) — exactly because these regressions are invisible to the other gates. (This tick already did;
+encoding it so a future tick doesn't skip browser QA after a "trivial CSS tweak".)
+
 ## 2026-06-16 (iter 133) — Focus-ring a11y; ground a "polish pass" in a measured gap + test the property robustly
 
 Shipped the **global keyboard focus-ring** (Appearance pass, a11y slice). **Component: UI →
