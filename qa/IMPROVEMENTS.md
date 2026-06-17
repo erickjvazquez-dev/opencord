@@ -3013,3 +3013,19 @@ north star; audio/QA is now strong, UI-features is the gap.
 **Carry (loop-process):** an AI-vision pass that finds nothing is a VALID, valuable tick outcome — it
 prevents churn. "Looked, it's clean, did the objective thing instead" is the right call, not a failure
 to find work.
+
+## 2026-06-17 (tick 146) — rotated to visible parity: Discord date dividers
+
+Acted on tick 145's rotation note: moved off voice/QA to a visible Discord-parity feature. Added
+calendar-day **date dividers** ("Today" / "Yesterday" / full date) to the message list — client-only,
+no backend, low-risk. Extracted `dayLabel` to its own `dates.ts` so it's unit-testable in isolation
+(no heavy Chat import); tested the Today/Yesterday/month-boundary branches. Shipped + railway up +
+rollout-verified (live bundle carries it). **Component advanced:** UI (Discord parity + readability).
+
+**Highest-value NEXT improvement:** the natural follow-up small polish — **hover timestamp on grouped
+messages** (Discord shows a faint left-margin time on the grouped continuation rows on hover; ours hide
+the time entirely). Tiny, visible, client-only. Bigger parity items still open: custom emoji (server
+:name:, self-hostable like avatars), Video slice 2 (screen+camera coexist). Keep rotating components.
+
+**Carry (loop-process):** when adding a small pure helper inside a giant component, extract it to its
+own module so the test doesn't drag in the whole component tree — cheap testability, clean blast radius.
