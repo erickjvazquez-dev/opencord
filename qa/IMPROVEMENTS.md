@@ -3270,3 +3270,24 @@ row (reuse the profile-card surface), a blocked-users list in Settings (a "Priva
 account area), and HIDE/collapse a blocked user's messages in server channels (the slice-2 effect — hook
 the message history/render: `Recent`/`SearchMessages` server-side filter OR a client collapse). Then the
 friends/requests social graph is a separate later epic.
+
+## 2026-06-17 (tick 158) — user blocking COMPLETE (client slice 2)
+
+Shipped the client half: Block/Unblock on the profile card, a Settings → Privacy blocked-list, and
+blocked authors' messages hidden in every channel (pure `visibleMessages` filter applied before the
+divider/grouping pass; live WS auto-hidden). Two-author browser E2E proves block→hide→unblock→reappear;
+vitest for the filter; AI-vision the card button + Privacy tab + the message actually vanishing.
+**User blocking done end-to-end** (backend DM-enforcement slice 1 + client slice 2), prod-verified.
+
+**Highest-value NEXT (rotate):** options — (a) **friends / friend requests** — completes the
+relationships/social area started with blocking (shares the relationship concept; a real Discord surface:
+send request → accept/decline → friends list → friends-only DM gating). Medium-big epic, backend-first.
+(b) A **consolidation / "feels like Discord" polish + broad QA pass** across the ~15 ticks of new
+surfaces (emoji, notifications, Privacy, profile card) to ensure cohesion — lighter, lower-risk. (c)
+Threads or custom colored roles (big epics). Lean friends (natural continuation) OR a polish pass to
+consolidate the feature burst.
+
+**Process note:** the investigate→delegate→review-the-risky-bits→verify(gate+AI-vision+prod)→ship loop
+is humming — 3 multi-slice epics (custom emoji, blocking) + 2 features (notifications) shipped cleanly
+with the one P1 (emoji-load) caught and fixed by tightening the QA (naturalWidth). Verification depth is
+the throughline.
