@@ -3247,3 +3247,26 @@ are fixed owner/admin/member); (d) **threads** (big). Lean friends OR server-lev
 **Process note:** the loop is in a healthy groove — investigate (Explore agent, keep context lean) →
 delegate impl → review the security/correctness bits myself → verify (gate + naturalWidth/decode +
 AI-vision) → ship → prod-verify. The tick-155 P1 catch shows the verification depth is paying off.
+
+## 2026-06-17 (tick 157) — user blocking, backend slice 1 (DM enforcement)
+
+Shipped the block API (block/unblock/list) + SYMMETRIC DM enforcement via the central `CanAccessChannel`
+gate (so block flows through open/send/react/history) + `CreateOrGetDM`→ErrBlocked + `ListDMs` filter.
+Investigated first (Explore agent → slice plan), delegated impl, REVIEWED the central-gate change myself
+(the kind='dm' branch only; server/global untouched), independently ran the blocking + regression tests
+(DM/server access still pass — no collateral), and PROD-verified the live block flow (block→204,
+/me/blocks lists, unblock→204, unauth→401, migration applied). Rule-15 adversarial cases live in the
+integration tests.
+
+**Carry — modifying a central security function:** the highest-care change of the epic was the one-branch
+edit to `CanAccessChannel` (every channel access flows through it). The discipline that made it safe:
+(a) scope the change to the DM branch ONLY, (b) keep an explicit regression guard test asserting
+server-channel/#general access is unaffected, (c) review the exact SQL myself, (d) run the existing
+DM+server access tests and confirm green. When touching a central gate, the regression guard is as
+important as the new behavior.
+
+**Highest-value NEXT — blocking slice 2 (client):** block/unblock button on the profile card + member
+row (reuse the profile-card surface), a blocked-users list in Settings (a "Privacy" or extend the
+account area), and HIDE/collapse a blocked user's messages in server channels (the slice-2 effect — hook
+the message history/render: `Recent`/`SearchMessages` server-side filter OR a client collapse). Then the
+friends/requests social graph is a separate later epic.
