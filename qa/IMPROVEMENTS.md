@@ -3156,3 +3156,25 @@ Pick per per-component rotation; emoji-reactions builds on fresh momentum, video
 **Loop-process note (context):** 11 ticks; FEATURE-COMPLETE checkpoint (cleanest possible stopping
 point). Delegation kept per-tick growth modest + no degradation, so continuing with the 30-min cadence
 rather than a disruptive forced-clear; the <20% auto-clear net has room to fire between ticks if needed.
+
+## 2026-06-17 (tick 153) — composer emoji picker (slice 3b); custom emoji FULLY complete
+
+Shipped the composer 🙂 picker (insert `:name:` at the caret; shown only when the server has emoji;
+reaction palette untouched). Delegated impl; reviewed caret logic + verified (build, vitest 39/39, full
+QA, AI-vision) + prod. Custom emoji is now fully complete across 4 slices (backend/render/manager/picker).
+
+**QA gap found this tick (do NEXT — Track 0):** the QA emoji FIXTURE is a degenerate 1px PNG, so the
+inline emoji + manager + picker tiles render tiny/ambiguous in screenshots — I couldn't AI-vision-confirm
+the *rendered* emoji unambiguously (picker tiles did visibly load, and the DOM assertions prove the
+correct `img.emoji-inline src=/api/emoji/{id}`, so the feature IS correct — but the vision check is
+weak). Fix: replace the QA emoji fixture with a clearly-visible small PNG (e.g. a solid 64×64 colored
+square) so every emoji screenshot definitively shows whether emoji render to the eye. Small, high-value
+(makes the AI-vision step meaningful for the whole emoji feature). This is the loop's "improve the QA
+process itself" work.
+
+**Highest-value NEXT (rotate off emoji):** (a) the visible-fixture QA fix above (quick, do first); then
+(b) **video slice 2** (screen+camera coexist) — the remaining TOP-PRIORITY partial — or custom-emoji
+reactions. Per-component rotation: emoji is done; video advances TOP PRIORITY.
+
+**Loop-process (context):** 12 ticks; still trusting the wired ctx<20% auto-clear (purpose-built, fires
++ re-arms when actually low) over a mistimed forced-clear. Delegation keeps per-tick growth modest.
