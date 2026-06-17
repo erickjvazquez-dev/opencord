@@ -3110,3 +3110,25 @@ server-settings upload/delete UI. Slice 2 is client-only + testable via browser 
 NOT forcing a clear (re-arm wipes the ScheduleWakeup + is fragile; would disrupt the 30-min cadence the
 session is paced on). Relying on the wired ctx<20% auto-clear as the net; still executing cleanly
 (delegated well, caught the gofmt issue, verified independently + on prod).
+
+## 2026-06-17 (tick 151) — custom emoji CLIENT render (slice 2); feature usable end-to-end
+
+Shipped the client half: `:name:` renders as an inline emoji image for the active server's emoji
+(per-server cached map; literal in #general/DMs). Built via delegated general-purpose agent (kept my
+context lean again); I reviewed the XSS-critical `markdown.tsx` change (React img, numeric-id src,
+map-gated, literal fallback — safe), independently ran build+vitest (39/39) + full QA (no markdown
+regression across bold/spoiler/mention/blockquote) + AI-vision the render, and prod-verified. Custom
+emoji now works end-to-end (backend upload + client render); only the UI to upload (slice 3) remains.
+
+**Delegation is the context-management lever:** ticks 150–151 were big features (backend + client) but
+delegating the implementation to agents kept MY context from ballooning while I owned review + security
++ verification. This is how the loop sustains long sessions without a risky forced-clear — fan the
+file-heavy implementation out, keep the main loop as reviewer/verifier/shipper (Rule 17).
+
+**Highest-value NEXT improvement:** slice 3 — server-settings **emoji manager** (list + upload form +
+delete, admin-only, in the Settings modal or a server-settings surface) + an **emoji picker** that
+inserts `:name:` into the composer (extend the existing reaction quick-palette pattern). Delegate the
+impl; review + browser-QA + AI-vision. That completes the custom-emoji feature.
+
+**Loop-process note (context):** 10 ticks; delegation kept this one lean-ish. Still not forcing a clear
+(re-arm fragile); the <20% auto-clear remains the net. Continue delegating big slices.
