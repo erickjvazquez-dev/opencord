@@ -297,7 +297,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   (silences all incoming audio + forces the mic off; E2E verified). **Global PTT
   hotkey shipped** (hold a bound key — default `` ` ``, rebindable + persisted —
   anywhere to talk; stands down while typing; E2E + AI-vision verified).
-  *Next voice polish: screen share, video, soundboard.*
+  **Voice presence shipped (iter 170, v0.9 slice 1):** the hub tracks who's in the voice
+  call per channel (a `voiceMembers` map mutated lock-free on the single Run goroutine;
+  voice-join/leave/disconnect update it) and broadcasts a `voice-presence` event; the client
+  shows a live **"🔊 N in voice"** header chip so you see a call WITHOUT joining (foundation
+  for discoverable calls + dedicated voice channels). WS test + 3-client browser E2E + AI-vision.
+  **Slice 2 NEXT:** a `Hub.VoiceMembers(channelID)` HTTP query + cross-channel sidebar presence
+  (see who's in voice on EACH channel, like Discord), then dedicated `kind='voice'` channels.
+  *Next voice polish: voice channels as entities, screen share, video, soundboard.*
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
   contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live
   video tiles for every viewer; **screen-audio mixing** — sharer scales the level sent to all

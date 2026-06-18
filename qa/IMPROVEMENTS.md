@@ -3584,3 +3584,28 @@ in 3 surfaces + hoisting + route-level security from tick 165). Genuinely comple
 voice channels as entities (needs the hub voice-presence work) or audit log.
 
 **Cadence:** shipped a feature; colored roles complete. Parity backlog remains → ACTIVE (1800s).
+
+## 2026-06-18 (tick 170) — voice presence shipped (audio component advanced)
+
+After ~10 UI/chat ticks, rotated to the AUDIO component (furthest from its north star per the owner rule).
+Shipped voice presence: the hub tracks who's in the voice call per channel and broadcasts it, so a channel
+shows a live "🔊 N in voice" indicator without joining. Key correctness property: the voiceMembers map is
+mutated ONLY on the hub's single Run goroutine (the same lock-free discipline as the client set) — every
+mutation point (voice-join/leave event, unregister, evict) is inside Run, and the HTTP-safe query pattern
+(OnlineUserIDs) is reserved for slice 2. Verified with a real two-client WS test (join→presence-includes-A,
+leave→drops) + a 3-client browser E2E (B, not in the call, sees "1 in voice") + AI-vision.
+
+**Highest-value loop improvement (a discovery, not a process gap):**
+While picking the work I found the AUDIO component is FAR more advanced than the loop's recent focus
+implied — `web/src/sfu.ts` already has a full LiveKit SFU transport (stack-guardian APPROVED 2026-06-14,
+opt-in via OPENCORD_SFU_URL), with active-speaker selection, and mesh↔SFU both work E2E. The scale north
+star is largely BUILT; what was missing was the everyday UX around voice (who's in a call), which is what
+this tick added. **Lesson for the loop's component rotation: "furthest from north star" must be judged from
+the CODE, not from which component the recent ticks happened to touch — I'd mentally ranked audio as
+"behind" when its hard scale-problem was already solved and its real gap was presence/UX.** Re-read the
+component's GOAL.md NORTH STAR note + grep its code before assuming it's the laggard.
+
+**Coverage note:** voice presence has WS-unit + 3-client-browser + AI-vision coverage. The untested next
+surface is the cross-channel sidebar presence (slice 2) which needs the HTTP query — not built yet.
+
+**Cadence:** shipped a feature; voice-presence slice 1 done with slice 2 queued → ACTIVE (1800s).
