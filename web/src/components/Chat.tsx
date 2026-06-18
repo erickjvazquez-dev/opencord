@@ -1785,6 +1785,17 @@ export function Chat({
     .find((c) => c.id === channelId)
   // A voice channel shows a join-to-talk view instead of the text chat + composer.
   const activeChannelIsVoice = activeServerChannel?.kind === 'voice'
+  // Live roster for the open voice channel: prefer the active-channel live presence
+  // (voicePresence — updated on every WS voice-presence event, so it reflects a join/leave
+  // instantly), and fall back to the ~15s polled cross-channel map only if the live list
+  // hasn't arrived yet. This keeps the voice view's "who's here" current without poll lag.
+  const voiceRoster = !activeChannelIsVoice
+    ? []
+    : voicePresence.length > 0
+      ? voicePresence
+      : channelId != null
+        ? (serverVoice[channelId] ?? [])
+        : []
   const activeChannelName = current?.name ?? activeServerChannel?.name ?? activeThread?.name
   // A thread is being viewed iff the active channel is the tracked active thread.
   const inThread = !!activeThread && activeThread.id === channelId
@@ -3153,9 +3164,9 @@ export function Chat({
                     Disconnect
                   </button>
                 )}
-                {channelId != null && (serverVoice[channelId]?.length ?? 0) > 0 && (
+                {voiceRoster.length > 0 && (
                   <ul className="voice-channel-roster" aria-label="people in this voice channel">
-                    {serverVoice[channelId].map((uid) => (
+                    {voiceRoster.map((uid) => (
                       <li key={uid} className="voice-channel-roster-item">
                         <span className="voice-participant-dot" aria-hidden />
                         {voiceUserName(uid)}

@@ -608,6 +608,12 @@ async function main() {
   const disconnectBtn = page.getByRole('button', { name: 'Disconnect' })
   await disconnectBtn.waitFor({ timeout: 8000 })
   check(await disconnectBtn.isVisible(), 'the voice channel view shows a Disconnect control while in-call')
+  // The voice-channel view's roster lists who's connected — joining must surface SELF there.
+  // This is a real end-to-end presence assertion inside the voice view (voicePresence is live, no
+  // poll lag), and waiting for it makes the in-call screenshot deterministic (roster has populated).
+  const selfRosterItem = page.locator('.voice-channel-roster-item', { hasText: user })
+  await selfRosterItem.waitFor({ timeout: 15000 })
+  check(await selfRosterItem.isVisible(), 'the voice-channel view roster lists the connected user (self)')
   await shot('07-voice-channel-incall.png')
   await page
     .locator('.server-group', { hasText: 'qa server' })

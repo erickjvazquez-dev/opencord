@@ -2497,3 +2497,16 @@ The `🔔 mute` notification toggle stays (harmless). Frontend-only; text/DM/thr
 guard — on the open voice channel it asserts the header brand contains 🔊 and that
 `.readonly-toggle/.slowmode-edit/.topic-edit/.pins-open/.threads-open/.search-form` are all absent;
 AI-vision confirmed the cleaned-up header. Ship + `railway up` + rollout-verify.
+
+## Voice channel roster — live source + presence assertion (v0.9, slice 3d)
+
+**Why:** the slice-3b voice view listed participants from `serverVoice[channelId]` (the ~15s polled
+cross-channel map), so a join/leave lagged up to 15s and the QA in-call screenshot non-deterministically
+showed/omitted the roster. Fix at the root: the open voice channel IS the active channel, so its roster
+now prefers the **live** `voicePresence` (updated on every WS voice-presence event), falling back to the
+polled map only until the live list arrives. Roster updates are now instant.
+
+**Verify (Rule 14):** tsc clean, vitest 77/77, go build/vet/test green; browser QA now asserts the
+voice-channel view roster lists SELF after joining (a real end-to-end presence assertion inside the view,
+`waitFor` the roster item → the in-call screenshot is deterministic); AI-vision confirmed the roster +
+sidebar participant both show. Ship + `railway up` + rollout-verify.
