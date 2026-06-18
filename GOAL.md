@@ -318,8 +318,19 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   invalid-kind rejected; route 403 non-admin / 400 bad kind / 201 kind='voice'); go build/vet/test green;
   shipped + `railway up` + **live E2E verified** (201 voice / unchanged text / 400 bad-kind / 403
   non-admin on the deploy). The client create-channel UI doesn't send `kind` yet → no UI change until 3b.
-  **Slice 3b NEXT (client):** render `kind='voice'` channels with a 🔊 icon, click-to-join the call, and
-  list participants beneath the channel in the sidebar (reusing `serverVoice` presence).
+  **Slice 3b DONE (iter 173): voice channels in the client.** A 🔊 voice channel you create (new
+  "+ voice" button), click to open a centered **join-to-talk view** (text composer + message list
+  hidden), Join → the in-call voice bar, Disconnect → back. Participants list **beneath** the channel
+  row in the sidebar (Discord-style), resolving ids→names via the active server's `memberList`, reusing
+  `serverVoice` presence. Architectural note: mesh voice rides the per-channel WS, so being "in" a voice
+  channel == it being your active channel. tsc clean, vitest 77/77, go build/vet/test green; browser QA
+  grew a create→🔊 row→join-view (no composer)→Join→in-call bar→Disconnect flow (all green); AI-vision
+  verified the join view, in-call view, and sidebar participants-beneath; blast-radius guard PASS;
+  shipped + `railway up` + **rollout-verified** (live JS/CSS bundles carry the new code).
+  **Slice 3c NEXT (polish):** the channel *header* still shows `#` + text-channel actions
+  (pins/threads/edit-topic/make-read-only/slowmode/search) for a voice channel — swap to 🔊 and hide the
+  inapplicable actions. **3d:** auto-join on click; background voice while viewing a text channel
+  (needs a separate voice WS so voice isn't tied to the active channel).
   *Next voice polish: screen share, video, soundboard.*
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
   contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live

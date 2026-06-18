@@ -3664,3 +3664,35 @@ a feature isn't QA-covered until the rendered RESULT is exercised by eye, not ju
 adversarial coverage. The CLICK-TO-JOIN + participant-list-beneath UI is uncovered until slice 3b.
 
 **Cadence:** shipped a feature; slice 3b queued → ACTIVE (1800s).
+
+## 2026-06-18 (tick 173) — voice channels in the client (v0.9 slice 3b, UI) shipped
+
+Made `kind='voice'` channels visible + usable: a "+ voice" create button, a 🔊 sidebar row with
+participants listed beneath it (Discord-style), and a centered join-to-talk main view (composer +
+message list hidden) with Join/Disconnect reusing the existing in-call voice bar. A blast-radius guard
+(Rule 18) confirmed PASS before shipping: `channelButton` now returns a wrapper `<div>` for voice
+channels but the bare `<button>` for text (unchanged), the composer/intro/message-list gates only add
+`&& !activeChannelIsVoice` (false for DMs/threads/text), and no test asserts `.server-channel` is a
+direct button. Drove the REAL UI via browser QA (create → 🔊 row → join view → Join with the fake mic →
+in-call voice bar → Disconnect) and **AI-vision-graded three screenshots** — the join view, the in-call
+view, and a sidebar element-shot showing the participant beneath the 🔊 row. All clean, no P0.
+
+**QA process improvement this tick (the meta-QA, owner's top Track-0 ask):** grew `qa/browser.mjs` with
+a full **create-AND-join-a-voice-channel** interaction flow — exactly the standing rule slice 3a logged
+("3b must not ship the UI without its browser+vision coverage"). The flow asserts not just that the row
+renders but that the RESULT is right by eye: the join view shows, the composer is GONE (`.composer`
+count === 0 — a negative assertion the harness didn't have before), joining surfaces the in-call bar,
+and disconnecting returns to Join. This extends the GAP-026 result-region discipline to a brand-new
+interaction (join/leave a call) and adds element-shots of the result region for vision grading.
+
+**Highest-value loop improvement (a QA gap the vision pass surfaced, now logged):** AI-vision caught a
+P1 the automated checks missed — the channel HEADER still shows `#` + text-channel actions (pins,
+threads, edit-topic, make-read-only, slowmode, search) for a voice channel, which are inapplicable.
+This is the vision pass earning its keep: text+DOM assertions all passed, but the rendered header is
+off for a voice channel. Logged as slice 3c. Next tick should ALSO add a browser assertion that a voice
+channel's header hides those text-only actions, so the fix is regression-guarded.
+
+**Coverage note:** voice channels now have store+route integration (3a) + a full browser create/join/
+leave flow + AI-vision (3b). Uncovered: the header-polish state (3c) and auto-join-on-click (3d).
+
+**Cadence:** shipped a feature; slice 3c queued → ACTIVE (1800s).
