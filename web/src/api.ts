@@ -566,11 +566,15 @@ export async function createServerChannel(
   serverId: number,
   name: string,
   categoryId?: number,
+  kind?: 'public' | 'voice',
 ): Promise<Channel> {
+  const body: { name: string; categoryId?: number; kind?: string } = { name }
+  if (categoryId != null) body.categoryId = categoryId
+  if (kind === 'voice') body.kind = 'voice' // omit for text channels (server defaults to public)
   const res = await fetch(`/api/servers/${serverId}/channels`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(categoryId == null ? { name } : { name, categoryId }),
+    body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create channel')

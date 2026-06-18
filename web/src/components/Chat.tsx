@@ -1586,12 +1586,23 @@ export function Chat({
     }
   }, [token])
 
-  // Create a channel, optionally inside a category (categoryId).
-  const addServerChannel = async (serverId: number, categoryId?: number) => {
-    const name = window.prompt('New channel name (2-32 chars: a-z, 0-9, _ or -):')?.trim()
+  // Create a channel, optionally inside a category (categoryId) and of a given kind
+  // ('voice' for a 🔊 voice channel, else a text channel).
+  const addServerChannel = async (
+    serverId: number,
+    categoryId?: number,
+    kind: 'public' | 'voice' = 'public',
+  ) => {
+    const name = window
+      .prompt(
+        kind === 'voice'
+          ? 'New voice channel name (2-32 chars: a-z, 0-9, _ or -):'
+          : 'New channel name (2-32 chars: a-z, 0-9, _ or -):',
+      )
+      ?.trim()
     if (!name) return
     try {
-      const c = await createServerChannel(token, serverId, name, categoryId)
+      const c = await createServerChannel(token, serverId, name, categoryId, kind)
       setServerChannels((cur) => ({ ...cur, [serverId]: [...(cur[serverId] ?? []), c] }))
       setChannelId(c.id)
     } catch (err) {
@@ -1638,25 +1649,61 @@ export function Chat({
       else next.add(categoryId)
       return next
     })
+  // Resolve a voice participant's user id to a display name (self → "you"; otherwise
+  // the active server's member list; falls back to the raw id if not yet loaded).
+  const voiceUserName = (uid: number) =>
+    uid === user.id
+      ? user.username
+      : (memberList.find((m) => m.userId === uid)?.username ?? `User ${uid}`)
+
   // One server-channel button (reused for uncategorized channels + each category group).
-  const channelButton = (c: Channel) => (
-    <button
-      key={c.id}
-      className={`channel-item server-channel${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}${mutedChannels.has(c.id) ? ' muted' : ''}`}
-      onClick={() => selectChannel(c.id)}
-    >
-      <span className="hash">#</span>
-      <span className="item-name" title={c.name}>
-        {c.name}
-      </span>
-      {(serverVoice[c.id]?.length ?? 0) > 0 && (
-        <span className="channel-voice-badge" title={`${serverVoice[c.id].length} in voice`}>
-          🔊 {serverVoice[c.id].length}
+  // A voice channel (kind='voice') gets a 🔊 glyph and lists its current participants
+  // beneath the row (Discord-style); a text channel renders exactly as before.
+  const channelButton = (c: Channel) => {
+    const isVoice = c.kind === 'voice'
+    const inVoice = serverVoice[c.id] ?? []
+    const btn = (
+      <button
+        key={c.id}
+        className={`channel-item server-channel${isVoice ? ' voice-channel' : ''}${c.id === channelId ? ' active' : ''}${isUnread(c.id) ? ' unread' : ''}${mutedChannels.has(c.id) ? ' muted' : ''}`}
+        onClick={() => selectChannel(c.id)}
+      >
+        <span className="hash">{isVoice ? '🔊' : '#'}</span>
+        <span className="item-name" title={c.name}>
+          {c.name}
         </span>
-      )}
-      {unreadIndicator(c.id)}
-    </button>
-  )
+        {/* Text channels show a 🔊 N badge when a call is live; a voice channel's glyph
+            already says it, so it shows a bare count instead. */}
+        {!isVoice && inVoice.length > 0 && (
+          <span className="channel-voice-badge" title={`${inVoice.length} in voice`}>
+            🔊 {inVoice.length}
+          </span>
+        )}
+        {isVoice && inVoice.length > 0 && (
+          <span className="channel-voice-badge" title={`${inVoice.length} in voice`}>
+            {inVoice.length}
+          </span>
+        )}
+        {unreadIndicator(c.id)}
+      </button>
+    )
+    if (!isVoice) return btn
+    return (
+      <div key={c.id} className="voice-channel-group">
+        {btn}
+        {inVoice.length > 0 && (
+          <ul className="voice-participants">
+            {inVoice.map((uid) => (
+              <li key={uid} className="voice-participant" title={voiceUserName(uid)}>
+                <span className="voice-participant-dot" aria-hidden />
+                <span className="voice-participant-name">{voiceUserName(uid)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    )
+  }
 
   const startEdit = (m: Message) => {
     setEditingId(m.id)
@@ -1736,6 +1783,8 @@ export function Chat({
   const activeServerChannel = Object.values(serverChannels)
     .flat()
     .find((c) => c.id === channelId)
+  // A voice channel shows a join-to-talk view instead of the text chat + composer.
+  const activeChannelIsVoice = activeServerChannel?.kind === 'voice'
   const activeChannelName = current?.name ?? activeServerChannel?.name ?? activeThread?.name
   // A thread is being viewed iff the active channel is the tracked active thread.
   const inThread = !!activeThread && activeThread.id === channelId
@@ -2176,6 +2225,12 @@ export function Chat({
               <div className="server-group-actions">
                 <button className="server-add-channel" onClick={() => void addServerChannel(s.id)}>
                   + channel
+                </button>
+                <button
+                  className="server-add-channel"
+                  onClick={() => void addServerChannel(s.id, undefined, 'voice')}
+                >
+                  + voice
                 </button>
                 <button className="server-add-channel" onClick={() => void addCategory(s.id)}>
                   + category
@@ -3059,7 +3114,54 @@ export function Chat({
               ))}
             </div>
           )}
-          {membersOf === null && searchResults === null && pins === null && threads === null && (
+          {/* Voice channel: a join-to-talk view instead of text chat (the per-channel WS
+              carries voice, so being "in" a voice channel == having it active). */}
+          {membersOf === null &&
+            searchResults === null &&
+            pins === null &&
+            threads === null &&
+            activeChannelIsVoice && (
+              <div className="voice-channel-view">
+                <div className="voice-channel-view-icon" aria-hidden>
+                  🔊
+                </div>
+                <h2 className="voice-channel-view-title">{activeChannelName}</h2>
+                <p className="voice-channel-view-sub">
+                  {inCall
+                    ? 'You’re connected. Talk away — leave to disconnect.'
+                    : 'This is a voice channel. Join to talk with whoever’s here.'}
+                </p>
+                {!inCall ? (
+                  <button
+                    className="voice-channel-join-btn"
+                    onClick={() => void joinVoice()}
+                    disabled={!connected}
+                    title={connected ? 'Join this voice channel' : 'Connecting…'}
+                  >
+                    🎙 Join Voice
+                  </button>
+                ) : (
+                  <button className="voice-channel-leave-btn" onClick={leaveVoice}>
+                    Disconnect
+                  </button>
+                )}
+                {channelId != null && (serverVoice[channelId]?.length ?? 0) > 0 && (
+                  <ul className="voice-channel-roster" aria-label="people in this voice channel">
+                    {serverVoice[channelId].map((uid) => (
+                      <li key={uid} className="voice-channel-roster-item">
+                        <span className="voice-participant-dot" aria-hidden />
+                        {voiceUserName(uid)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          {membersOf === null &&
+            searchResults === null &&
+            pins === null &&
+            threads === null &&
+            !activeChannelIsVoice && (
             <div className="channel-intro">
               <div className="channel-intro-icon" aria-hidden>
                 {inThread ? '🧵' : activeDM ? (dmIsGroup(activeDM) ? '👥' : '@') : '#'}
@@ -3086,6 +3188,7 @@ export function Chat({
             searchResults === null &&
             pins === null &&
             threads === null &&
+            !activeChannelIsVoice &&
             // Hide blocked users' messages entirely. Filter FIRST so the date-divider +
             // grouping logic below computes over the VISIBLE list (a hidden message can't
             // break a run or leave an orphaned divider). Live WS messages from a blocked
@@ -3352,6 +3455,7 @@ export function Chat({
             ))}
           </div>
         )}
+        {!activeChannelIsVoice && (
         <form className="composer" onSubmit={send}>
           <input
             ref={fileInputRef}
@@ -3481,6 +3585,7 @@ export function Chat({
             {uploading ? 'Sending…' : 'Send'}
           </button>
         </form>
+        )}
       </div>
 
       {activeServerId && memberList.length > 0 && (

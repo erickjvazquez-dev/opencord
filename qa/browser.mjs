@@ -563,6 +563,45 @@ async function main() {
   await page.locator('.server-channel', { hasText: srvChan }).locator('.channel-voice-badge').waitFor({ state: 'detached', timeout: 20000 })
   check(true, 'the 🔊 badge clears after the caller disconnects')
 
+  // 7-voice-channel (v0.9 slice 3b): a dedicated kind='voice' channel. Create it via "+ voice";
+  // it opens to a join-to-talk view (text composer hidden), Join → the in-call voice bar appears,
+  // then Disconnect returns to the Join state. Drives the REAL UI (fake mic), not just the API.
+  step('create a voice channel → join-to-talk view (no composer) → Join → Disconnect')
+  const voiceChan = 'vc' + String(Date.now()).slice(-6)
+  promptAnswer = voiceChan
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: '+ voice' })
+    .click()
+  const voiceRow = page.locator('.server-channel.voice-channel', { hasText: voiceChan })
+  await voiceRow.waitFor({ timeout: 8000 })
+  check(await voiceRow.isVisible(), 'voice channel appears in the sidebar as a 🔊 voice row')
+  // Creating it also opens it → the join-to-talk view shows and the text composer is gone.
+  await page.locator('.voice-channel-view').waitFor({ timeout: 8000 })
+  check(await page.locator('.voice-channel-view').isVisible(), 'opening a voice channel shows the join view')
+  check((await page.locator('.composer').count()) === 0, 'the text composer is hidden in a voice channel')
+  await page.locator('.voice-channel-view').screenshot({ path: join(SHOTS, '07-voice-channel.png') })
+  // Join the call (Chromium fake mic, auto-granted) → the in-call voice bar + Disconnect appear.
+  await page.getByRole('button', { name: /Join Voice/ }).click()
+  await page.locator('.voice-bar').waitFor({ timeout: 12000 })
+  check(await page.locator('.voice-bar').isVisible(), 'joining a voice channel shows the in-call voice bar')
+  const disconnectBtn = page.getByRole('button', { name: 'Disconnect' })
+  await disconnectBtn.waitFor({ timeout: 8000 })
+  check(await disconnectBtn.isVisible(), 'the voice channel view shows a Disconnect control while in-call')
+  await shot('07-voice-channel-incall.png')
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .screenshot({ path: join(SHOTS, '07-voice-sidebar.png') })
+  await disconnectBtn.click()
+  await page.getByRole('button', { name: /Join Voice/ }).waitFor({ timeout: 8000 })
+  check(
+    await page.getByRole('button', { name: /Join Voice/ }).isVisible(),
+    'disconnecting returns to the Join Voice state',
+  )
+  // Return to the text channel so the thread test below starts from the right place.
+  await page.getByRole('button', { name: new RegExp(srvChan) }).click()
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).waitFor({ timeout: 8000 })
+
   // 7-thread — Threads (v0.8 slice 2): open the thread panel, start a thread, open it, post a
   // message, then return to the parent and confirm the thread is listed.
   step('start a thread off the server channel, open it, post a message, see it listed')

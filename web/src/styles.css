@@ -2052,6 +2052,121 @@ button:disabled {
   border-radius: 10px;
 }
 
+/* Voice channels (kind='voice') in the sidebar — a 🔊 channel you click to join, with
+   its current participants listed beneath the row (Discord-style). */
+.voice-channel-group {
+  display: flex;
+  flex-direction: column;
+}
+.channel-item.server-channel.voice-channel.active {
+  /* A voice channel you're viewing reads "connected" via the same active highlight. */
+  color: var(--text);
+}
+.voice-participants {
+  list-style: none;
+  margin: 0 0 2px;
+  padding: 1px 0 2px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.voice-participant {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.voice-participant-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--online, #36c46e);
+}
+.voice-participant-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Voice channel main view — replaces the text chat + composer for a 🔊 channel. */
+.voice-channel-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 16px;
+  margin: auto 0;
+}
+.voice-channel-view-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--bg-elevated, #2b2d31);
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+}
+.voice-channel-view-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.voice-channel-view-sub {
+  margin: 0;
+  max-width: 360px;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+.voice-channel-join-btn,
+.voice-channel-leave-btn {
+  margin-top: 6px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #fff;
+}
+.voice-channel-join-btn {
+  background: var(--online, #248046);
+}
+.voice-channel-join-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.voice-channel-join-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.voice-channel-leave-btn {
+  background: var(--danger, #da373c);
+}
+.voice-channel-leave-btn:hover {
+  filter: brightness(1.08);
+}
+.voice-channel-roster {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.voice-channel-roster-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+
 .voice-bar {
   display: flex;
   align-items: center;

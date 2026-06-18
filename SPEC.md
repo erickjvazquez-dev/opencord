@@ -2456,3 +2456,30 @@ creates a `voice` channel → `ListServerChannels` returns it with `kind='voice'
 `kind=''`; adversarial: a plain member can't create — route 403; an invalid kind → store rejects /
 route 400). Live E2E on the running stack: create a voice channel via the API, list it, confirm
 `kind='voice'`; bad kind → 400; non-admin → 403. (Browser/visual verification lands with slice 3b's UI.)
+
+## Voice channels in the client (v0.9, slice 3b — UI)
+
+**Why:** slice 3a made `kind='voice'` a first-class server channel server-side; 3b makes it visible
+and usable — Discord's core 🔊 channel you click to join, with participants listed beneath it.
+Architectural constraint: mesh voice signaling rides the per-channel WS, so being "in" a voice channel
+== having it as your active channel (background voice while reading another text channel needs a
+separate-WS refactor — a later slice).
+
+- **Create:** `addServerChannel(serverId, categoryId?, kind='public')` + a new **"+ voice"** button in
+  the server group create the channel with `kind:'voice'` (api `createServerChannel` gains an optional
+  `kind`, omitted for text so the body is unchanged).
+- **Sidebar:** `channelButton` renders a 🔊 glyph (not #) for a voice channel and lists its current
+  participants beneath the row (`voice-channel-group` → `voice-participants`), resolving ids→names via
+  the active server's `memberList`. Reuses the existing `serverVoice` cross-channel presence.
+- **Main view:** `activeChannelIsVoice` (active server channel `kind==='voice'`) swaps the text chat +
+  composer for a centered **voice-channel-view**: 🔊 icon, name, a Join/Disconnect control
+  (reusing `joinVoice`/`leaveVoice` + the existing in-call voice bar), and a roster. The text composer
+  and message list are hidden for voice channels; DMs/threads/text are untouched (flag is false).
+
+**Verify (Rule 14):** tsc clean, vitest 77/77, go build/vet/test green; browser QA grows a new flow —
+create via "+ voice" → 🔊 row in the sidebar → opens the join view (composer absent) → Join → in-call
+voice bar + Disconnect → back to Join → return to a text channel — all green; AI-vision verified the
+join view, the in-call view, and the sidebar participants-beneath. Ship + `railway up` + rollout-verify.
+**P1 follow-ups (slice 3c polish):** the channel *header* still shows `#` + text-channel actions
+(pins/threads/edit-topic/make-read-only/slowmode/search) for a voice channel — swap to 🔊 and hide the
+inapplicable actions. **3d:** auto-join on click; background voice while viewing a text channel.
