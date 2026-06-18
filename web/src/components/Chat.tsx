@@ -20,6 +20,8 @@ import {
   uploadServerEmoji,
   deleteServerEmoji,
   fetchPins,
+  fetchThreads,
+  createThread,
   fetchServerMembers,
   fetchServers,
   redeemInvite,
@@ -242,6 +244,10 @@ export function Chat({
   const [searchResults, setSearchResults] = useState<Message[] | null>(null)
   // Pins panel: non-null shows the channel's pinned messages.
   const [pins, setPins] = useState<Message[] | null>(null)
+  // Threads (v0.8): `threads` non-null shows the channel's thread panel; `activeThread` is the
+  // thread currently being viewed (its name/back-link, since threads aren't in any channel list).
+  const [threads, setThreads] = useState<Channel[] | null>(null)
+  const [activeThread, setActiveThread] = useState<Channel | null>(null)
   // Server members panel: non-null shows the member list (with the owner's role controls).
   const [membersOf, setMembersOf] = useState<{ serverId: number; members: ServerMember[] } | null>(
     null,
@@ -1221,6 +1227,44 @@ export function Chat({
     }
   }
   const closePins = () => setPins(null)
+
+  // Threads (v0.8): open the panel of the active channel's threads (mirrors the pins panel).
+  const openThreads = async () => {
+    if (channelId == null) return
+    try {
+      setMembersOf(null)
+      setSearchResults(null)
+      setPins(null)
+      setSearchQuery('')
+      setThreads(await fetchThreads(token, channelId))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not load threads')
+    }
+  }
+  const closeThreads = () => setThreads(null)
+
+  // Open a thread channel: reuse selectChannel's WS reconnect, and remember it as the active
+  // thread so the header can show its name + a back-link to the parent.
+  const selectThread = (t: Channel) => {
+    setChannelId(t.id)
+    setSidebarOpen(false)
+    setPins(null)
+    setThreads(null)
+    setActiveThread(t)
+  }
+
+  // Create a thread off `parentChannelId` (prompt for a name), then jump into it.
+  const startThread = async (parentChannelId: number) => {
+    const name = window.prompt('New thread name:')?.trim()
+    if (!name) return
+    try {
+      const t = await createThread(token, parentChannelId, name)
+      setThreads((cur) => (cur ? [t, ...cur] : cur))
+      selectThread(t)
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not create thread')
+    }
+  }
   const changeRole = async (serverId: number, userId: number, role: string) => {
     try {
       await setServerMemberRole(token, serverId, userId, role)
@@ -1663,7 +1707,9 @@ export function Chat({
   const activeServerChannel = Object.values(serverChannels)
     .flat()
     .find((c) => c.id === channelId)
-  const activeChannelName = current?.name ?? activeServerChannel?.name
+  const activeChannelName = current?.name ?? activeServerChannel?.name ?? activeThread?.name
+  // A thread is being viewed iff the active channel is the tracked active thread.
+  const inThread = !!activeThread && activeThread.id === channelId
   // My role in the server whose member panel is open (owner/admin/member/undefined).
   const myRoleInPanel = membersOf?.members.find((x) => x.userId === user.id)?.role
   const iAmServerOwner = myRoleInPanel === 'owner'
@@ -1877,6 +1923,8 @@ export function Chat({
     setChannelId(id)
     setSidebarOpen(false)
     setPins(null) // a panel from the previous channel shouldn't linger
+    setThreads(null)
+    setActiveThread(null) // leaving a thread for a normal channel
   }
 
   const runSearch = async (e: FormEvent) => {
@@ -2103,12 +2151,23 @@ export function Chat({
           </button>
           <div className="brand">
             Opencord{' '}
+            {inThread && activeThread?.parentId != null && (
+              <button
+                className="link thread-back"
+                onClick={() => selectChannel(activeThread.parentId as number)}
+                title="Back to the channel"
+              >
+                ←
+              </button>
+            )}
             <span className="channel">
-              {activeDM
-                ? dmIsGroup(activeDM)
-                  ? dmTitle(activeDM)
-                  : `@${dmTitle(activeDM)}`
-                : `#${activeChannelName ?? '…'}`}
+              {inThread
+                ? `🧵 ${activeChannelName ?? '…'}`
+                : activeDM
+                  ? dmIsGroup(activeDM)
+                    ? dmTitle(activeDM)
+                    : `@${dmTitle(activeDM)}`
+                  : `#${activeChannelName ?? '…'}`}
             </span>
             {activeIsReadOnly && (
               <span className="readonly-badge" title="read-only — only admins can post">
@@ -2147,6 +2206,11 @@ export function Chat({
           {channelId != null && (
             <button className="link pins-open" onClick={() => void openPins()}>
               pins
+            </button>
+          )}
+          {channelId != null && !activeDM && !inThread && (
+            <button className="link threads-open" onClick={() => void openThreads()}>
+              🧵 threads
             </button>
           )}
           {channelId != null && (
@@ -2894,26 +2958,64 @@ export function Chat({
               ))}
             </div>
           )}
-          {membersOf === null && searchResults === null && pins === null && (
+          {membersOf === null && searchResults === null && pins === null && threads !== null && (
+            <div className="search-results">
+              <div className="search-results-head">
+                <span>
+                  🧵 {threads.length} thread{threads.length === 1 ? '' : 's'}
+                </span>
+                <span>
+                  <button className="link" onClick={() => void startThread(channelId as number)}>
+                    + New thread
+                  </button>{' '}
+                  <button className="link" onClick={closeThreads}>
+                    ✕ close
+                  </button>
+                </span>
+              </div>
+              {threads.length === 0 && <div className="search-empty">No threads yet — start one.</div>}
+              {threads.map((t) => (
+                <button
+                  key={t.id}
+                  className="thread-row"
+                  onClick={() => selectThread(t)}
+                  title={`Open “${t.name}”`}
+                >
+                  <span className="thread-row-icon" aria-hidden>
+                    🧵
+                  </span>
+                  <span className="thread-row-name">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {membersOf === null && searchResults === null && pins === null && threads === null && (
             <div className="channel-intro">
               <div className="channel-intro-icon" aria-hidden>
-                {activeDM ? (dmIsGroup(activeDM) ? '👥' : '@') : '#'}
+                {inThread ? '🧵' : activeDM ? (dmIsGroup(activeDM) ? '👥' : '@') : '#'}
               </div>
               <h2 className="channel-intro-title">
-                {activeDM ? dmTitle(activeDM) : `Welcome to #${activeChannelName ?? ''}!`}
+                {inThread
+                  ? activeChannelName
+                  : activeDM
+                    ? dmTitle(activeDM)
+                    : `Welcome to #${activeChannelName ?? ''}!`}
               </h2>
               <p className="channel-intro-sub">
-                {activeDM
-                  ? dmIsGroup(activeDM)
-                    ? `This is the beginning of your group conversation with ${dmTitle(activeDM)}.`
-                    : `This is the beginning of your direct message history with @${dmTitle(activeDM)}.`
-                  : `This is the start of the #${activeChannelName ?? ''} channel.`}
+                {inThread
+                  ? `This is the start of the “${activeChannelName ?? ''}” thread.`
+                  : activeDM
+                    ? dmIsGroup(activeDM)
+                      ? `This is the beginning of your group conversation with ${dmTitle(activeDM)}.`
+                      : `This is the beginning of your direct message history with @${dmTitle(activeDM)}.`
+                    : `This is the start of the #${activeChannelName ?? ''} channel.`}
               </p>
             </div>
           )}
           {membersOf === null &&
             searchResults === null &&
             pins === null &&
+            threads === null &&
             // Hide blocked users' messages entirely. Filter FIRST so the date-divider +
             // grouping logic below computes over the VISIBLE list (a hidden message can't
             // break a run or leave an orphaned divider). Live WS messages from a blocked
@@ -2990,6 +3092,9 @@ export function Chat({
                       )}
                       {canPin && (
                         <button onClick={() => void togglePin(m)}>{m.pinned ? 'unpin' : 'pin'}</button>
+                      )}
+                      {!activeDM && !inThread && (
+                        <button onClick={() => void startThread(m.channelId)}>thread</button>
                       )}
                       <button onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}>
                         react
@@ -3227,11 +3332,13 @@ export function Chat({
                   ? `you're timed out until ${new Date(myTimeoutUntil as string).toLocaleTimeString()}`
                   : !canPost
                     ? 'read-only — only admins can post'
-                    : activeDM
-                      ? dmIsGroup(activeDM)
-                        ? `Message ${dmTitle(activeDM)}`
-                        : `Message @${dmTitle(activeDM)}`
-                      : `Message #${activeChannelName ?? ''}`
+                    : inThread
+                      ? `Message 🧵 ${activeChannelName ?? ''}`
+                      : activeDM
+                        ? dmIsGroup(activeDM)
+                          ? `Message ${dmTitle(activeDM)}`
+                          : `Message @${dmTitle(activeDM)}`
+                        : `Message #${activeChannelName ?? ''}`
             }
             value={draft}
             onChange={(e) => {

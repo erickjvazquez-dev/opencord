@@ -802,3 +802,71 @@ func TestServeWSGroupDMFanoutIntegration(t *testing.T) {
 		t.Fatal("member C should receive A's group message")
 	}
 }
+
+// TestServeWSThreadFanoutIntegration proves v0.8 thread realtime: a message in a thread fans
+// out to all the parent server's members over their live sockets (threads reuse the
+// channel-id-scoped hub), while a non-member of the parent server is refused the thread
+// handshake (access is inherited from the parent, Rule 15).
+func TestServeWSThreadFanoutIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := h.user(t)
+	b, bTok := h.user(t)
+	c, cTok := h.user(t)
+	_, strangerTok := h.user(t)
+
+	srv, err := h.store.CreateServer(ctx, owner.ID, "Thread Realtime")
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
+	if err := h.store.AddServerMember(ctx, srv.ID, b.ID); err != nil {
+		t.Fatalf("add b: %v", err)
+	}
+	if err := h.store.AddServerMember(ctx, srv.ID, c.ID); err != nil {
+		t.Fatalf("add c: %v", err)
+	}
+	parent, err := h.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+	thread, err := h.store.CreateThread(ctx, parent.ID, "Realtime Thread")
+	if err != nil {
+		t.Fatalf("thread: %v", err)
+	}
+	chQ := fmt.Sprintf("?channel=%d&token=", thread.ID)
+
+	connA, _ := h.dial(t, chQ+ownerTok)
+	if connA == nil {
+		t.Fatal("owner failed to connect to the thread")
+	}
+	defer connA.Close()
+	connB, _ := h.dial(t, chQ+bTok)
+	if connB == nil {
+		t.Fatal("member B failed to connect to the thread")
+	}
+	defer connB.Close()
+	connC, _ := h.dial(t, chQ+cTok)
+	if connC == nil {
+		t.Fatal("member C failed to connect to the thread")
+	}
+	defer connC.Close()
+
+	// A non-member of the parent server is refused the thread handshake (inherited access).
+	if conn, status := h.dial(t, chQ+strangerTok); conn != nil {
+		conn.Close()
+		t.Fatal("a non-member upgraded to a thread they can't access")
+	} else if status != http.StatusForbidden {
+		t.Fatalf("non-member thread handshake = %d, want 403", status)
+	}
+
+	// A posts in the thread; B and C both receive it live.
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"body":"in the thread"}`)); err != nil {
+		t.Fatalf("A write: %v", err)
+	}
+	if !wsWaitForBody(t, connB, "in the thread", 4*time.Second) {
+		t.Fatal("member B should receive A's thread message")
+	}
+	if !wsWaitForBody(t, connC, "in the thread", 4*time.Second) {
+		t.Fatal("member C should receive A's thread message")
+	}
+}

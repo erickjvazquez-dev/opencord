@@ -529,6 +529,34 @@ async function main() {
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
+  // 7-thread — Threads (v0.8 slice 2): open the thread panel, start a thread, open it, post a
+  // message, then return to the parent and confirm the thread is listed.
+  step('start a thread off the server channel, open it, post a message, see it listed')
+  promptAnswer = 'qa thread ' + srvChan
+  await page.locator('.threads-open').click()
+  await page.locator('.search-results-head', { hasText: /thread/ }).waitFor({ timeout: 6000 })
+  await page.getByRole('button', { name: '+ New thread' }).click()
+  // startThread prompts for the name (auto-answered) → creates + opens the thread.
+  await page.locator('.brand .channel', { hasText: '🧵' }).waitFor({ timeout: 8000 })
+  check(
+    ((await page.locator('.brand .channel').textContent()) || '').includes('qa thread'),
+    'header shows the thread name after opening it',
+  )
+  const threadBody = 'inside the thread ' + Date.now()
+  await page.getByPlaceholder(/qa thread/).fill(threadBody)
+  await page.getByRole('button', { name: 'Send' }).click()
+  await page.getByText(threadBody).waitFor({ timeout: 8000 })
+  check(await page.getByText(threadBody).isVisible(), 'a message posts inside the thread')
+  await shot('07-thread.png')
+  // Back to the parent channel, reopen the panel → the thread is listed.
+  await page.locator('.thread-back').click()
+  await page.locator('.threads-open').click()
+  const threadRow = page.locator('.thread-row', { hasText: 'qa thread' })
+  await threadRow.waitFor({ timeout: 6000 })
+  check(await threadRow.isVisible(), 'the thread appears in the channel thread panel')
+  await shot('07-thread-panel.png')
+  await page.locator('.search-results-head .link', { hasText: 'close' }).click()
+
   // 7-cat — Channel categories: the owner creates a category, adds a channel inside it,
   // and the category renders as a collapsible group that nests its channel.
   step('create a category → add a channel in it → collapse/expand the group')

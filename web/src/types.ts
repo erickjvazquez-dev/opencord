@@ -15,6 +15,10 @@ export interface Channel {
   slowmodeSeconds?: number
   // Groups the channel under a server category; absent = uncategorized.
   categoryId?: number
+  // Threads (v0.8): kind='thread' marks a thread; parentId is the channel it hangs off.
+  // Absent/'' for a normal channel.
+  kind?: string
+  parentId?: number
 }
 
 // A named, collapsible grouping of a server's channels (Discord-style category).

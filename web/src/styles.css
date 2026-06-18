@@ -1478,6 +1478,42 @@ button:disabled {
   font-style: italic;
 }
 
+/* Thread panel rows (v0.8) — a clickable thread in the channel's thread list. */
+.thread-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  padding: 10px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.thread-row:hover {
+  background: var(--bg-input);
+}
+.thread-row-icon {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.thread-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.thread-back {
+  margin-right: 4px;
+  font-size: 16px;
+}
+
 /* Server members panel rows + role badges. */
 .member-row {
   display: flex;

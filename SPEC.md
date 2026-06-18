@@ -2303,3 +2303,34 @@ server channel; a parent member accesses it, a non-member is denied; the thread 
 nesting rejected; name validation). Live E2E on a real server (create/list threads, post in a thread,
 member-200/non-member-403, thread not in the channel list). No client yet — slice 2 adds the thread UI
 ("start thread" on a message, a thread list/panel, the thread view) + a 3-client WS thread-fanout check.
+
+## Threads — client (v0.8, slice 2)
+
+**Why:** slice 1 shipped the thread backend (a thread = a `kind='thread'` channel with `parentId`,
+reusing the message/WS infra). Slice 2 is the client so users can create/open threads.
+
+- **`types.ts`:** `Channel` gains `kind?` + `parentId?`.
+- **`api.ts`:** `fetchThreads(token, channelId)`, `createThread(token, channelId, name)`.
+- **`Chat.tsx`:**
+  - State `threads: Channel[] | null` (the panel, mirrors `pins`) + `activeThread: Channel | null` (the
+    thread being viewed — its name/back-link, since threads aren't in any channel list).
+  - Header gets a **🧵 Threads** button (shown for a normal channel, not a DM, not while in a thread) →
+    `openThreads()` fetches + opens a panel (mirrors the pins panel) listing the channel's threads + a
+    **+ New thread** create (prompt name → `createThread` → open it).
+  - A **thread** action in the message hover row (`createThreadFromMessage` → prompt name → create+open) —
+    Discord-faithful discoverability.
+  - `selectThread(t)` opens the thread channel (reuses `selectChannel`'s WS reconnect) + sets
+    `activeThread`; `selectChannel` clears `activeThread`. `activeChannelName` falls back to
+    `activeThread?.name`; in a thread the header shows `🧵 name` + a **← back** link to the parent.
+  - The composer placeholder reflects the thread name.
+- **`styles.css`:** a small `.thread-row` (reuses the pins-panel/`.search-results` container).
+
+**Verify (Rule 14):** vitest stays green; `go build/vet/test` green incl. a NEW
+`TestServeWSThreadFanoutIntegration` (3 ws clients on a thread channel — A sends → B AND C receive; a
+non-member's handshake to the thread channel is refused 403 — proving thread realtime + access inherit
+the parent). Browser QA: a new flow — open a server channel → 🧵 Threads → + New thread → the thread
+appears → open it → post a message → the thread view shows it; AI-vision the thread panel + thread view.
+Then ship + `railway up` + rollout-verify the live bundle.
+
+Later (slice 3+): message-anchored threads ("X started a thread" system message), thread unread counts,
+archive/auto-archive, a thread indicator on the source message.
