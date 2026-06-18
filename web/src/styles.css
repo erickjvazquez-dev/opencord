@@ -1514,6 +1514,31 @@ button:disabled {
   font-size: 16px;
 }
 
+/* A clickable reference under a message that started a thread (Discord-style). */
+.thread-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  background: var(--bg-input);
+  border: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.thread-chip:hover {
+  background: #3a3c43;
+  text-decoration: underline;
+}
+
 /* Server members panel rows + role badges. */
 .member-row {
   display: flex;

@@ -157,6 +157,11 @@ CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
 -- Deleting the parent cascades its threads. parent_id is NULL for every non-thread channel.
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS parent_id BIGINT REFERENCES channels(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS channels_parent_id_idx ON channels (parent_id);
+-- Message-anchored threads (v0.8 slice 3): the message a thread was started from, so the
+-- source message can show a clickable thread reference. NULL for every non-anchored channel;
+-- if the message is deleted the thread survives, just unanchored (SET NULL).
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS source_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS channels_source_message_id_idx ON channels (source_message_id);
 
 -- Custom colored roles (v0.7): Discord-style COSMETIC roles, separate from the
 -- owner/admin/member permission tier above (which stays in server_members.role). An admin

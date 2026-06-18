@@ -2334,3 +2334,29 @@ Then ship + `railway up` + rollout-verify the live bundle.
 
 Later (slice 3+): message-anchored threads ("X started a thread" system message), thread unread counts,
 archive/auto-archive, a thread indicator on the source message.
+
+## Threads — message-anchored + discoverable (v0.8, slice 3)
+
+**Why:** the threads MVP (slices 1-2) only surfaces threads via the header panel — a real
+discoverability gap. Discord anchors a thread to the message it was started from and shows a clickable
+"🧵 thread" reference on that message. This closes the gap and makes threads usable in practice.
+
+- **Schema:** `channels.source_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL` — the message
+  a thread was started from (nullable; only threads set it).
+- **`CreateThread`** gains an optional `fromMessageID *int64`, validated to be a non-deleted message IN
+  the parent channel (Rule B/C, mirrors reply validation — a client can't anchor to a message it can't
+  see); stored on the thread.
+- **`Message`** gains `ThreadID *int64` + `ThreadName string` — the thread anchored to this message (if
+  any), surfaced in the read paths (`Recent`/`SearchMessages`/`PinnedMessages`) via a LEFT JOIN
+  `channels t ON t.source_message_id = m.id AND t.kind='thread'`.
+- **Route:** `POST /api/channels/{id}/threads` accepts `{name, fromMessageId?}`.
+- **Client:** the message-hover **thread** action passes the message id; if the message already anchors a
+  thread (`m.threadId`), it OPENS that thread instead of creating a duplicate (Discord behavior). A
+  **🧵 {name}** chip renders under a message that started a thread → clicking opens it. `selectThread`
+  works from `{id, name}` (a minimal Channel).
+
+**Verify (Rule 14):** `go build/vet/test` green incl. extending `TestThreadsIntegration` (a thread created
+`fromMessageID` records the anchor; the source message's `ThreadID`/`ThreadName` surface in `Recent`; an
+anchor to a cross-channel/bogus/deleted message is rejected or dropped). Full QA green incl. a new flow:
+start a thread from a message → a 🧵 chip appears on that message → click it → the thread opens; AI-vision
+the chip. Ship + `railway up` + rollout-verify.

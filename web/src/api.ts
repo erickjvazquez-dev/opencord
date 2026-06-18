@@ -571,12 +571,18 @@ export async function fetchThreads(token: string, channelId: number): Promise<Ch
   return res.json()
 }
 
-// Start a thread off a channel (POST /api/channels/{id}/threads {name}).
-export async function createThread(token: string, channelId: number, name: string): Promise<Channel> {
+// Start a thread off a channel (POST /api/channels/{id}/threads {name, fromMessageId?}).
+// fromMessageId anchors the thread to a message so its source shows a thread reference.
+export async function createThread(
+  token: string,
+  channelId: number,
+  name: string,
+  fromMessageId?: number,
+): Promise<Channel> {
   const res = await fetch(`/api/channels/${channelId}/threads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(fromMessageId == null ? { name } : { name, fromMessageId }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create thread')

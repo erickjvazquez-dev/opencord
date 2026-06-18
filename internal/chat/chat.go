@@ -168,6 +168,10 @@ type Message struct {
 	// AuthorColor (v0.7) is the author's top custom-role color in the channel's server
 	// (#RGB/#RRGGBB), tinting their name. "" for DM/global channels or an uncolored author.
 	AuthorColor string `json:"authorColor,omitempty"`
+	// ThreadID/ThreadName (v0.8 slice 3) are the thread started FROM this message, if any, so
+	// the client can show a clickable thread reference. nil/"" when the message has no thread.
+	ThreadID   *int64 `json:"threadId,omitempty"`
+	ThreadName string `json:"threadName,omitempty"`
 	// Reply reference (Discord-style). ReplyTo is the referenced message id; the
 	// author + body snippet are denormalized so history and live broadcasts render
 	// the quoted preview without an extra round-trip. All three are unset when the
@@ -2207,10 +2211,12 @@ const maxThreadNameLen = 100
 
 // CreateThread (v0.8) creates a thread (kind='thread') under parentID, copying the parent's
 // server_id so the parent's access + post gates apply to the thread unchanged. The parent must
-// exist and be a regular channel — NOT a DM and NOT itself a thread (no nesting in slice 1).
-// The name is trimmed + bounded 1..100. The caller verifies the actor can access+post in the
-// parent (the route does); a thread does NOT participate in channel-name uniqueness.
-func (s *Store) CreateThread(ctx context.Context, parentID int64, name string) (Channel, error) {
+// exist and be a regular channel — NOT a DM and NOT itself a thread (no nesting). The name is
+// trimmed + bounded 1..100. fromMessageID, when set, anchors the thread to a message: it is
+// validated to be a non-deleted message IN the parent channel (Rule B/C — a client can't anchor
+// to a message it can't see) and DROPPED (not honored) otherwise. The caller verifies the actor
+// can access+post in the parent (the route does); a thread does NOT participate in name uniqueness.
+func (s *Store) CreateThread(ctx context.Context, parentID int64, name string, fromMessageID *int64) (Channel, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len([]rune(name)) > maxThreadNameLen {
 		return Channel{}, ErrInvalidThreadName
@@ -2228,12 +2234,24 @@ func (s *Store) CreateThread(ctx context.Context, parentID int64, name string) (
 	if kind == "dm" || kind == "thread" {
 		return Channel{}, ErrNotThreadable
 	}
+	// Validate the anchor message lives (non-deleted) in THIS parent channel; drop it otherwise.
+	if fromMessageID != nil {
+		var ok bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted_at IS NULL)`,
+			*fromMessageID, parentID).Scan(&ok); err != nil {
+			return Channel{}, err
+		}
+		if !ok {
+			fromMessageID = nil
+		}
+	}
 	parent := parentID
 	c := Channel{Name: name, PostPolicy: "everyone", Kind: "thread", ParentID: &parent}
 	if err := s.pool.QueryRow(ctx,
-		`INSERT INTO channels (name, kind, parent_id, server_id) VALUES ($1, 'thread', $2, $3)
-		   RETURNING id, created_at`,
-		name, parentID, serverID).Scan(&c.ID, &c.CreatedAt); err != nil {
+		`INSERT INTO channels (name, kind, parent_id, server_id, source_message_id)
+		   VALUES ($1, 'thread', $2, $3, $4) RETURNING id, created_at`,
+		name, parentID, serverID, fromMessageID).Scan(&c.ID, &c.CreatedAt); err != nil {
 		return Channel{}, err
 	}
 	return c, nil
@@ -2515,10 +2533,11 @@ func (s *Store) RevokeInvite(ctx context.Context, serverID int64, code string) e
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at, m.pinned,
-		        m.reply_to, ru.username, r.body, r.deleted_at, `+authorColorSQL+`
+		        m.reply_to, ru.username, r.body, r.deleted_at, `+authorColorSQL+`, t.id, COALESCE(t.name, '')
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		   LEFT JOIN messages r ON r.id = m.reply_to
 		   LEFT JOIN users ru ON ru.id = r.user_id
+		   LEFT JOIN channels t ON t.source_message_id = m.id AND t.kind = 'thread'
 		  WHERE m.channel_id = $1
 		  ORDER BY m.id DESC LIMIT $2`, channelID, limit)
 	if err != nil {
@@ -2534,7 +2553,7 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 		var replyAuthor, replyBody *string
 		var replyDeleted *time.Time
 		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt, &editedAt, &m.Pinned,
-			&replyTo, &replyAuthor, &replyBody, &replyDeleted, &m.AuthorColor); err != nil {
+			&replyTo, &replyAuthor, &replyBody, &replyDeleted, &m.AuthorColor, &m.ThreadID, &m.ThreadName); err != nil {
 			return nil, err
 		}
 		m.EditedAt = editedAt
@@ -2586,8 +2605,9 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 // Access is gated by the caller (HandlePins) before this runs.
 func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at, `+authorColorSQL+`
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at, `+authorColorSQL+`, t.id, COALESCE(t.name, '')
 		   FROM messages m JOIN users u ON u.id = m.user_id
+		   LEFT JOIN channels t ON t.source_message_id = m.id AND t.kind = 'thread'
 		  WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted_at IS NULL
 		  ORDER BY m.id`, channelID)
 	if err != nil {
@@ -2597,7 +2617,7 @@ func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message,
 	out := make([]Message, 0)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt, &m.AuthorColor); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt, &m.AuthorColor, &m.ThreadID, &m.ThreadName); err != nil {
 			return nil, err
 		}
 		m.Pinned = true
@@ -2704,8 +2724,9 @@ func (s *Store) SearchMessages(ctx context.Context, channelID int64, query strin
 	if f.after != nil {
 		conds = append(conds, "m.created_at >= "+add(*f.after))
 	}
-	sql := `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at, ` + authorColorSQL + `
+	sql := `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at, ` + authorColorSQL + `, t.id, COALESCE(t.name, '')
 		   FROM messages m JOIN users u ON u.id = m.user_id
+		   LEFT JOIN channels t ON t.source_message_id = m.id AND t.kind = 'thread'
 		  WHERE ` + strings.Join(conds, " AND ") + `
 		  ORDER BY m.id DESC LIMIT ` + add(limit)
 	rows, err := s.pool.Query(ctx, sql, args...)
@@ -2717,7 +2738,7 @@ func (s *Store) SearchMessages(ctx context.Context, channelID int64, query strin
 	for rows.Next() {
 		var m Message
 		var editedAt *time.Time
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &editedAt, &m.AuthorColor); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &editedAt, &m.AuthorColor, &m.ThreadID, &m.ThreadName); err != nil {
 			return nil, err
 		}
 		m.EditedAt = editedAt

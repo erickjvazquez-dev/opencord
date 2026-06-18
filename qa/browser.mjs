@@ -557,6 +557,26 @@ async function main() {
   await shot('07-thread-panel.png')
   await page.locator('.search-results-head .link', { hasText: 'close' }).click()
 
+  // 7-thread-anchor (slice 3) — start a thread FROM a message → a clickable 🧵 chip appears on
+  // the source message (anchored/discoverable threads).
+  step('start a thread from a message → a thread chip appears on the source message')
+  promptAnswer = 'anchored thread'
+  const srcMsg = page.locator('.message', { hasText: srvBody }).first()
+  await srcMsg.hover()
+  await srcMsg.getByRole('button', { name: 'thread', exact: true }).click()
+  await page.locator('.brand .channel', { hasText: '🧵 anchored thread' }).waitFor({ timeout: 8000 })
+  // Back to the parent: the source message now carries a thread chip (history refetch).
+  await page.locator('.thread-back').click()
+  const chip = page.locator('.message', { hasText: srvBody }).first().locator('.thread-chip')
+  await chip.waitFor({ timeout: 8000 })
+  check(await chip.isVisible(), 'the source message shows a 🧵 thread chip after starting a thread from it')
+  await shot('07-thread-chip.png')
+  // Clicking the chip opens the thread.
+  await chip.click()
+  await page.locator('.brand .channel', { hasText: '🧵 anchored thread' }).waitFor({ timeout: 8000 })
+  check(true, 'clicking the thread chip opens the anchored thread')
+  await page.locator('.thread-back').click()
+
   // 7-cat — Channel categories: the owner creates a category, adds a channel inside it,
   // and the category renders as a collapsible group that nests its channel.
   step('create a category → add a channel in it → collapse/expand the group')

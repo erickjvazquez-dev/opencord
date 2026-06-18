@@ -1253,17 +1253,28 @@ export function Chat({
     setActiveThread(t)
   }
 
-  // Create a thread off `parentChannelId` (prompt for a name), then jump into it.
-  const startThread = async (parentChannelId: number) => {
+  // Create a thread off `parentChannelId` (prompt for a name), optionally anchored to a
+  // message, then jump into it.
+  const startThread = async (parentChannelId: number, fromMessageId?: number) => {
     const name = window.prompt('New thread name:')?.trim()
     if (!name) return
     try {
-      const t = await createThread(token, parentChannelId, name)
+      const t = await createThread(token, parentChannelId, name, fromMessageId)
       setThreads((cur) => (cur ? [t, ...cur] : cur))
       selectThread(t)
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'could not create thread')
     }
+  }
+
+  // The message-hover "thread" action: open the message's existing thread if it already has
+  // one (Discord behavior — one thread per message), else start a new anchored thread.
+  const threadFromMessage = (m: Message) => {
+    if (m.threadId != null) {
+      selectThread({ id: m.threadId, name: m.threadName ?? 'thread', kind: 'thread', createdAt: '', parentId: m.channelId })
+      return
+    }
+    void startThread(m.channelId, m.id)
   }
   const changeRole = async (serverId: number, userId: number, role: string) => {
     try {
@@ -3094,7 +3105,9 @@ export function Chat({
                         <button onClick={() => void togglePin(m)}>{m.pinned ? 'unpin' : 'pin'}</button>
                       )}
                       {!activeDM && !inThread && (
-                        <button onClick={() => void startThread(m.channelId)}>thread</button>
+                        <button onClick={() => threadFromMessage(m)}>
+                          {m.threadId != null ? 'open thread' : 'thread'}
+                        </button>
                       )}
                       <button onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}>
                         react
@@ -3170,6 +3183,23 @@ export function Chat({
                           </button>
                         ))}
                     </div>
+                  )}
+                  {!m.deleted && m.threadId != null && (
+                    <button
+                      className="thread-chip"
+                      onClick={() =>
+                        selectThread({
+                          id: m.threadId as number,
+                          name: m.threadName ?? 'thread',
+                          kind: 'thread',
+                          createdAt: '',
+                          parentId: m.channelId,
+                        })
+                      }
+                      title={`Open the “${m.threadName}” thread`}
+                    >
+                      🧵 {m.threadName}
+                    </button>
                   )}
                   {!m.deleted && (m.reactions?.length ?? 0) > 0 && (
                     <div className="reactions">

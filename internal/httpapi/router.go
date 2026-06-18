@@ -359,13 +359,14 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					return
 				}
 				var in struct {
-					Name string `json:"name"`
+					Name          string `json:"name"`
+					FromMessageID *int64 `json:"fromMessageId"`
 				}
 				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
 					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 					return
 				}
-				thread, err := store.CreateThread(r.Context(), id, in.Name)
+				thread, err := store.CreateThread(r.Context(), id, in.Name, in.FromMessageID)
 				switch {
 				case errors.Is(err, chat.ErrInvalidThreadName):
 					http.Error(w, `{"error":"thread name must be 1-100 characters"}`, http.StatusBadRequest)

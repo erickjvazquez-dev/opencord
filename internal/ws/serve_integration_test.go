@@ -829,7 +829,7 @@ func TestServeWSThreadFanoutIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("channel: %v", err)
 	}
-	thread, err := h.store.CreateThread(ctx, parent.ID, "Realtime Thread")
+	thread, err := h.store.CreateThread(ctx, parent.ID, "Realtime Thread", nil)
 	if err != nil {
 		t.Fatalf("thread: %v", err)
 	}

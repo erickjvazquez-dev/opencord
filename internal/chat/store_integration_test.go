@@ -2455,7 +2455,7 @@ func TestThreadsIntegration(t *testing.T) {
 		t.Fatalf("channel: %v", err)
 	}
 
-	th, err := store.CreateThread(ctx, parent.ID, "Release Planning")
+	th, err := store.CreateThread(ctx, parent.ID, "Release Planning", nil)
 	if err != nil {
 		t.Fatalf("create thread: %v", err)
 	}
@@ -2494,7 +2494,7 @@ func TestThreadsIntegration(t *testing.T) {
 	}
 
 	// A second thread can SHARE the same name (threads don't enforce name uniqueness).
-	th2, err := store.CreateThread(ctx, parent.ID, "Release Planning")
+	th2, err := store.CreateThread(ctx, parent.ID, "Release Planning", nil)
 	if err != nil {
 		t.Fatalf("duplicate-name thread should be allowed: %v", err)
 	}
@@ -2511,22 +2511,62 @@ func TestThreadsIntegration(t *testing.T) {
 		t.Fatalf("thread Recent = %+v err %v", recent, err)
 	}
 
+	// Message-anchored threads (slice 3): a thread created fromMessageID records the anchor,
+	// and the source message's ThreadID/ThreadName surface in the parent channel's Recent.
+	src, err := store.Save(ctx, parent.ID, owner.ID, owner.Username, "let's discuss this")
+	if err != nil {
+		t.Fatalf("save source msg: %v", err)
+	}
+	anchored, err := store.CreateThread(ctx, parent.ID, "Discussion", &src.ID)
+	if err != nil {
+		t.Fatalf("anchored thread: %v", err)
+	}
+	parentRecent, err := store.Recent(ctx, parent.ID, owner.ID, 50)
+	if err != nil {
+		t.Fatalf("parent recent: %v", err)
+	}
+	var found bool
+	for _, m := range parentRecent {
+		if m.ID == src.ID {
+			found = true
+			if m.ThreadID == nil || *m.ThreadID != anchored.ID || m.ThreadName != "Discussion" {
+				t.Fatalf("source message thread anchor wrong: threadId=%v name=%q (want %d/Discussion)", m.ThreadID, m.ThreadName, anchored.ID)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("source message missing from parent Recent")
+	}
+	// An anchor to a message NOT in the parent channel is dropped (the thread is created
+	// unanchored, so no message carries it) — Rule B/C, can't anchor to a foreign message.
+	foreign, _ := store.Save(ctx, th.ID, member.ID, member.Username, "foreign") // in the thread, not the parent
+	if dropped, err := store.CreateThread(ctx, parent.ID, "No Anchor", &foreign.ID); err != nil {
+		t.Fatalf("create with foreign anchor: %v", err)
+	} else {
+		again, _ := store.Recent(ctx, parent.ID, owner.ID, 50)
+		for _, m := range again {
+			if m.ThreadID != nil && *m.ThreadID == dropped.ID {
+				t.Fatalf("a cross-channel anchor must be DROPPED, but message %d carries thread %d", m.ID, dropped.ID)
+			}
+		}
+	}
+
 	// Guards: name validation, threading a DM, nesting a thread, unknown parent.
-	if _, err := store.CreateThread(ctx, parent.ID, "  "); !errors.Is(err, chat.ErrInvalidThreadName) {
+	if _, err := store.CreateThread(ctx, parent.ID, "  ", nil); !errors.Is(err, chat.ErrInvalidThreadName) {
 		t.Fatalf("blank name err = %v, want ErrInvalidThreadName", err)
 	}
-	if _, err := store.CreateThread(ctx, parent.ID, strings.Repeat("a", 101)); !errors.Is(err, chat.ErrInvalidThreadName) {
+	if _, err := store.CreateThread(ctx, parent.ID, strings.Repeat("a", 101), nil); !errors.Is(err, chat.ErrInvalidThreadName) {
 		t.Fatalf("overlong name err = %v, want ErrInvalidThreadName", err)
 	}
 	bob := regUser(t, pool)
 	dm, _ := store.CreateOrGetDM(ctx, owner.ID, bob.ID)
-	if _, err := store.CreateThread(ctx, dm.ID, "no dms"); !errors.Is(err, chat.ErrNotThreadable) {
+	if _, err := store.CreateThread(ctx, dm.ID, "no dms", nil); !errors.Is(err, chat.ErrNotThreadable) {
 		t.Fatalf("thread on a DM err = %v, want ErrNotThreadable", err)
 	}
-	if _, err := store.CreateThread(ctx, th.ID, "no nesting"); !errors.Is(err, chat.ErrNotThreadable) {
+	if _, err := store.CreateThread(ctx, th.ID, "no nesting", nil); !errors.Is(err, chat.ErrNotThreadable) {
 		t.Fatalf("nested thread err = %v, want ErrNotThreadable", err)
 	}
-	if _, err := store.CreateThread(ctx, 1<<40, "ghost"); !errors.Is(err, chat.ErrChannelNotFound) {
+	if _, err := store.CreateThread(ctx, 1<<40, "ghost", nil); !errors.Is(err, chat.ErrChannelNotFound) {
 		t.Fatalf("unknown parent err = %v, want ErrChannelNotFound", err)
 	}
 }
