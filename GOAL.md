@@ -410,7 +410,18 @@ item from here as the structural milestones above land.
 - [~] **Slowmode** (per-channel post cooldown, admin-set, server-enforced, 🐌 badge —
   E2E + adversarial test) · NSFW gating · announcement channels (done: read-only
   policy) + following · channel topic (done)
-- [ ] Threads + archived threads · pinned messages
+- [~] **Threads** — **slice 1 backend DONE (iter 166):** a thread = `kind='thread'` channel with
+  `parent_id`, copying the parent's `server_id` so access/posting/history/WS-fanout all work UNCHANGED
+  (the same channel-id-scoped reuse group DMs used). `channels.parent_id` (+ index); per-scope name
+  unique indexes recreated to exclude threads (many can share a name). `CreateThread` (no DM/no nesting,
+  name 1-100, copies server_id) + `ListThreads`; threads kept out of `ListChannels`/`ListServerChannels`/
+  unreads. Routes `GET/POST /api/channels/{id}/threads` (gated on parent access; POST also CanPost).
+  `TestThreadsIntegration` + live E2E (access inherited, absent from channel list, full adversarial set);
+  shipped + `railway up` + rollout-verified (new route 401 not 404). **Slice 2 NEXT (client):** a "Create
+  Thread" affordance on a message / channel header, a thread list/panel for a channel, and the thread
+  view (reuses the message view on the thread's channel id); browser QA + AI-vision + a 3-client WS
+  thread-fanout test. Later: archived threads, auto-archive, thread unread counts, "X started a thread"
+  system message. (Pinned messages already DONE separately.)
 
 ### Messaging
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators

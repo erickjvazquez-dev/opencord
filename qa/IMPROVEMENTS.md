@@ -3476,3 +3476,32 @@ confirm an unexpected status is a real reject (did the side effect happen?) befo
 next: WS frame fuzzing (oversized/garbage/wrong-type frames) beyond the existing checks, or start threads.
 
 **Cadence:** shipped real coverage (no runtime change → no deploy, Rule 10). Backlog remains → ACTIVE 1800s.
+
+## 2026-06-17 (tick 166) — full-product QA/AI-vision pass (green) + threads backend slice 1 shipped
+
+Two tracks. **Track 0:** on the every-3rd-tick cadence (last tick was test-only), ran the full browser QA
+(green) and AI-vision-reviewed a broad sample — mobile drawer (group DM glyph clean), mobile message view
+(XSS escaped, mentions/replies/attachments/code render), member list (role badges + typing indicator),
+colored names — **all cohesive, no P0/P1**. A valid green polish-confirmation after the feature burst.
+**Track 1:** started the biggest remaining parity gap — **threads** — backend slice 1. The design win
+(same as group DMs): a thread = `kind='thread'` channel with `parent_id` that copies the parent's
+server_id, so access/posting/history/WS-fanout reuse the existing channel-id-scoped infra with ZERO new
+message code. Only real subtlety caught during design: threads carry a name + server_id, so they'd collide
+with the per-scope channel-name UNIQUE indexes — recreated those to exclude `kind='thread'`. Full
+integration + live E2E (incl. adversarial 403/400) + rollout-verified. Component advanced: **UI/parity**.
+
+**Highest-value loop improvement (the recurring-design-pattern is now explicit):**
+Three epics in a row (group DMs, colored roles assignment, threads) shipped fast BECAUSE the data model
+reused an existing N-scoped table instead of inventing a new mechanism — group DMs reused `channel_members`,
+threads reused the channel/message/hub infra. **Codified design heuristic for new features: before adding a
+new table/mechanism, ask "can this be a new `kind`/row on an existing N-scoped table?" — the channel +
+channel_members + per-channel-hub primitives already cover DMs, groups, and threads for free; reusing them
+keeps each feature a thin slice and inherits all the access/realtime/test coverage automatically.** This is
+why threads slice 1 touched only 6 files with no new message/WS code. Also re-confirmed the schema-migration
+discipline: a `DROP INDEX IF EXISTS` + recreate is needed when CHANGING an existing partial-unique-index
+predicate (CREATE ... IF NOT EXISTS alone won't update a live index).
+
+**Coverage note:** threads slice 1 has store + route-implicit + live-E2E coverage; the gap is a 3-client WS
+thread-fanout test + browser coverage — both land with slice 2 (the thread UI).
+
+**Cadence:** shipped a feature with slice 2 queued → ACTIVE (1800s).
