@@ -748,3 +748,57 @@ func TestHubOnlineUserIDsIntegration(t *testing.T) {
 		t.Fatal("user should be offline after disconnecting")
 	}
 }
+
+// TestServeWSGroupDMFanoutIntegration proves v0.6 group-DM realtime: a message sent in a
+// group DM fans out to ALL its members over their live sockets (the per-channel hub makes
+// this "free" — and "free" is exactly what silently regresses), while a non-member's
+// handshake to the group channel is refused (WS access control holds for groups, Rule 15).
+func TestServeWSGroupDMFanoutIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+	a, aTok := h.user(t)
+	b, bTok := h.user(t)
+	c, cTok := h.user(t)
+	_, strangerTok := h.user(t)
+
+	g, err := h.store.CreateGroupDM(ctx, a.ID, []int64{b.ID, c.ID})
+	if err != nil {
+		t.Fatalf("create group dm: %v", err)
+	}
+	chQ := fmt.Sprintf("?channel=%d&token=", g.ID)
+
+	connA, _ := h.dial(t, chQ+aTok)
+	if connA == nil {
+		t.Fatal("A (member) failed to connect to the group")
+	}
+	defer connA.Close()
+	connB, _ := h.dial(t, chQ+bTok)
+	if connB == nil {
+		t.Fatal("B (member) failed to connect to the group")
+	}
+	defer connB.Close()
+	connC, _ := h.dial(t, chQ+cTok)
+	if connC == nil {
+		t.Fatal("C (member) failed to connect to the group")
+	}
+	defer connC.Close()
+
+	// A non-member is refused the group channel handshake (403) — group access control.
+	if conn, status := h.dial(t, chQ+strangerTok); conn != nil {
+		conn.Close()
+		t.Fatal("a non-member upgraded to a group DM channel they can't access")
+	} else if status != http.StatusForbidden {
+		t.Fatalf("non-member group handshake = %d, want 403", status)
+	}
+
+	// A sends ONE message; BOTH other members must receive it live (fanout to all N).
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"body":"hi group"}`)); err != nil {
+		t.Fatalf("A write: %v", err)
+	}
+	if !wsWaitForBody(t, connB, "hi group", 4*time.Second) {
+		t.Fatal("member B should receive A's group message")
+	}
+	if !wsWaitForBody(t, connC, "hi group", 4*time.Second) {
+		t.Fatal("member C should receive A's group message")
+	}
+}
