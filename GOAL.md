@@ -62,6 +62,22 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   "Create Group"). **Core group DMs complete (create + render + realtime).** Later sub-slices (lower
   priority): group naming (needs a non-UNIQUE name column), add/remove member, leave group, stacked
   member avatars.
+- [~] **Custom colored roles (Discord parity, tick-159 ROI #2)** — **slice 1 backend DONE (iter 162):**
+  Discord-style COSMETIC colored roles, additive to and separate from the owner/admin/member PERMISSION
+  tier (untouched — low blast radius). New `server_roles` (id, server_id, name, color, position) +
+  `member_roles` (user_id, role_id) tables (no change to `server_members.role`). Store (all mutations
+  admin-gated, Rule C): Create (validate name 1-32 + color `#RGB`/`#RRGGBB`, position=max+1), List
+  (position desc), Update (rename/recolor), Delete (cascades assignments), Assign/Unassign (target must
+  be a member, role must belong to the server). `ServerMember` gains `color` = the member's **top**
+  (highest-position) role color via a correlated subquery in `ListServerMembers` (Discord's top-role
+  rule). Routes under `/custom-roles` (since `POST .../roles` is the permission setter). `go build/vet/
+  test` green incl. `TestServerCustomRolesIntegration`; **live E2E on a real server** (full CRUD +
+  assignment + member-list color resolution + recolor + cascade-on-delete; adversarial: non-admin 403,
+  bad hex 400, non-member 404, bogus role 404); shipped + `railway up` + rollout-verified (new route 401
+  not 404). **Slice 2 NEXT:** client — a role manager (create/edit color via a picker/swatches, delete)
+  in server settings, assign/unassign on the member/profile UI, and render each member's name in their
+  `color` (member list + message authors); browser QA + AI-vision. Later: role reordering (drag
+  position), per-role permissions (beyond cosmetic).
 - [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
   "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
   uppercase field labels, **password show/hide toggle**, inline min-length hint, loading

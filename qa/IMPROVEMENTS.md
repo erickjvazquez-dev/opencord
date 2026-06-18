@@ -3367,3 +3367,30 @@ have no UI yet (add/remove member, leave) — but those are unbuilt, so not a ga
 target: a colored-roles epic (tick-159 plan #2) or threads — both large; pick per ROI next tick.
 
 **Cadence:** shipped a feature (core group DMs complete) → ACTIVE (1800s); next tick starts a new epic.
+
+## 2026-06-17 (tick 162) — custom colored roles slice 1 (backend) shipped + rollout-verified
+
+Started the tick-159 ROI #2 epic (colored roles). Key design decision that kept blast radius low:
+treat colored roles as a COSMETIC layer (`server_roles` + `member_roles`) entirely SEPARATE from the
+existing owner/admin/member permission tier (`server_members.role`) — so the proven permission/kick/ban
+logic is untouched and the member-list grouping still works. The top-role color is surfaced on
+`ServerMember.color` via one correlated subquery (Discord's highest-position rule). Full admin-gated
+CRUD + assignment, validated (hex color + name length, Rule B/15). Verified end-to-end on a REAL server
+(CRUD + color resolution + recolor + cascade + adversarial 403/400/404), then `railway up` + rollout-proof
+(new route 401 not 404). **Component advanced: UI/parity** (groundwork for colored names — a near-universal
+Discord feature).
+
+**Highest-value loop improvement this tick (process — recurring E2E foot-gun, now a rule):**
+The live E2E first run FAILED to fetch user ids: I assumed a `/api/me`-style id endpoint, but the id is
+returned in the **register/login response** itself (`{token, user:{id,...}}`). Two ticks running, the
+E2E scripting (not the product) has been the fragile part — tick 160 `GID` zsh var, tick 161 realtime
+selector, tick 162 id source. **Rule for next E2E tick: derive identity from the auth response
+(`.user.id`/`.token`) — never assume a separate `/me` lookup — and prefer non-reserved var names + a
+known-free port.** The CRUD/adversarial assertions that DIDN'T need ids all passed first try, so the
+product was right; the harness scripting was the cost. A small reusable bash helper (register→{tok,id})
+would remove this entirely — noted for a future QA-tooling tick.
+
+**Coverage note:** colored roles now have backend (integration) + live-E2E coverage. The gap is the
+SAME as group DMs at this stage: no UI yet, so no browser/AI-vision coverage — that lands with slice 2.
+
+**Cadence:** shipped a feature with slice 2 queued → ACTIVE (1800s).
