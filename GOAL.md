@@ -425,8 +425,15 @@ item from here as the structural milestones above land.
   A sends, B+C receive; non-member handshake 403). tsc/vitest/go green; full QA green (browser=0 realtime=0
   voice=0 search=0 — new flow creates/opens/posts in a thread + confirms it's listed); AI-vision verified
   the thread view + panel; shipped + `railway up` + rollout-verified (live bundle carries "🧵 threads").
-  **✅ Threads MVP COMPLETE (create + open + chat + realtime).** Later (slice 3+, optional): message-
-  anchored threads + "X started a thread" system message, thread unread counts, archive/auto-archive.
+  **✅ Threads MVP COMPLETE (create + open + chat + realtime).** **Slice 3 DONE (iter 168):
+  message-anchored + discoverable threads** — `channels.source_message_id`; `CreateThread(…, fromMessageID)`
+  validated to a non-deleted message in the parent (Rule B/C, dropped otherwise); `Message.threadId/
+  threadName` surfaced via a LEFT JOIN in the read paths; the message-hover **thread** action anchors to
+  the message (or opens the existing one — one thread per message), and a clickable **🧵 {name}** chip
+  renders under the source message. `TestThreadsIntegration` extended (anchor recorded + surfaced; cross-
+  channel anchor dropped); full QA green incl. a start-from-message→chip→open flow; AI-vision verified the
+  chip; shipped + `railway up` + rollout-verified. Later (optional): "X started a thread" system message,
+  thread unread counts, archive/auto-archive.
 
 ### Messaging
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators

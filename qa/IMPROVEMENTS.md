@@ -3531,3 +3531,28 @@ message / unread counts), which has no code yet.
 
 **Cadence:** shipped a feature; threads MVP complete. No unchecked P0/P1 in the active epic, but the
 parity backlog still has items (voice channels as entities, audit log, role hoisting). ACTIVE (1800s).
+
+## 2026-06-18 (tick 168) — threads slice 3 (message-anchored, discoverable) shipped
+
+Closed the real usability gap in the threads MVP: threads were only reachable via the header panel.
+Now a thread can be anchored to the message it was started from (the "thread" hover action), and that
+message shows a clickable 🧵 chip — Discord's discoverability model. Reused the proven reply-validation
+pattern (anchor must be a non-deleted message in the parent, else dropped — Rule B/C) and the existing
+read-path JOIN approach (same shape as the authorColor subquery from slice 2b). Full QA green incl. a
+start-from-message → chip → open flow; AI-vision verified the chip. Component: **UI/parity**.
+
+**Highest-value loop improvement (a concrete reuse pattern is now a named tool):**
+This slice added a per-message derived field (`threadId/threadName`) by LEFT-JOINing the read paths —
+EXACTLY the same mechanism as `authorColor` (slice 2b). Two ticks apart, the same "annotate every message
+with a derived field via a join/subquery in Recent+Pins+Search" pattern. **Named heuristic for future
+per-message metadata (thread refs, author color, future: reaction-of-the-day, pin-count, etc.): add the
+field to Message, JOIN/subquery it into the THREE read paths (Recent, PinnedMessages, SearchMessages) +
+set it on the live Save/Edit path if it must appear instantly; the WS history reuses Recent for free.**
+Knowing the read paths are exactly those three (and the live paths are Save*/Edit) makes each such field a
+mechanical, low-risk change. Logged so the next per-message field doesn't re-discover the surface.
+
+**Coverage note:** threads now fully covered (store + anchor + route + WS-fanout + browser create/open/
+anchor-chip + AI-vision). Threads is feature-complete for parity; remaining thread items (system message,
+unread counts, archive) are niche polish. Next epic candidates: voice channels as entities, role hoisting.
+
+**Cadence:** shipped a feature; threads complete. Parity backlog remains → ACTIVE (1800s).
