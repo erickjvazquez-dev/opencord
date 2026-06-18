@@ -3696,3 +3696,32 @@ channel's header hides those text-only actions, so the fix is regression-guarded
 leave flow + AI-vision (3b). Uncovered: the header-polish state (3c) and auto-join-on-click (3d).
 
 **Cadence:** shipped a feature; slice 3c queued → ACTIVE (1800s).
+
+## 2026-06-18 (tick 174) — voice-channel header polish (v0.9 slice 3c) shipped
+
+Closed the P1 the slice-3b AI-vision pass surfaced: a voice channel's header showed `#` + text-channel
+actions (make-read-only, slowmode, edit-topic, pins, threads, message search) that don't apply to a
+call. Now the brand shows `🔊 <name>` and those actions (plus the redundant header Join-voice/N-in-voice
+buttons) are hidden, all behind `!activeChannelIsVoice` (text/DM/thread headers byte-identical). This is
+the vision→fix→regression-guard loop closing: the P1 vision found last tick became this tick's fix +
+a browser assertion so it can't silently return.
+
+**QA process improvement this tick:** grew `qa/browser.mjs` with a header regression guard — on the open
+voice channel it asserts the brand contains 🔊 AND that `.readonly-toggle/.slowmode-edit/.topic-edit/
+.pins-open/.threads-open/.search-form` are all absent (count===0). Negative assertions ("this chrome is
+GONE") are a class the harness was thin on; they're how you regression-guard a "hide X in context Y" fix.
+
+**Highest-value loop improvement (a QA-robustness gap, logged for next tick):** the in-call screenshot
+this tick did NOT show the voice roster beneath Disconnect (last tick it did) — a timing race between
+the voice-join and the ~15s `serverVoice` presence poll: the screenshot fired before presence
+round-tripped. The feature is fine (3b proved it), but the QA evidence is non-deterministic. FIX next
+tick: before the in-call screenshot, `waitFor` the `.voice-channel-roster-item` (or assert it shows
+self) so the roster is deterministically present — turning a flaky visual into a real end-to-end
+presence assertion inside the voice-channel view (stronger than a screenshot, and stable).
+
+**Coverage note:** voice channels now have store+route (3a) + create/join/leave browser flow (3b) +
+header regression guard (3c) + AI-vision. Gap: the in-call ROSTER inside the voice view isn't asserted
+yet (the timing-race fix above closes it). Auto-join-on-click (3d) remains uncovered/unbuilt.
+
+**Cadence:** shipped a fix; voice channels feature-complete → still ACTIVE (1800s), but the next tick
+can rotate to another component (group-DM sub-slices, appearance polish, or audio→SFU north star).

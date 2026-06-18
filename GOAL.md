@@ -327,9 +327,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   grew a create→🔊 row→join-view (no composer)→Join→in-call bar→Disconnect flow (all green); AI-vision
   verified the join view, in-call view, and sidebar participants-beneath; blast-radius guard PASS;
   shipped + `railway up` + **rollout-verified** (live JS/CSS bundles carry the new code).
-  **Slice 3c NEXT (polish):** the channel *header* still shows `#` + text-channel actions
-  (pins/threads/edit-topic/make-read-only/slowmode/search) for a voice channel — swap to 🔊 and hide the
-  inapplicable actions. **3d:** auto-join on click; background voice while viewing a text channel
+  **Slice 3c DONE (iter 174): voice-channel header polish.** The header now reads as a call, not a text
+  room — the brand shows `🔊 <name>` (not `#`) and the inapplicable text-channel actions (make-read-only,
+  slowmode, edit-topic, pins, threads, message search) + the header's own Join-voice/N-in-voice buttons
+  (redundant with the main view) are hidden; the 🔔 mute toggle stays. All gated on `!activeChannelIsVoice`
+  so text/DM/thread headers are byte-identical. tsc/vitest/go green; browser QA grew a regression guard
+  (header shows 🔊 + hides readonly/slowmode/topic/pins/threads/search); AI-vision confirmed; shipped +
+  rollout-verified. **✅ Voice channels FULLY USABLE + POLISHED (3a backend · 3b UI · 3c header).**
+  **Slice 3d (optional, later):** auto-join on click; background voice while viewing a text channel
   (needs a separate voice WS so voice isn't tied to the active channel).
   *Next voice polish: screen share, video, soundboard.*
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
