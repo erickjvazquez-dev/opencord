@@ -48,10 +48,20 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   `POST /api/dms/group {identifiers:[...]}` (64 KiB bounded). `go build/vet/test` green incl.
   `TestGroupDMIntegration`; **live E2E on a real server** (sorted users, per-viewer ListDMs, member-200/
   non-member-403, 404/400 guards, 1-other==1:1); shipped + `railway up` + rollout-verified (new route 401
-  not 404). **Slice 2 NEXT:** client — a "Create Group DM" flow (multi-select), group rendering in the DM
-  list (stacked/group avatar + comma-joined member names since groups are unnamed) + header + welcome,
-  switch the client to `users[]`; browser QA (create-group flow) + AI-vision. Later sub-slices: group
-  naming (needs a non-UNIQUE name column), add/remove member, leave group.
+  not 404). **Slice 2 client DONE (iter 161):** new `NewGroupModal.tsx` — the Discord-style "New Direct
+  Message" dialog (chips input, Enter/comma adds, ✕/Backspace removes, ≤9; button reads "Create DM" for
+  one / "Create Group" for 2+; Esc/overlay/✕ close). The `+ New DM` button now opens it (replacing the
+  old double `window.prompt` — a polish win; one chip → idempotent 1:1). New pure `dm.ts`
+  (`dmOthers`/`dmIsGroup`/`dmTitle`/`parseIdentifiers`, vitest 12, legacy `user` fallback); DM list,
+  header, welcome + composer render via it; a group shows an accent group-glyph avatar with the full
+  member list in the title. Also closed the slice-1 QA gap: a **3-client WS fanout test** (A→B+C; a
+  non-member's group handshake refused 403). Verify: tsc clean, vitest 77/77, **full QA green
+  (browser=0 realtime=0 voice=0 search=0** — new create-group browser flow + realtime migrated to the
+  modal), AI-vision verified (modal + sidebar row + header + welcome + composer), go test green;
+  shipped + `railway up` + rollout-verified (live bundle byte-identical, carries "New Direct Message"/
+  "Create Group"). **Core group DMs complete (create + render + realtime).** Later sub-slices (lower
+  priority): group naming (needs a non-UNIQUE name column), add/remove member, leave group, stacked
+  member avatars.
 - [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
   "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
   uppercase field labels, **password show/hide toggle**, inline min-length hint, loading

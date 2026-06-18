@@ -3341,3 +3341,29 @@ rollout-proof (the new route returns 401 not 404, vs a genuinely-unknown path st
    foot-guns; noting them so the next E2E tick uses `CID`/a free port from the start.
 
 **Cadence:** shipped a real feature with a follow-on slice queued → stay ACTIVE (1800s).
+
+## 2026-06-17 (tick 161) — group DMs slice 2 (client) shipped + rollout-verified
+
+Completed core group DMs: a Discord-style "New Direct Message" chips modal (replacing the old double
+`window.prompt`), group rendering across the DM list/header/welcome/composer via a pure, vitest-tested
+`dm.ts`, and the 3-client WS fanout test I flagged last tick (closed). Full QA green incl. a new
+create-group browser flow; AI-vision verified the modal + rendered group. Shipped + rollout-verified
+(live bundle byte-identical, carries the new strings). **Component advanced: chat/UI** toward the
+"polished, Discord-faithful" north star (a real modal, not a prompt; faithful group title/avatar).
+
+**Highest-value loop improvement this tick (process — caught + fixed a real false-red):**
+The browser QA passed but **realtime QA went red (RC2=1)** because `qa/realtime.mjs` still drove the
+DM-create via the removed `window.prompt`. The lesson is a concrete loop rule, now internalized: **when a
+UI affordance changes, grep ALL QA scripts (browser.mjs AND realtime.mjs AND voice.mjs) for the old
+selector/flow before declaring done — not just the one you're editing.** The multi-suite QA caught it
+(good), but I should have anticipated it from the diff. The fix migrated realtime to the modal flow
+(1 chip → "Create DM"), and both suites are now green. Reinforces tick-160's env-trap lesson: the gate
+is only trustworthy because it runs the REAL multi-client UI — a unit-test-only gate would have shipped
+a broken DM-create flow.
+
+**Coverage note:** group DMs now have backend (integration), realtime (3-client WS fanout), and browser
+(create + render) coverage — well-covered. Least-tested area surfacing next: the group-DM *edge* paths
+have no UI yet (add/remove member, leave) — but those are unbuilt, so not a gap yet. Next genuine
+target: a colored-roles epic (tick-159 plan #2) or threads — both large; pick per ROI next tick.
+
+**Cadence:** shipped a feature (core group DMs complete) → ACTIVE (1800s); next tick starts a new epic.
