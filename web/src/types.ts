@@ -65,6 +65,20 @@ export interface ServerMember {
   // Profile (shown on the profile card): a longer About Me + short pronouns; absent = none.
   about?: string
   pronouns?: string
+  // Custom colored roles (v0.7): `color` is the member's top role color (#RGB/#RRGGBB) used
+  // to tint their name; `roleIds` are the cosmetic role ids they hold (top position first).
+  color?: string
+  roleIds?: number[]
+}
+
+// A custom, cosmetic, server-scoped colored role (v0.7) — separate from the
+// owner/admin/member permission tier. A member's display color is their top role's color.
+export interface Role {
+  id: number
+  serverId: number
+  name: string
+  color: string
+  position: number
 }
 
 // A custom emoji owned by a server. Server-scoped: a `:name:` only renders as an

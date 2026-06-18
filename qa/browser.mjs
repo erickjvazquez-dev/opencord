@@ -788,6 +788,39 @@ async function main() {
     'members panel shows the owner role',
   )
 
+  // 7d-roles — Custom colored roles (v0.7): admin opens Manage Roles, creates a colored role,
+  // then assigns it to themselves from their profile card → their name in the member list is
+  // tinted that color. Reuses the members panel that's already open.
+  step('custom roles: create a colored role, assign it, see the member name colored')
+  await page.locator('.manage-roles-btn').click()
+  await page.locator('.roles-modal').waitFor({ timeout: 4000 })
+  await page.locator('.roles-name-input').fill('qa-mod')
+  await page.locator('.roles-modal').getByRole('button', { name: /Add role/ }).click()
+  await page.locator('.roles-row', { hasText: 'qa-mod' }).waitFor({ timeout: 6000 })
+  check(
+    (await page.locator('.roles-row', { hasText: 'qa-mod' }).count()) === 1,
+    'the new role appears in the roles manager',
+  )
+  await shot('07d-roles-manager.png')
+  // Close the manager (Esc), then open my own profile from the sidebar member list and assign.
+  await page.keyboard.press('Escape')
+  await page.locator('.roles-modal').waitFor({ state: 'detached', timeout: 4000 })
+  await page.locator('.member-list .member-list-row').first().click()
+  await page.locator('.profile-card').waitFor({ timeout: 4000 })
+  const roleChip = page.locator('.profile-role-chip', { hasText: 'qa-mod' })
+  await roleChip.waitFor({ timeout: 4000 })
+  await roleChip.click()
+  // After assignment the chip flips to the "on" (assigned) state.
+  await page.locator('.profile-role-chip.on', { hasText: 'qa-mod' }).waitFor({ timeout: 6000 })
+  await shot('07d-roles-profile.png')
+  await page.keyboard.press('Escape')
+  await page.locator('.profile-card').waitFor({ state: 'detached', timeout: 4000 })
+  // The member's name in the sidebar list now carries an inline color style (the role color).
+  const namedStyle =
+    (await page.locator('.member-list .member-list-row .author').first().getAttribute('style')) || ''
+  check(namedStyle.includes('color'), `member name is tinted by the assigned role (style="${namedStyle}")`)
+  await shot('07d-roles-colored-name.png')
+
   // 7d3 — Invites management (admin): the section lists the active code, a freshly
   // created invite appears (unlimited + a max-uses one), and revoking one removes it. The
   // QA bot is the owner (admin), so the admin-only Invites section renders. The "+ New

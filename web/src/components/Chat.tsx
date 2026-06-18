@@ -33,6 +33,9 @@ import {
   voiceToken,
   setMessagePinned,
   setServerMemberRole,
+  listServerRoles,
+  assignServerRole,
+  unassignServerRole,
   transferServerOwnership,
   kickServerMember,
   banServerMember,
@@ -61,6 +64,7 @@ import type {
   Invite,
   Message,
   Reaction,
+  Role,
   Server,
   ServerBan,
   ServerEmoji,
@@ -78,6 +82,7 @@ import { EmojiImg } from './EmojiImg'
 import { Settings } from './Settings'
 import { ProfileCard } from './ProfileCard'
 import { NewGroupModal } from './NewGroupModal'
+import { RolesManagerModal } from './RolesManagerModal'
 import { dmTitle, dmIsGroup, dmOthers } from '../dm'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
@@ -189,6 +194,9 @@ export function Chat({
   const [channels, setChannels] = useState<Channel[]>([])
   const [dms, setDms] = useState<DMChannel[]>([])
   const [newDMOpen, setNewDMOpen] = useState(false)
+  // Custom colored roles (v0.7): the active server's roles + which server the manager is open for.
+  const [serverRoles, setServerRoles] = useState<Role[]>([])
+  const [rolesManagerFor, setRolesManagerFor] = useState<number | null>(null)
   const [servers, setServers] = useState<Server[]>([])
   // serverId → its channels (members-only; fetched per server).
   const [serverChannels, setServerChannels] = useState<Record<number, Channel[]>>({})
@@ -1668,6 +1676,61 @@ export function Chat({
     : undefined
   const canModerate = myActiveRole === 'owner' || myActiveRole === 'admin'
   const activeIsReadOnly = activeServerChannel?.postPolicy === 'admins'
+
+  // Custom colored roles (v0.7): keep the active server's roles loaded (for the profile-card
+  // role chips + name colors), and refresh members+roles after any assignment so colors update.
+  useEffect(() => {
+    const sid = activeServerId ? Number(activeServerId) : null
+    if (!sid) {
+      setServerRoles([])
+      return
+    }
+    let cancelled = false
+    listServerRoles(token, sid)
+      .then((rs) => !cancelled && setServerRoles(rs))
+      .catch(() => !cancelled && setServerRoles([]))
+    return () => {
+      cancelled = true
+    }
+  }, [activeServerId, token])
+
+  const refreshRolesAndMembers = async () => {
+    const sid = activeServerId ? Number(activeServerId) : null
+    if (!sid) return
+    try {
+      const [members, roles] = await Promise.all([
+        fetchServerMembers(token, sid),
+        listServerRoles(token, sid),
+      ])
+      setMemberList(members)
+      setServerRoles(roles)
+      setMembersOf((cur) => (cur && cur.serverId === sid ? { serverId: sid, members } : cur))
+      setProfileMember((cur) => (cur ? members.find((m) => m.userId === cur.userId) ?? cur : cur))
+    } catch {
+      /* transient — leave the prior state */
+    }
+  }
+
+  const assignRole = async (userId: number, roleId: number) => {
+    const sid = activeServerId ? Number(activeServerId) : null
+    if (!sid) return
+    try {
+      await assignServerRole(token, sid, userId, roleId)
+      await refreshRolesAndMembers()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not assign role')
+    }
+  }
+  const unassignRole = async (userId: number, roleId: number) => {
+    const sid = activeServerId ? Number(activeServerId) : null
+    if (!sid) return
+    try {
+      await unassignServerRole(token, sid, userId, roleId)
+      await refreshRolesAndMembers()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not unassign role')
+    }
+  }
   // Am I currently timed out (muted) in the active server channel? Derived from the
   // polled member list; the server enforces it regardless, this just reflects it in UI.
   const myTimeoutUntil = memberList.find((m) => m.userId === user.id)?.timeoutUntil
@@ -2475,6 +2538,14 @@ export function Chat({
                       rename
                     </button>
                   )}
+                  {(myRoleInPanel === 'owner' || myRoleInPanel === 'admin') && (
+                    <button
+                      className="link manage-roles-btn"
+                      onClick={() => setRolesManagerFor(membersOf.serverId)}
+                    >
+                      manage roles
+                    </button>
+                  )}
                   {myRoleInPanel === 'owner' ? (
                     <button
                       className="link delete-server-btn"
@@ -2512,7 +2583,9 @@ export function Chat({
                     />
                   </span>
                   <span className="member-id">
-                    <span className="author">{mb.username}</span>
+                    <span className="author" style={mb.color ? { color: mb.color } : undefined}>
+                      {mb.username}
+                    </span>
                     {(mb.status || mb.statusEmoji) && (
                       <span className="member-status" title={mb.status || ''}>
                         {mb.statusEmoji && <span className="status-emoji">{mb.statusEmoji}</span>}
@@ -3248,7 +3321,9 @@ export function Chat({
                       />
                     </span>
                     <span className="member-id">
-                      <span className="author">{mb.username}</span>
+                      <span className="author" style={mb.color ? { color: mb.color } : undefined}>
+                        {mb.username}
+                      </span>
                       {(mb.status || mb.statusEmoji) && (
                         <span className="member-status" title={mb.status || ''}>
                           {mb.statusEmoji && <span className="status-emoji">{mb.statusEmoji}</span>}
@@ -3307,10 +3382,22 @@ export function Chat({
           blocked={blocked.has(profileMember.userId)}
           onToggleBlock={(id) => void toggleBlock(id)}
           onClose={() => setProfileMember(null)}
+          canManageRoles={canModerate}
+          serverRoles={serverRoles}
+          onAssignRole={(uid, rid) => void assignRole(uid, rid)}
+          onUnassignRole={(uid, rid) => void unassignRole(uid, rid)}
         />
       )}
       {newDMOpen && (
         <NewGroupModal token={token} onClose={() => setNewDMOpen(false)} onCreated={addDM} />
+      )}
+      {rolesManagerFor !== null && (
+        <RolesManagerModal
+          token={token}
+          serverId={rolesManagerFor}
+          onClose={() => setRolesManagerFor(null)}
+          onChanged={() => void refreshRolesAndMembers()}
+        />
       )}
     </div>
   )

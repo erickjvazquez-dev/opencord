@@ -5,6 +5,7 @@ import type {
   DMChannel,
   Invite,
   Message,
+  Role,
   Server,
   ServerBan,
   ServerEmoji,
@@ -207,6 +208,98 @@ export async function transferServerOwnership(
   if (!res.ok && res.status !== 204) {
     const data = await res.json().catch(() => ({}))
     throw new Error((data as { error?: string }).error || 'could not transfer ownership')
+  }
+}
+
+// --- Custom colored roles (v0.7) ---
+
+// List a server's cosmetic colored roles (members), highest position first.
+export async function listServerRoles(token: string, serverId: number): Promise<Role[]> {
+  const res = await fetch(`/api/servers/${serverId}/custom-roles`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('could not load roles')
+  return res.json()
+}
+
+// Create a colored role {name, color} (admin). Returns the new role.
+export async function createServerRole(
+  token: string,
+  serverId: number,
+  name: string,
+  color: string,
+): Promise<Role> {
+  const res = await fetch(`/api/servers/${serverId}/custom-roles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name, color }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create role')
+  return data as Role
+}
+
+// Rename/recolor a role (admin).
+export async function updateServerRole(
+  token: string,
+  serverId: number,
+  roleId: number,
+  name: string,
+  color: string,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/custom-roles/${roleId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name, color }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not update role')
+  }
+}
+
+// Delete a role (admin); assignments cascade away.
+export async function deleteServerRole(token: string, serverId: number, roleId: number): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/custom-roles/${roleId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not delete role')
+  }
+}
+
+// Assign (PUT) / unassign (DELETE) a role to/from a member (admin).
+export async function assignServerRole(
+  token: string,
+  serverId: number,
+  userId: number,
+  roleId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/members/${userId}/custom-roles/${roleId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not assign role')
+  }
+}
+
+export async function unassignServerRole(
+  token: string,
+  serverId: number,
+  userId: number,
+  roleId: number,
+): Promise<void> {
+  const res = await fetch(`/api/servers/${serverId}/members/${userId}/custom-roles/${roleId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not unassign role')
   }
 }
 

@@ -2536,6 +2536,128 @@ button:disabled {
   gap: 8px;
   margin-top: 20px;
 }
+
+/* Roles manager (v0.7) — reuses .group-modal as a compact card. */
+.roles-modal {
+  max-width: 460px;
+}
+.roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 16px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.roles-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 4px 0;
+}
+.roles-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-input);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.roles-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roles-delete {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.roles-delete:hover {
+  text-decoration: underline;
+}
+/* A native color input, restyled to a tidy round swatch. */
+.roles-swatch {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.roles-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.roles-swatch::-webkit-color-swatch {
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+}
+.roles-create {
+  border-top: 1px solid var(--bg-input);
+  padding-top: 14px;
+}
+.roles-create-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.roles-name-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  outline: none;
+}
+.roles-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.roles-preset {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.roles-preset:hover {
+  border-color: var(--text);
+}
+
+/* Profile-card role chips (assign/unassign). */
+.profile-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.profile-role-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 12px;
+  border: 1px solid;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+}
+.profile-role-chip.on {
+  color: #fff;
+}
 .settings-presence {
   background: var(--bg-input);
   padding: 8px 12px;

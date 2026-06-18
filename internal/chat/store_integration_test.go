@@ -1178,6 +1178,22 @@ func memberColor(t *testing.T, store *chat.Store, serverID, userID int64) string
 	return ""
 }
 
+// memberRoleIDs pulls a member's surfaced cosmetic role ids from ListServerMembers.
+func memberRoleIDs(t *testing.T, store *chat.Store, serverID, userID int64) []int64 {
+	t.Helper()
+	members, err := store.ListServerMembers(context.Background(), serverID)
+	if err != nil {
+		t.Fatalf("list members: %v", err)
+	}
+	for _, m := range members {
+		if m.UserID == userID {
+			return m.RoleIds
+		}
+	}
+	t.Fatalf("member %d not found in member list", userID)
+	return nil
+}
+
 // TestServerCustomRolesIntegration exercises v0.7 custom colored roles (slice 1, backend):
 // admin-gated CRUD + assignment, the top-role color surfaced in ListServerMembers, and the
 // owner/admin/member permission tier left completely untouched.
@@ -1247,6 +1263,10 @@ func TestServerCustomRolesIntegration(t *testing.T) {
 	}
 	if c := memberColor(t, store, srv.ID, member.ID); c != high.Color {
 		t.Fatalf("with both roles, color = %q, want top %q", c, high.Color)
+	}
+	// roleIds are surfaced for the client, highest position first.
+	if ids := memberRoleIDs(t, store, srv.ID, member.ID); len(ids) != 2 || ids[0] != high.ID || ids[1] != low.ID {
+		t.Fatalf("member roleIds = %v, want [%d %d] (top first)", ids, high.ID, low.ID)
 	}
 
 	// Recolor the top role → reflected in the member's color.

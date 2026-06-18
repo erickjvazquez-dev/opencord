@@ -2222,3 +2222,37 @@ becomes the top role's; two roles → highest position wins; bad color rejected;
 assignment). **Live E2E on a real server** (curl the full CRUD + assignment + member-list color; adversarial:
 non-admin 403, bad hex 400, cross-server role 404). No client UI yet → slice 2 adds the role-manager UI +
 colored names + its QA.
+
+## Custom colored roles — client (v0.7, slice 2a)
+
+**Why:** slice 1 shipped the role backend (CRUD + assignment + top-role `color` on members). Slice 2a is
+the client so admins can actually create/assign roles and members' names render in their color.
+
+- **Backend tweak (needed for the assignment UI to show state):** `ServerMember` gains `roleIds []int64`
+  — the cosmetic role ids the member holds in this server (highest-position first), aggregated in
+  `ListServerMembers` alongside the existing `color`. No new endpoint.
+- **`types.ts`:** new `Role {id, serverId, name, color, position}`; `ServerMember` gains `color?` +
+  `roleIds?: number[]`.
+- **`api.ts`:** `listServerRoles`, `createServerRole`, `updateServerRole`, `deleteServerRole`,
+  `assignServerRole`, `unassignServerRole` (mirror `setServerMemberRole`).
+- **`RolesManagerModal.tsx` (new):** opened from the members-panel server-settings (admin only). Lists
+  existing roles (color swatch + name + delete), and a create row (name input + `<input type="color">`
+  + Discord-style preset swatches + Add). Inline server errors. Esc/overlay/✕ close. Reuses the
+  `.settings-overlay` + group-modal scaffold.
+- **`ProfileCard.tsx`:** when an admin views a server member, a new **Roles** section shows every server
+  role as a toggle chip (filled in its color when assigned, per `member.roleIds`); clicking assigns/
+  unassigns live. New props: `activeServerId?`, `canManageRoles?`, `serverRoles?`, `onAssignRole?`,
+  `onUnassignRole?` (all optional → the card stays usable in non-server/non-admin contexts).
+- **`Chat.tsx`:** fetch the active server's roles into state; wire the manager modal + the ProfileCard
+  props/handlers (assign/unassign → refresh members + roles so colors update live); render each
+  member's name in `style={{ color: mb.color }}` in the sidebar member list + the members panel.
+- **`styles.css`:** the roles manager (swatches, role rows), the profile roles chips.
+
+**Deferred to slice 2b:** message-author coloring (needs the author's role color joined into the message
+history + WS payload — a backend change); role reordering (drag); per-role permissions.
+
+**Verify (Rule 14):** vitest stays green; `go build/vet/test` green incl. an extended
+`TestServerCustomRolesIntegration` asserting `roleIds` on members; full browser QA — a new flow: admin
+opens Manage Roles → creates a colored role → opens a member's profile → assigns it → the member's name
+in the list renders in the role color; AI-vision the manager + colored name. Ship + `railway up` +
+rollout-verify the live bundle.

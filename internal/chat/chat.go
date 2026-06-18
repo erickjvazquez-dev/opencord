@@ -129,6 +129,9 @@ type ServerMember struct {
 	// Color (v0.7) is the member's top custom-role color (#RGB/#RRGGBB), used to tint their
 	// name. "" = no colored role assigned.
 	Color string `json:"color,omitempty"`
+	// RoleIds (v0.7) are the cosmetic role ids this member holds in the server (highest
+	// position first), so the client can show per-member assignment state. Empty = none.
+	RoleIds []int64 `json:"roleIds,omitempty"`
 }
 
 // Role is a custom, cosmetic, server-scoped colored role (v0.7) — distinct from the
@@ -1797,7 +1800,10 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 		        COALESCE((SELECT sr.color FROM member_roles mr
 		                    JOIN server_roles sr ON sr.id = mr.role_id
 		                   WHERE mr.user_id = m.user_id AND sr.server_id = m.server_id
-		                   ORDER BY sr.position DESC, sr.id DESC LIMIT 1), '')
+		                   ORDER BY sr.position DESC, sr.id DESC LIMIT 1), ''),
+		        COALESCE((SELECT array_agg(mr.role_id ORDER BY sr.position DESC, sr.id DESC)
+		                    FROM member_roles mr JOIN server_roles sr ON sr.id = mr.role_id
+		                   WHERE mr.user_id = m.user_id AND sr.server_id = m.server_id), '{}')
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
 		  ORDER BY (m.role = 'owner') DESC, (m.role = 'admin') DESC, u.username`, serverID)
@@ -1808,7 +1814,7 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil, &m.About, &m.Pronouns, &m.Color); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil, &m.About, &m.Pronouns, &m.Color, &m.RoleIds); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
