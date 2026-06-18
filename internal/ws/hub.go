@@ -62,6 +62,13 @@ type onlineReq struct {
 	reply chan map[int64]bool
 }
 
+// voiceReq asks the hub for the in-voice user ids of each of the given channels (presence
+// across channels — used by the sidebar, since a client's WS only covers its active channel).
+type voiceReq struct {
+	channelIDs []int64
+	reply      chan map[int64][]int64
+}
+
 // userMessage carries a pre-marshalled event addressed to every live socket of a
 // specific user (regardless of which channel each is on).
 type userMessage struct {
@@ -80,6 +87,7 @@ type Hub struct {
 	unregister chan *Client
 	evict      chan evictReq
 	online     chan onlineReq
+	voice      chan voiceReq
 	toUser     chan userMessage
 	// voiceMembers tracks who is in the voice call per channel (channelID → {userID}).
 	// Mutated ONLY on the Run goroutine (like clients), so it needs no lock.
@@ -96,6 +104,7 @@ func NewHub(store *chat.Store) *Hub {
 		unregister:   make(chan *Client),
 		evict:        make(chan evictReq),
 		online:       make(chan onlineReq),
+		voice:        make(chan voiceReq),
 		toUser:       make(chan userMessage),
 		voiceMembers: make(map[int64]map[int64]bool),
 	}
@@ -118,6 +127,14 @@ func (h *Hub) SendToUser(userID int64, e Event) {
 func (h *Hub) OnlineUserIDs() map[int64]bool {
 	reply := make(chan map[int64]bool, 1)
 	h.online <- onlineReq{reply: reply}
+	return <-reply
+}
+
+// VoiceMembersFor returns each channel's in-voice user ids (only channels with someone in
+// voice appear in the result). Built on the hub goroutine, so the map needs no lock.
+func (h *Hub) VoiceMembersFor(channelIDs []int64) map[int64][]int64 {
+	reply := make(chan map[int64][]int64, 1)
+	h.voice <- voiceReq{channelIDs: channelIDs, reply: reply}
 	return <-reply
 }
 
@@ -205,6 +222,19 @@ func (h *Hub) Run() {
 				set[c.user.ID] = true
 			}
 			req.reply <- set
+		case req := <-h.voice:
+			out := make(map[int64][]int64)
+			for _, cid := range req.channelIDs {
+				if set := h.voiceMembers[cid]; len(set) > 0 {
+					ids := make([]int64, 0, len(set))
+					for id := range set {
+						ids = append(ids, id)
+					}
+					sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+					out[cid] = ids
+				}
+			}
+			req.reply <- out
 		case um := <-h.toUser:
 			for c := range h.clients {
 				if c.user.ID != um.userID {

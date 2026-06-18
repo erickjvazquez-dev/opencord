@@ -2409,3 +2409,23 @@ goroutine (with the sender's `From` + the channel). Track presence there:
 (A joins → B receives a `voice-presence` listing A; A leaves/disconnects → it drops). Full QA green incl.
 a browser assertion that a second client joining voice surfaces "in voice" for the first; AI-vision the
 header chip. Ship + `railway up` + rollout-verify.
+
+## Voice presence — cross-channel sidebar (v0.9, slice 2)
+
+**Why:** slice 1 showed "🔊 N in voice" for the ACTIVE channel (live via WS). Discord shows voice
+participants per channel in the sidebar — so you see a call on ANY channel. The client's WS is per-channel
+(can't get live presence for other channels), so this uses an HTTP query.
+
+- **`Hub.VoiceMembersFor(channelIDs) map[int64][]int64`** — HTTP-safe query (request/reply channel,
+  mirrors `OnlineUserIDs`; runs on the hub goroutine, no lock). Returns each channel's in-voice user ids.
+- **`GET /api/servers/{id}/voice-presence`** (members only) → `{channelId: [userIds]}` for the server's
+  channels (only non-empty). The handler lists the server's channels + asks the hub.
+- **Client:** `fetchServerVoicePresence(token, serverId)`; state `serverVoice` (channelId → userIds). The
+  server sidebar renders a small **🔊 N** badge on each channel with voice members. Refreshed on
+  server-select, when any `voice-presence` WS event fires, and on a modest poll (~15 s) while a server is
+  open (the only way to learn a call started on a channel you're not viewing).
+
+**Verify (Rule 14):** `go build/vet/test` green incl. a route + hub test (two members; one joins voice on
+a channel via WS → `GET /voice-presence` lists them on that channel; a non-member is 403). Full QA green
+incl. a browser assertion that a 🔊 badge appears on a server channel when someone is in its call;
+AI-vision the sidebar badge. Ship + `railway up` + rollout-verify.

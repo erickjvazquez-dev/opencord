@@ -979,6 +979,30 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		}
 	})
 	// List a server's members with their roles (members only).
+	// Voice presence across a server's channels (v0.9 slice 2): channelId → user ids in voice.
+	// Members-only; lets the sidebar show which channels have an active call.
+	r.Get("/servers/{id}/voice-presence", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		chans, err := store.ListServerChannels(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not load channels"}`, http.StatusInternalServerError)
+			return
+		}
+		ids := make([]int64, 0, len(chans))
+		for _, c := range chans {
+			ids = append(ids, c.ID)
+		}
+		writeJSON(w, http.StatusOK, hub.VoiceMembersFor(ids))
+	})
 	r.Get("/servers/{id}/members", func(w http.ResponseWriter, r *http.Request) {
 		me, _ := auth.UserFrom(r.Context())
 		id, err := serverIDParam(r)

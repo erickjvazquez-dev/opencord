@@ -177,6 +177,19 @@ export async function fetchServerMembers(token: string, serverId: number): Promi
   return res.json()
 }
 
+// Voice presence across a server's channels (v0.9 slice 2): channelId → user ids in voice.
+// Only channels with an active call appear. Powers the sidebar "🔊 N" badges.
+export async function fetchServerVoicePresence(
+  token: string,
+  serverId: number,
+): Promise<Record<number, number[]>> {
+  const res = await fetch(`/api/servers/${serverId}/voice-presence`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error('could not load voice presence')
+  return res.json()
+}
+
 export async function setServerMemberRole(
   token: string,
   serverId: number,

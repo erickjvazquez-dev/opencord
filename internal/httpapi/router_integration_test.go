@@ -161,6 +161,18 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 		wantStatus(t, hs.req(t, "GET", p, memberTok, ""), http.StatusOK, "member lists server channels")
 	})
 
+	t.Run("voice-presence is members-only", func(t *testing.T) {
+		p := fmt.Sprintf("/api/servers/%d/voice-presence", srv.ID)
+		wantStatus(t, hs.req(t, "GET", p, "", ""), http.StatusUnauthorized, "no-token voice-presence")
+		wantStatus(t, hs.req(t, "GET", p, strangerTok, ""), http.StatusForbidden, "stranger voice-presence")
+		// A member gets 200 with a JSON object (empty when no one is in voice in this harness).
+		w := hs.req(t, "GET", p, memberTok, "")
+		wantStatus(t, w, http.StatusOK, "member voice-presence")
+		if body := strings.TrimSpace(w.Body.String()); !strings.HasPrefix(body, "{") {
+			t.Fatalf("voice-presence body = %q, want a JSON object", body)
+		}
+	})
+
 	var createdChannelID int64
 	t.Run("channel creation is admin-gated", func(t *testing.T) {
 		p := fmt.Sprintf("/api/servers/%d/channels", srv.ID)

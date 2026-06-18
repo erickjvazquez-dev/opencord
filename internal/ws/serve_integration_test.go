@@ -330,6 +330,12 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 	if vp := readUntil(connB, "voice-presence"); !contains(vp.VoiceMembers, a.ID) {
 		t.Fatalf("voice-presence after A joins = %v, want to include A (%d)", vp.VoiceMembers, a.ID)
 	}
+	// The HTTP-facing query (used by the cross-channel sidebar, slice 2) sees A too.
+	if dch, err := h.store.DefaultChannelID(context.Background()); err == nil {
+		if vm := h.hub.VoiceMembersFor([]int64{dch}); !contains(vm[dch], a.ID) {
+			t.Fatalf("VoiceMembersFor[%d] = %v, want to include A (%d)", dch, vm[dch], a.ID)
+		}
+	}
 	// A leaves voice → voice-presence drops A.
 	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-leave"}`)); err != nil {
 		t.Fatalf("A voice-leave: %v", err)

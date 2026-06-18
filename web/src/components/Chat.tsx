@@ -22,6 +22,7 @@ import {
   fetchPins,
   fetchThreads,
   createThread,
+  fetchServerVoicePresence,
   fetchServerMembers,
   fetchServers,
   redeemInvite,
@@ -220,6 +221,11 @@ export function Chat({
   // Voice presence (v0.9): the user ids currently in the voice call on the ACTIVE channel,
   // driven live by the WS "voice-presence" event. Reset whenever the channel's history loads.
   const [voicePresence, setVoicePresence] = useState<number[]>([])
+  // Cross-channel voice presence for the sidebar badges (channelId → user ids). The WS only
+  // covers the active channel, so this is polled per server (slice 2). reloadVoiceRef lets the
+  // WS voice-presence handler trigger an immediate refresh.
+  const [serverVoice, setServerVoice] = useState<Record<number, number[]>>({})
+  const reloadVoiceRef = useRef<() => void>(() => {})
   const [connected, setConnected] = useState(false)
   const [draft, setDraft] = useState('')
   // Attachments staged in the composer (sent over HTTP multipart, not the WS).
@@ -504,6 +510,7 @@ export function Chat({
         void voiceRef.current?.handle(data)
         } else if (data.type === 'voice-presence') {
           setVoicePresence(data.voiceMembers ?? [])
+          reloadVoiceRef.current() // a call near you changed → refresh the sidebar badges
         } else if (data.type === 'presence') setOnline(data.online ?? 0)
         else if (data.type === 'server-removed' && data.serverId) {
           // We were kicked: drop the server from the sidebar; if we're viewing one of
@@ -1642,6 +1649,11 @@ export function Chat({
       <span className="item-name" title={c.name}>
         {c.name}
       </span>
+      {(serverVoice[c.id]?.length ?? 0) > 0 && (
+        <span className="channel-voice-badge" title={`${serverVoice[c.id].length} in voice`}>
+          🔊 {serverVoice[c.id].length}
+        </span>
+      )}
       {unreadIndicator(c.id)}
     </button>
   )
@@ -1756,6 +1768,37 @@ export function Chat({
       cancelled = true
     }
   }, [activeServerId, token])
+
+  // Cross-channel voice presence (v0.9 slice 2): poll each server's voice roster for the
+  // sidebar 🔊 badges (the per-channel WS can't see other channels' calls). reloadVoiceRef
+  // lets the WS voice-presence handler refresh immediately when a call near you changes.
+  useEffect(() => {
+    if (servers.length === 0) {
+      setServerVoice({})
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      const maps = await Promise.all(
+        servers.map((s) => fetchServerVoicePresence(token, s.id).catch(() => ({}) as Record<number, number[]>)),
+      )
+      if (cancelled) return
+      const merged: Record<number, number[]> = {}
+      for (const m of maps) {
+        for (const [cid, ids] of Object.entries(m)) {
+          if ((ids as number[]).length) merged[Number(cid)] = ids as number[]
+        }
+      }
+      setServerVoice(merged)
+    }
+    reloadVoiceRef.current = () => void load()
+    void load()
+    const timer = setInterval(load, 15000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [servers, token])
 
   const refreshRolesAndMembers = async () => {
     const sid = activeServerId ? Number(activeServerId) : null

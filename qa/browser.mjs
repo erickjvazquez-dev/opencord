@@ -529,6 +529,40 @@ async function main() {
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
+  // 7-voice-presence (v0.9 slice 2): joining voice on the server channel surfaces a live 🔊
+  // badge in the sidebar (cross-channel presence). Open a raw WS as the logged-in owner on
+  // srvChan and send voice-join (kept open on window), then assert the badge.
+  step('voice presence: a 🔊 sidebar badge appears on a server channel with someone in voice')
+  const voiceJoined = await page.evaluate(async (srvChanName) => {
+    const token = localStorage.getItem('opencord.token')
+    const auth = { Authorization: 'Bearer ' + token }
+    const servers = await fetch('/api/servers', { headers: auth }).then((r) => r.json())
+    const srv = (servers || []).find((s) => s.name === 'qa server')
+    if (!srv) return 'no qa server'
+    const chans = await fetch(`/api/servers/${srv.id}/channels`, { headers: auth }).then((r) => r.json())
+    const ch = (chans || []).find((c) => c.name === srvChanName)
+    if (!ch) return 'no srvChan'
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&channel=${ch.id}`)
+    window.__qaVoiceWS = ws
+    return await new Promise((resolve) => {
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'voice-join' }))
+        resolve('ok')
+      }
+      ws.onerror = () => resolve('ws error')
+    })
+  }, srvChan)
+  check(voiceJoined === 'ok', `owner joined voice on srvChan via raw WS (${voiceJoined})`)
+  const voiceBadge = page.locator('.server-channel', { hasText: srvChan }).locator('.channel-voice-badge')
+  await voiceBadge.waitFor({ timeout: 12000 })
+  check(await voiceBadge.isVisible(), 'a 🔊 voice badge appears on the server channel during a call')
+  await shot('07-voice-badge.png')
+  // Close the raw WS → the disconnect drops the badge (voice-leave on unregister).
+  await page.evaluate(() => window.__qaVoiceWS && window.__qaVoiceWS.close())
+  await page.locator('.server-channel', { hasText: srvChan }).locator('.channel-voice-badge').waitFor({ state: 'detached', timeout: 20000 })
+  check(true, 'the 🔊 badge clears after the caller disconnects')
+
   // 7-thread — Threads (v0.8 slice 2): open the thread panel, start a thread, open it, post a
   // message, then return to the parent and confirm the thread is listed.
   step('start a thread off the server channel, open it, post a message, see it listed')

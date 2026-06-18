@@ -132,6 +132,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/servers/{id}/categories` | bearer | Create a category `{name}` (admin)             |
 | `DELETE` | `/api/servers/{id}/categories/{catId}` | bearer | Delete a category; channels survive uncategorized (admin) |
 | `GET`    | `/api/servers/{id}/members`    | bearer | List members with roles + presence (members only) |
+| `GET`    | `/api/servers/{id}/voice-presence` | bearer | Who's in voice per channel (members only)  |
 | `POST`   | `/api/servers/{id}/roles`      | bearer | Set a member's role `{userId, role}` (owner)   |
 | `GET`    | `/api/servers/{id}/custom-roles` | bearer | List the server's colored roles (members)    |
 | `POST`   | `/api/servers/{id}/custom-roles` | bearer | Create a colored role `{name, color}` (admin) |
