@@ -417,11 +417,16 @@ item from here as the structural milestones above land.
   name 1-100, copies server_id) + `ListThreads`; threads kept out of `ListChannels`/`ListServerChannels`/
   unreads. Routes `GET/POST /api/channels/{id}/threads` (gated on parent access; POST also CanPost).
   `TestThreadsIntegration` + live E2E (access inherited, absent from channel list, full adversarial set);
-  shipped + `railway up` + rollout-verified (new route 401 not 404). **Slice 2 NEXT (client):** a "Create
-  Thread" affordance on a message / channel header, a thread list/panel for a channel, and the thread
-  view (reuses the message view on the thread's channel id); browser QA + AI-vision + a 3-client WS
-  thread-fanout test. Later: archived threads, auto-archive, thread unread counts, "X started a thread"
-  system message. (Pinned messages already DONE separately.)
+  shipped + `railway up` + rollout-verified (new route 401 not 404). **Slice 2 client DONE (iter 167):**
+  a **🧵 threads panel** (mirrors the pins panel) opened from the channel header — lists the channel's
+  threads + a "+ New thread" create; a **thread** message-hover action; `selectThread` reuses the message
+  view + WS reconnect and tracks `activeThread` so the header shows "← 🧵 name" with a back-link, and the
+  intro + composer reflect the thread. New `TestServeWSThreadFanoutIntegration` (3 clients on a thread →
+  A sends, B+C receive; non-member handshake 403). tsc/vitest/go green; full QA green (browser=0 realtime=0
+  voice=0 search=0 — new flow creates/opens/posts in a thread + confirms it's listed); AI-vision verified
+  the thread view + panel; shipped + `railway up` + rollout-verified (live bundle carries "🧵 threads").
+  **✅ Threads MVP COMPLETE (create + open + chat + realtime).** Later (slice 3+, optional): message-
+  anchored threads + "X started a thread" system message, thread unread counts, archive/auto-archive.
 
 ### Messaging
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators

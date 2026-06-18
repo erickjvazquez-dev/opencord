@@ -3505,3 +3505,29 @@ predicate (CREATE ... IF NOT EXISTS alone won't update a live index).
 thread-fanout test + browser coverage — both land with slice 2 (the thread UI).
 
 **Cadence:** shipped a feature with slice 2 queued → ACTIVE (1800s).
+
+## 2026-06-18 (tick 167) — threads slice 2 (client) shipped — THREADS MVP COMPLETE
+
+Completed threads: a 🧵 threads panel (header button, mirrors the pins panel) with create + open, a
+thread message-hover action, and a thread view (the message view reused on the thread's channel id) with
+a "← 🧵 name" header + back-link. Plus the 3-client WS thread-fanout test from the plan. Full QA green
+incl. a new create/open/post/list flow; AI-vision verified the view + panel. Threads (the biggest
+remaining parity gap) is now an end-to-end MVP — create, open, chat, realtime. Component: **UI/parity**.
+
+**Highest-value loop improvement (the channel-id-reuse strategy is now PROVEN across the stack):**
+Threads slice 2 was a thin client slice ONLY because slice 1 modeled a thread as a channel — so the
+client reused `selectChannel` (WS reconnect + history), the message view, the composer, and the message
+broadcast with ZERO new realtime/message-render code. The whole client slice was: 2 api helpers, a panel
+(copied from pins), and `activeThread` tracking for the header name (the one thing a thread needs that a
+listed channel gets for free). **This validates the tick-166 heuristic end-to-end: model a new feature as
+a new `kind`/row on the channel/`channel_members`/hub primitives and BOTH the backend AND the client
+become thin slices.** The only thread-specific client cost was that threads aren't in any channel list,
+so the header name needs separate tracking — worth noting as the general "reused-channel" tax (also true
+for group DMs, which track `activeDM`). 
+
+**Coverage note:** threads now have store + route + 3-client-WS-fanout + browser + AI-vision coverage —
+fully covered for the MVP surface. Untested = the deferred slice-3 surface (anchored threads / system
+message / unread counts), which has no code yet.
+
+**Cadence:** shipped a feature; threads MVP complete. No unchecked P0/P1 in the active epic, but the
+parity backlog still has items (voice channels as entities, audit log, role hoisting). ACTIVE (1800s).
