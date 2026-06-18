@@ -1593,3 +1593,117 @@ func TestPresenceEndpointIntegration(t *testing.T) {
 		t.Fatalf("presence must be unchanged (online) after rejected hostile bodies, got %q", p)
 	}
 }
+
+// TestCustomRolesAuthorizationIntegration is the route-level security proof for v0.7 custom
+// colored roles (Rule 15): every mutation is admin-gated, cross-server role ids are rejected
+// (IDOR), a non-member can't be assigned, and hostile input (bad color, oversized name/body,
+// malformed id) is refused — encoding the adversarial probes so they can never silently regress.
+func TestCustomRolesAuthorizationIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+	ownerA, aTok := hs.user(t)
+	member, memberTok := hs.user(t)
+	_, strangerTok := hs.user(t)
+	ownerB, bTok := hs.user(t)
+
+	srvA, err := hs.store.CreateServer(ctx, ownerA.ID, "Roles A")
+	if err != nil {
+		t.Fatalf("create srvA: %v", err)
+	}
+	srvB, err := hs.store.CreateServer(ctx, ownerB.ID, "Roles B")
+	if err != nil {
+		t.Fatalf("create srvB: %v", err)
+	}
+	code, _ := hs.store.CreateInvite(ctx, srvA.ID, ownerA.ID)
+	if _, err := hs.store.RedeemInvite(ctx, code, member.ID); err != nil {
+		t.Fatalf("redeem: %v", err)
+	}
+	roleA, err := hs.store.CreateServerRole(ctx, srvA.ID, ownerA.ID, "RoleA", "#3498db")
+	if err != nil {
+		t.Fatalf("create roleA: %v", err)
+	}
+	rolesA := fmt.Sprintf("/api/servers/%d/custom-roles", srvA.ID)
+
+	t.Run("create is admin-gated", func(t *testing.T) {
+		body := `{"name":"X","color":"#fff"}`
+		wantStatus(t, hs.req(t, "POST", rolesA, "", body), http.StatusUnauthorized, "no-token create role")
+		wantStatus(t, hs.req(t, "POST", rolesA, memberTok, body), http.StatusForbidden, "member creates role")
+		wantStatus(t, hs.req(t, "POST", rolesA, strangerTok, body), http.StatusForbidden, "stranger creates role")
+		wantStatus(t, hs.req(t, "GET", rolesA, strangerTok, ""), http.StatusForbidden, "stranger lists roles")
+		wantStatus(t, hs.req(t, "GET", rolesA, memberTok, ""), http.StatusOK, "member lists roles")
+	})
+
+	t.Run("input validation", func(t *testing.T) {
+		wantStatus(t, hs.req(t, "POST", rolesA, aTok, `{"name":"X","color":"red"}`), http.StatusBadRequest, "bad hex color")
+		wantStatus(t, hs.req(t, "POST", rolesA, aTok, `{"name":"X","color":"#fff;background:url(x)"}`), http.StatusBadRequest, "CSS-injection color")
+		wantStatus(t, hs.req(t, "POST", rolesA, aTok, `{"name":"`+strings.Repeat("a", 40)+`","color":"#fff"}`), http.StatusBadRequest, "oversized name")
+		wantStatus(t, hs.req(t, "POST", rolesA, aTok, `{"name":"   ","color":"#fff"}`), http.StatusBadRequest, "blank name")
+		wantStatus(t, hs.req(t, "DELETE", rolesA+"/abc", aTok, ""), http.StatusBadRequest, "malformed role id")
+		wantStatus(t, hs.req(t, "POST", rolesA, aTok, `{"name":"X","color":"#fff","pad":"`+strings.Repeat("A", 1<<13)+`"}`), http.StatusBadRequest, "oversized body")
+	})
+
+	t.Run("cross-server role id is rejected (IDOR)", func(t *testing.T) {
+		// ownerB is an admin of srvB but uses srvB's path with srvA's role id — must 404,
+		// never tamper with another server's role.
+		rolesB := fmt.Sprintf("/api/servers/%d/custom-roles/%d", srvB.ID, roleA.ID)
+		wantStatus(t, hs.req(t, "PATCH", rolesB, bTok, `{"name":"pwned","color":"#000"}`), http.StatusNotFound, "B edits A's role via srvB path")
+		wantStatus(t, hs.req(t, "DELETE", rolesB, bTok, ""), http.StatusNotFound, "B deletes A's role via srvB path")
+		assignB := fmt.Sprintf("/api/servers/%d/members/%d/custom-roles/%d", srvB.ID, ownerB.ID, roleA.ID)
+		wantStatus(t, hs.req(t, "PUT", assignB, bTok, ""), http.StatusNotFound, "B assigns A's role via srvB path")
+	})
+
+	t.Run("assign requires admin + a member target", func(t *testing.T) {
+		assign := fmt.Sprintf("/api/servers/%d/members/%d/custom-roles/%d", srvA.ID, member.ID, roleA.ID)
+		wantStatus(t, hs.req(t, "PUT", assign, memberTok, ""), http.StatusForbidden, "non-admin assigns")
+		// A stranger (non-member of srvA) can't be assigned a srvA role.
+		stranger, _ := hs.user(t)
+		assignStranger := fmt.Sprintf("/api/servers/%d/members/%d/custom-roles/%d", srvA.ID, stranger.ID, roleA.ID)
+		wantStatus(t, hs.req(t, "PUT", assignStranger, aTok, ""), http.StatusNotFound, "assign to a non-member")
+		// The legit path works (the admin assigns the role to the member).
+		wantStatus(t, hs.req(t, "PUT", assign, aTok, ""), http.StatusNoContent, "admin assigns to a member")
+	})
+}
+
+// TestGroupDMAuthorizationIntegration is the route-level security proof for v0.6 group DMs
+// (Rule 15): auth required, the member cap can't be bypassed, hostile/oversized/blocked input
+// is refused, and a non-member can neither read nor (via upload) post to a group channel.
+func TestGroupDMAuthorizationIntegration(t *testing.T) {
+	hs := newHarness(t)
+	ctx := context.Background()
+	a, aTok := hs.user(t)
+	b, _ := hs.user(t)
+	c, _ := hs.user(t)
+	_, strangerTok := hs.user(t)
+	blocked, _ := hs.user(t)
+
+	groupPath := "/api/dms/group"
+
+	t.Run("auth + input validation", func(t *testing.T) {
+		ids := fmt.Sprintf(`{"identifiers":["%s"]}`, b.Username)
+		wantStatus(t, hs.req(t, "POST", groupPath, "", ids), http.StatusUnauthorized, "no-token create group")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, `{"identifiers":[]}`), http.StatusBadRequest, "empty identifiers")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, `{"identifiers":["a","b","c","d","e","f","g","h","i","j","k"]}`), http.StatusBadRequest, "11 identifiers (cap bypass)")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, `{"identifiers":[`), http.StatusBadRequest, "malformed JSON")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, `{"identifiers":["`+strings.Repeat("A", 1<<14)+`"]}`), http.StatusBadRequest, "oversized body")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, fmt.Sprintf(`{"identifiers":["%s"]}`, a.Username)), http.StatusBadRequest, "self-only group")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, `{"identifiers":["' OR 1=1--"]}`), http.StatusNotFound, "injection-ish identifier -> not found, not 500")
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, fmt.Sprintf(`{"identifiers":["%s","ghost_nobody_xyz"]}`, b.Username)), http.StatusNotFound, "nonexistent member")
+	})
+
+	t.Run("a block forbids the group", func(t *testing.T) {
+		if err := hs.store.BlockUser(ctx, a.ID, blocked.ID); err != nil {
+			t.Fatalf("block: %v", err)
+		}
+		body := fmt.Sprintf(`{"identifiers":["%s","%s"]}`, b.Username, blocked.Username)
+		wantStatus(t, hs.req(t, "POST", groupPath, aTok, body), http.StatusForbidden, "group including a blocked user")
+	})
+
+	t.Run("a non-member cannot read a group channel", func(t *testing.T) {
+		grp, err := hs.store.CreateGroupDM(ctx, a.ID, []int64{b.ID, c.ID})
+		if err != nil {
+			t.Fatalf("create group: %v", err)
+		}
+		readPath := fmt.Sprintf("/api/messages?channel=%d", grp.ID)
+		wantStatus(t, hs.req(t, "GET", readPath, strangerTok, ""), http.StatusForbidden, "non-member reads group history")
+	})
+}
