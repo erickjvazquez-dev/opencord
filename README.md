@@ -131,6 +131,12 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `DELETE` | `/api/servers/{id}/categories/{catId}` | bearer | Delete a category; channels survive uncategorized (admin) |
 | `GET`    | `/api/servers/{id}/members`    | bearer | List members with roles + presence (members only) |
 | `POST`   | `/api/servers/{id}/roles`      | bearer | Set a member's role `{userId, role}` (owner)   |
+| `GET`    | `/api/servers/{id}/custom-roles` | bearer | List the server's colored roles (members)    |
+| `POST`   | `/api/servers/{id}/custom-roles` | bearer | Create a colored role `{name, color}` (admin) |
+| `PATCH`  | `/api/servers/{id}/custom-roles/{roleId}` | bearer | Edit a colored role `{name, color}` (admin) |
+| `DELETE` | `/api/servers/{id}/custom-roles/{roleId}` | bearer | Delete a colored role (admin)        |
+| `PUT`    | `/api/servers/{id}/members/{userId}/custom-roles/{roleId}` | bearer | Assign a role to a member (admin) |
+| `DELETE` | `/api/servers/{id}/members/{userId}/custom-roles/{roleId}` | bearer | Unassign a role (admin)           |
 | `DELETE` | `/api/servers/{id}/members/{userId}` | bearer | Kick a member (admin; live-evicted)      |
 | `GET`    | `/api/servers/{id}/bans`       | bearer | List bans (admin)                              |
 | `POST`   | `/api/servers/{id}/bans`       | bearer | Ban a member `{userId, reason?}` (admin)       |

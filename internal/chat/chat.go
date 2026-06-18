@@ -60,8 +60,16 @@ var (
 	ErrInvalidSlowmode = errors.New("invalid slowmode (0..21600 seconds)")
 	// ErrGroupTooLarge is returned when a group DM would exceed the 10-member cap.
 	ErrGroupTooLarge = errors.New("group DM exceeds the 10-member limit")
+	// ErrInvalidColor is returned when a custom role's color is not a #RGB/#RRGGBB hex.
+	ErrInvalidColor = errors.New("invalid color (want #RGB or #RRGGBB hex)")
+	// ErrInvalidRoleName is returned when a custom role's name is empty or too long.
+	ErrInvalidRoleName = errors.New("invalid role name (1-32 characters)")
+	// ErrRoleNotFound is returned when a custom role id doesn't exist in the server.
+	ErrRoleNotFound = errors.New("role not found")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
+	// roleColorRe matches a #RGB or #RRGGBB hex color (case-insensitive).
+	roleColorRe = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 )
 
 // DMUser is one of the other participants in a direct message channel.
@@ -118,6 +126,20 @@ type ServerMember struct {
 	// card. "" = none. React-escaped on render.
 	About    string `json:"about,omitempty"`
 	Pronouns string `json:"pronouns,omitempty"`
+	// Color (v0.7) is the member's top custom-role color (#RGB/#RRGGBB), used to tint their
+	// name. "" = no colored role assigned.
+	Color string `json:"color,omitempty"`
+}
+
+// Role is a custom, cosmetic, server-scoped colored role (v0.7) — distinct from the
+// owner/admin/member permission tier. A member's display color is their highest-position
+// assigned role's color.
+type Role struct {
+	ID       int64  `json:"id"`
+	ServerID int64  `json:"serverId"`
+	Name     string `json:"name"`
+	Color    string `json:"color"`
+	Position int    `json:"position"`
 }
 
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
@@ -1771,7 +1793,11 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 		`SELECT m.user_id, u.username, m.role, COALESCE(u.status, ''), COALESCE(u.status_emoji, ''),
 		        COALESCE(u.presence_state, 'online'),
 		        CASE WHEN m.timeout_until > now() THEN m.timeout_until END,
-		        COALESCE(u.about, ''), COALESCE(u.pronouns, '')
+		        COALESCE(u.about, ''), COALESCE(u.pronouns, ''),
+		        COALESCE((SELECT sr.color FROM member_roles mr
+		                    JOIN server_roles sr ON sr.id = mr.role_id
+		                   WHERE mr.user_id = m.user_id AND sr.server_id = m.server_id
+		                   ORDER BY sr.position DESC, sr.id DESC LIMIT 1), '')
 		   FROM server_members m JOIN users u ON u.id = m.user_id
 		  WHERE m.server_id = $1
 		  ORDER BY (m.role = 'owner') DESC, (m.role = 'admin') DESC, u.username`, serverID)
@@ -1782,12 +1808,161 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 	out := make([]ServerMember, 0)
 	for rows.Next() {
 		var m ServerMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil, &m.About, &m.Pronouns); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.Role, &m.Status, &m.StatusEmoji, &m.PresenceState, &m.TimeoutUntil, &m.About, &m.Pronouns, &m.Color); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// --- Custom colored roles (v0.7) ---------------------------------------------------------
+
+// validateRole normalizes + checks a custom role's name and color (Rule B). The trimmed
+// name must be 1-32 chars; the color a #RGB/#RRGGBB hex.
+func validateRole(name, color string) (string, string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > 32 {
+		return "", "", ErrInvalidRoleName
+	}
+	if !roleColorRe.MatchString(color) {
+		return "", "", ErrInvalidColor
+	}
+	return name, color, nil
+}
+
+// CreateServerRole creates a cosmetic role in serverID (admin-gated). The new role takes the
+// next position (max+1) so it sits on top by default. Returns ErrForbidden if the actor isn't
+// an admin/owner, ErrInvalidRoleName/ErrInvalidColor for bad input.
+func (s *Store) CreateServerRole(ctx context.Context, serverID, actorID int64, name, color string) (Role, error) {
+	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
+		return Role{}, err
+	} else if !admin {
+		return Role{}, ErrForbidden
+	}
+	name, color, err := validateRole(name, color)
+	if err != nil {
+		return Role{}, err
+	}
+	r := Role{ServerID: serverID, Name: name, Color: color}
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO server_roles (server_id, name, color, position)
+		 VALUES ($1, $2, $3, COALESCE((SELECT MAX(position) + 1 FROM server_roles WHERE server_id = $1), 0))
+		 RETURNING id, position`, serverID, name, color).Scan(&r.ID, &r.Position)
+	return r, err
+}
+
+// ListServerRoles returns serverID's cosmetic roles, highest position first.
+func (s *Store) ListServerRoles(ctx context.Context, serverID int64) ([]Role, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, server_id, name, color, position FROM server_roles
+		  WHERE server_id = $1 ORDER BY position DESC, id DESC`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Role, 0)
+	for rows.Next() {
+		var r Role
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.Name, &r.Color, &r.Position); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// UpdateServerRole renames/recolors a role (admin-gated). The role must belong to serverID
+// (ErrRoleNotFound otherwise).
+func (s *Store) UpdateServerRole(ctx context.Context, serverID, actorID, roleID int64, name, color string) error {
+	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
+		return err
+	} else if !admin {
+		return ErrForbidden
+	}
+	name, color, err := validateRole(name, color)
+	if err != nil {
+		return err
+	}
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE server_roles SET name = $3, color = $4 WHERE id = $2 AND server_id = $1`,
+		serverID, roleID, name, color)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrRoleNotFound
+	}
+	return nil
+}
+
+// DeleteServerRole removes a role (admin-gated); member_roles rows cascade away.
+func (s *Store) DeleteServerRole(ctx context.Context, serverID, actorID, roleID int64) error {
+	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
+		return err
+	} else if !admin {
+		return ErrForbidden
+	}
+	ct, err := s.pool.Exec(ctx,
+		`DELETE FROM server_roles WHERE id = $2 AND server_id = $1`, serverID, roleID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrRoleNotFound
+	}
+	return nil
+}
+
+// roleInServer reports whether roleID is a role of serverID.
+func (s *Store) roleInServer(ctx context.Context, serverID, roleID int64) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM server_roles WHERE id = $1 AND server_id = $2)`,
+		roleID, serverID).Scan(&ok)
+	return ok, err
+}
+
+// AssignServerRole gives targetID the role (admin-gated). The target must be a member of the
+// server (ErrUserNotFound) and the role must belong to it (ErrRoleNotFound). Idempotent.
+func (s *Store) AssignServerRole(ctx context.Context, serverID, actorID, targetID, roleID int64) error {
+	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
+		return err
+	} else if !admin {
+		return ErrForbidden
+	}
+	if ok, err := s.roleInServer(ctx, serverID, roleID); err != nil {
+		return err
+	} else if !ok {
+		return ErrRoleNotFound
+	}
+	if member, err := s.IsServerMember(ctx, serverID, targetID); err != nil {
+		return err
+	} else if !member {
+		return ErrUserNotFound
+	}
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		targetID, roleID)
+	return err
+}
+
+// UnassignServerRole removes a role from targetID (admin-gated). The role must belong to the
+// server (ErrRoleNotFound); removing an unheld role is a no-op success.
+func (s *Store) UnassignServerRole(ctx context.Context, serverID, actorID, targetID, roleID int64) error {
+	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
+		return err
+	} else if !admin {
+		return ErrForbidden
+	}
+	if ok, err := s.roleInServer(ctx, serverID, roleID); err != nil {
+		return err
+	} else if !ok {
+		return ErrRoleNotFound
+	}
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM member_roles WHERE user_id = $1 AND role_id = $2`, targetID, roleID)
+	return err
 }
 
 // maxStatusLen bounds a user's custom status (Rule B).

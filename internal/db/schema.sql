@@ -152,6 +152,28 @@ ALTER TABLE server_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT '
 ALTER TABLE server_members ADD COLUMN IF NOT EXISTS timeout_until TIMESTAMPTZ;
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS server_id BIGINT REFERENCES servers(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
+
+-- Custom colored roles (v0.7): Discord-style COSMETIC roles, separate from the
+-- owner/admin/member permission tier above (which stays in server_members.role). An admin
+-- creates named, colored roles and assigns them to members; a member's display color is
+-- their highest-`position` assigned role's color (Discord's top-role rule).
+CREATE TABLE IF NOT EXISTS server_roles (
+    id         BIGSERIAL PRIMARY KEY,
+    server_id  BIGINT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL,
+    position   INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS server_roles_server_id_idx ON server_roles (server_id);
+-- Role assignments: a member can hold many roles; role_id implies the server (via
+-- server_roles.server_id), so it isn't denormalized here. Deleting a role or user cascades.
+CREATE TABLE IF NOT EXISTS member_roles (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id BIGINT NOT NULL REFERENCES server_roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+CREATE INDEX IF NOT EXISTS member_roles_role_idx ON member_roles (role_id);
 -- Per-channel posting policy (v0.3): 'everyone' (default) or 'admins' (read-only /
 -- announcement channel — only a server owner/admin may post).
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS post_policy TEXT NOT NULL DEFAULT 'everyone';

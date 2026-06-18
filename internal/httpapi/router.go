@@ -1072,6 +1072,167 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			w.WriteHeader(http.StatusNoContent)
 		}
 	})
+
+	// --- Custom colored roles (v0.7): cosmetic, separate from the owner/admin/member
+	// permission tier. Live under /custom-roles (POST /roles is the permission setter).
+	// Mutations are admin-gated in the store; map ErrForbidden→403, bad input→400, ErrRoleNotFound
+	// / ErrUserNotFound→404.
+	mapRoleErr := func(w http.ResponseWriter, err error) {
+		switch {
+		case errors.Is(err, chat.ErrForbidden):
+			http.Error(w, `{"error":"only an admin can manage roles"}`, http.StatusForbidden)
+		case errors.Is(err, chat.ErrInvalidColor):
+			http.Error(w, `{"error":"color must be a #RGB or #RRGGBB hex"}`, http.StatusBadRequest)
+		case errors.Is(err, chat.ErrInvalidRoleName):
+			http.Error(w, `{"error":"role name must be 1-32 characters"}`, http.StatusBadRequest)
+		case errors.Is(err, chat.ErrRoleNotFound):
+			http.Error(w, `{"error":"role not found"}`, http.StatusNotFound)
+		case errors.Is(err, chat.ErrUserNotFound):
+			http.Error(w, `{"error":"user is not a member"}`, http.StatusNotFound)
+		default:
+			http.Error(w, `{"error":"could not update role"}`, http.StatusInternalServerError)
+		}
+	}
+	roleIDParam := func(r *http.Request) (int64, error) {
+		return strconv.ParseInt(chi.URLParam(r, "roleId"), 10, 64)
+	}
+	// List a server's custom roles (members only).
+	r.Get("/servers/{id}/custom-roles", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		if ok, err := store.IsServerMember(r.Context(), id, me.ID); err != nil || !ok {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		roles, err := store.ListServerRoles(r.Context(), id)
+		if err != nil {
+			http.Error(w, `{"error":"could not load roles"}`, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, roles)
+	})
+	// Create a custom role: {name, color} (admin only).
+	r.Post("/servers/{id}/custom-roles", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			Name  string `json:"name"`
+			Color string `json:"color"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		role, err := store.CreateServerRole(r.Context(), id, me.ID, in.Name, in.Color)
+		if err != nil {
+			mapRoleErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, role)
+	})
+	// Edit a custom role: {name, color} (admin only).
+	r.Patch("/servers/{id}/custom-roles/{roleId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		roleID, err := roleIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid role id"}`, http.StatusBadRequest)
+			return
+		}
+		var in struct {
+			Name  string `json:"name"`
+			Color string `json:"color"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if err := store.UpdateServerRole(r.Context(), id, me.ID, roleID, in.Name, in.Color); err != nil {
+			mapRoleErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// Delete a custom role (admin only); assignments cascade away.
+	r.Delete("/servers/{id}/custom-roles/{roleId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		roleID, err := roleIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid role id"}`, http.StatusBadRequest)
+			return
+		}
+		if err := store.DeleteServerRole(r.Context(), id, me.ID, roleID); err != nil {
+			mapRoleErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// Assign a custom role to a member (admin only).
+	r.Put("/servers/{id}/members/{userId}/custom-roles/{roleId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		targetID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+			return
+		}
+		roleID, err := roleIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid role id"}`, http.StatusBadRequest)
+			return
+		}
+		if err := store.AssignServerRole(r.Context(), id, me.ID, targetID, roleID); err != nil {
+			mapRoleErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// Unassign a custom role from a member (admin only).
+	r.Delete("/servers/{id}/members/{userId}/custom-roles/{roleId}", func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		id, err := serverIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid server id"}`, http.StatusBadRequest)
+			return
+		}
+		targetID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+		if err != nil {
+			http.Error(w, `{"error":"invalid user id"}`, http.StatusBadRequest)
+			return
+		}
+		roleID, err := roleIDParam(r)
+		if err != nil {
+			http.Error(w, `{"error":"invalid role id"}`, http.StatusBadRequest)
+			return
+		}
+		if err := store.UnassignServerRole(r.Context(), id, me.ID, targetID, roleID); err != nil {
+			mapRoleErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	// Ban a member: {userId, reason?} in the body. Owner/admin only; same authz as kick
 	// (can't ban the owner/yourself; an admin can't ban a fellow admin — store enforces).
 	// Removes them AND blocks rejoining until unbanned; evicts their live sockets.

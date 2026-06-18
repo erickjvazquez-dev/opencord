@@ -1162,6 +1162,120 @@ func TestSearchDateOperatorsIntegration(t *testing.T) {
 	}
 }
 
+// memberColor pulls a member's surfaced top-role color from ListServerMembers.
+func memberColor(t *testing.T, store *chat.Store, serverID, userID int64) string {
+	t.Helper()
+	members, err := store.ListServerMembers(context.Background(), serverID)
+	if err != nil {
+		t.Fatalf("list members: %v", err)
+	}
+	for _, m := range members {
+		if m.UserID == userID {
+			return m.Color
+		}
+	}
+	t.Fatalf("member %d not found in member list", userID)
+	return ""
+}
+
+// TestServerCustomRolesIntegration exercises v0.7 custom colored roles (slice 1, backend):
+// admin-gated CRUD + assignment, the top-role color surfaced in ListServerMembers, and the
+// owner/admin/member permission tier left completely untouched.
+func TestServerCustomRolesIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Color Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	// Mutations are admin-gated; a plain member can't create a role.
+	if _, err := store.CreateServerRole(ctx, srv.ID, member.ID, "Mod", "#ff0000"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("member create role err = %v, want ErrForbidden", err)
+	}
+	// Input validation (admin, but bad data).
+	if _, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Mod", "red"); !errors.Is(err, chat.ErrInvalidColor) {
+		t.Fatalf("bad color err = %v, want ErrInvalidColor", err)
+	}
+	if _, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "   ", "#fff"); !errors.Is(err, chat.ErrInvalidRoleName) {
+		t.Fatalf("blank name err = %v, want ErrInvalidRoleName", err)
+	}
+
+	// Owner creates two roles; positions auto-increment so the second sits on top.
+	low, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Member+", "#3498db")
+	if err != nil {
+		t.Fatalf("create low role: %v", err)
+	}
+	high, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Moderator", "#e91e63")
+	if err != nil {
+		t.Fatalf("create high role: %v", err)
+	}
+	if high.Position <= low.Position {
+		t.Fatalf("second role should have a higher position: low=%d high=%d", low.Position, high.Position)
+	}
+
+	// List returns both, highest position first.
+	roles, err := store.ListServerRoles(ctx, srv.ID)
+	if err != nil || len(roles) != 2 || roles[0].ID != high.ID {
+		t.Fatalf("ListServerRoles = %+v err %v (want high first)", roles, err)
+	}
+
+	// Assign is admin-gated; a non-member target is rejected.
+	if err := store.AssignServerRole(ctx, srv.ID, member.ID, member.ID, low.ID); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("member assign err = %v, want ErrForbidden", err)
+	}
+	if err := store.AssignServerRole(ctx, srv.ID, owner.ID, stranger.ID, low.ID); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("assign non-member err = %v, want ErrUserNotFound", err)
+	}
+
+	// Assign the LOW role → the member's surfaced color becomes the low color.
+	if err := store.AssignServerRole(ctx, srv.ID, owner.ID, member.ID, low.ID); err != nil {
+		t.Fatalf("assign low: %v", err)
+	}
+	if c := memberColor(t, store, srv.ID, member.ID); c != low.Color {
+		t.Fatalf("after low assign, color = %q, want %q", c, low.Color)
+	}
+	// Also assign the HIGH role → the top (highest-position) role wins the color.
+	if err := store.AssignServerRole(ctx, srv.ID, owner.ID, member.ID, high.ID); err != nil {
+		t.Fatalf("assign high: %v", err)
+	}
+	if c := memberColor(t, store, srv.ID, member.ID); c != high.Color {
+		t.Fatalf("with both roles, color = %q, want top %q", c, high.Color)
+	}
+
+	// Recolor the top role → reflected in the member's color.
+	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, high.ID, "Moderator", "#00ff00"); err != nil {
+		t.Fatalf("update role: %v", err)
+	}
+	if c := memberColor(t, store, srv.ID, member.ID); c != "#00ff00" {
+		t.Fatalf("after recolor, color = %q, want #00ff00", c)
+	}
+
+	// Delete the top role → its assignment cascades, color falls back to the low role.
+	if err := store.DeleteServerRole(ctx, srv.ID, owner.ID, high.ID); err != nil {
+		t.Fatalf("delete role: %v", err)
+	}
+	if c := memberColor(t, store, srv.ID, member.ID); c != low.Color {
+		t.Fatalf("after deleting the top role, color = %q, want low %q", c, low.Color)
+	}
+
+	// An unknown / cross-server role id is ErrRoleNotFound on update/delete/assign.
+	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, 1<<40, "X", "#fff"); !errors.Is(err, chat.ErrRoleNotFound) {
+		t.Fatalf("update unknown role err = %v, want ErrRoleNotFound", err)
+	}
+
+	// The permission tier is untouched by any of this.
+	if role, _ := store.ServerRole(ctx, srv.ID, member.ID); role != "member" {
+		t.Fatalf("custom roles must not change the permission tier: member role = %q", role)
+	}
+}
+
 func TestServerRolesIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()

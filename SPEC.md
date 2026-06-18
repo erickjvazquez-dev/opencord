@@ -2188,3 +2188,37 @@ Then ship + `railway up` + rollout-verify the live bundle carries the new flow.
 
 Later sub-slices: group naming (needs a non-UNIQUE name column), add/remove member, leave group,
 stacked member avatars.
+
+## Custom colored roles — backend (v0.7, slice 1)
+
+**Why:** tick-159 ROI plan #2 — "every Discord server uses them." Today roles are the fixed
+owner/admin/member PERMISSION tier (`server_members.role`). This adds Discord-style **cosmetic** roles:
+a server admin creates named, colored roles, assigns them to members, and a member's name renders in
+their **top** (highest-position) role's color. Cosmetic only — the permission tier is untouched
+(low blast radius); the member-list Admins/Members grouping stays.
+
+**Model (additive, no change to the existing role column).**
+- `server_roles (id, server_id→servers ON DELETE CASCADE, name, color, position, created_at)` —
+  server-scoped; `position` orders them (higher = wins the color tie).
+- `member_roles (user_id→users, role_id→server_roles ON DELETE CASCADE, PK(user_id, role_id))` — the
+  assignment; deleting a role or user cascades. A member's display color = their assigned role with the
+  highest `position` (Discord's top-role rule).
+
+- **`Role` struct** `{id, serverId, name, color, position}`. **`ServerMember` gains `color`** (the top
+  role color, "" = none) surfaced via a correlated subquery in `ListServerMembers`.
+- **Store (all mutations admin-gated via `IsServerAdmin`, Rule C):** `CreateServerRole` (validate name
+  1–32 chars + color `#RGB`/`#RRGGBB` → `ErrInvalidColor`; position = max+1), `ListServerRoles`
+  (position desc), `UpdateServerRole` (rename/recolor, role must belong to the server),
+  `DeleteServerRole` (cascades assignments), `AssignServerRole`/`UnassignServerRole` (target must be a
+  member; role must belong to the server).
+- **Routes** (cosmetic roles live under `custom-roles` since `POST .../roles` is the permission
+  setter): `GET /api/servers/{id}/custom-roles` (member-gated), `POST` (create), `PATCH/DELETE
+  …/custom-roles/{roleId}`, `PUT/DELETE …/members/{userId}/custom-roles/{roleId}` (assign/unassign).
+  Bodies 4 KiB-bounded (Rule B); admin-gating returns 403, bad color/name 400, unknown role/member 404.
+
+**Verify (Rule 14):** `go build/vet/test` green incl. a new `TestServerCustomRolesIntegration` (admin
+creates/edits/deletes a role; non-admin is forbidden; assign → the member's `color` in `ListServerMembers`
+becomes the top role's; two roles → highest position wins; bad color rejected; delete cascades the
+assignment). **Live E2E on a real server** (curl the full CRUD + assignment + member-list color; adversarial:
+non-admin 403, bad hex 400, cross-server role 404). No client UI yet → slice 2 adds the role-manager UI +
+colored names + its QA.
