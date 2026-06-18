@@ -2274,3 +2274,32 @@ the feature: a message author's name renders in their top role color.
 Save and Recent; DM message carries none); full QA green incl. a new flow that re-enters a server channel
 after a role assignment and asserts the message author name is tinted; AI-vision verified the colored
 message author. Ship + `railway up` + rollout-verify. **Colored roles now fully complete.**
+
+## Threads — backend (v0.8, slice 1)
+
+**Why:** the biggest remaining Discord parity gap (owner's TOP PRIORITY = UI/UX parity). A thread is a
+sub-conversation spawned from a parent channel. Modeled as a `kind='thread'` channel with a `parent_id`
+(mirrors how group DMs reused `channel_members`) — so messages, history, WS fanout, post-policy, and
+slowmode all work UNCHANGED (channel-id-scoped already).
+
+**Model (reuse the channel infra; minimal new surface).**
+- Schema: `channels.parent_id BIGINT REFERENCES channels(id) ON DELETE CASCADE` (+ index). A thread is
+  `kind='thread'`, `parent_id=<parent>`, **`server_id` copied from the parent**, `name` set.
+- **Access is inherited for free:** because the thread copies the parent's `server_id`, the existing
+  `CanAccessChannel` server-membership branch (or `ELSE TRUE` for a public parent) already gates it —
+  NO change to `CanAccessChannel`/`CanPostInChannel`. A thread member = the parent's server member.
+- **Channel struct** gains `ParentID *int64` + `Kind string` (omitempty) so the client can identify threads.
+- Threads are kept OUT of the regular channel lists (`ListChannels`, `ListServerChannels`, and the unreads
+  query) via `AND kind <> 'thread'` — they're fetched separately, like DMs stay out.
+- `CreateThread(ctx, parentID, name)`: validate the parent exists, is NOT a DM and NOT itself a thread
+  (no nesting in slice 1), copy its `server_id`, validate name (1–100 chars), insert `kind='thread'`.
+  `ListThreads(ctx, parentID)`: the parent's threads, newest first.
+- Routes: `POST /api/channels/{id}/threads {name}` (gate: `CanAccessChannel`+`CanPostInChannel`) and
+  `GET /api/channels/{id}/threads` (gate: `CanAccessChannel`). 4 KiB-bounded (Rule B).
+
+**Verify (Rule 14):** `go build/vet/test` green incl. `TestThreadsIntegration` (create a thread on a
+server channel; a parent member accesses it, a non-member is denied; the thread is absent from
+`ListServerChannels`/`ListChannels`; posting + `Recent` work in the thread; a thread on a DM is rejected;
+nesting rejected; name validation). Live E2E on a real server (create/list threads, post in a thread,
+member-200/non-member-403, thread not in the channel list). No client yet — slice 2 adds the thread UI
+("start thread" on a message, a thread list/panel, the thread view) + a 3-client WS thread-fanout check.

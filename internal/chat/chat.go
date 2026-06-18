@@ -66,6 +66,12 @@ var (
 	ErrInvalidRoleName = errors.New("invalid role name (1-32 characters)")
 	// ErrRoleNotFound is returned when a custom role id doesn't exist in the server.
 	ErrRoleNotFound = errors.New("role not found")
+	// ErrChannelNotFound is returned when a channel id doesn't exist.
+	ErrChannelNotFound = errors.New("channel not found")
+	// ErrInvalidThreadName is returned when a thread name is empty or too long (>100).
+	ErrInvalidThreadName = errors.New("invalid thread name (1-100 characters)")
+	// ErrNotThreadable is returned when trying to thread a DM or a thread (no nesting).
+	ErrNotThreadable = errors.New("cannot start a thread here")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 	// roleColorRe matches a #RGB or #RRGGBB hex color (case-insensitive).
@@ -216,6 +222,10 @@ type Channel struct {
 	SlowmodeSeconds int `json:"slowmodeSeconds,omitempty"`
 	// CategoryID groups the channel under a server category; nil = uncategorized.
 	CategoryID *int64 `json:"categoryId,omitempty"`
+	// Kind distinguishes a thread ('thread') from a regular channel; "" for non-threads on
+	// the wire (omitempty). ParentID is the parent channel a thread hangs off; nil otherwise.
+	Kind     string `json:"kind,omitempty"`
+	ParentID *int64 `json:"parentId,omitempty"`
 }
 
 type Store struct{ pool *pgxpool.Pool }
@@ -963,7 +973,7 @@ func (s *Store) Unreads(ctx context.Context, userID int64, username string) ([]C
 		    AND msg.id > COALESCE(
 		          (SELECT last_read_id FROM channel_reads cr
 		            WHERE cr.channel_id = c.id AND cr.user_id = $1), 0)
-		  WHERE (
+		  WHERE c.kind <> 'thread' AND (
 		          (c.kind <> 'dm' AND c.server_id IS NULL)
 		          OR (c.server_id IS NOT NULL AND EXISTS (
 		                SELECT 1 FROM server_members sm
@@ -2191,6 +2201,66 @@ func (s *Store) CreateServerChannelInCategory(ctx context.Context, serverID int6
 	return c, nil
 }
 
+// maxThreadNameLen bounds a thread's display name (Rule B). Threads allow spaces + caps
+// (they're titles, not slugs), so they don't use ValidChannelName.
+const maxThreadNameLen = 100
+
+// CreateThread (v0.8) creates a thread (kind='thread') under parentID, copying the parent's
+// server_id so the parent's access + post gates apply to the thread unchanged. The parent must
+// exist and be a regular channel — NOT a DM and NOT itself a thread (no nesting in slice 1).
+// The name is trimmed + bounded 1..100. The caller verifies the actor can access+post in the
+// parent (the route does); a thread does NOT participate in channel-name uniqueness.
+func (s *Store) CreateThread(ctx context.Context, parentID int64, name string) (Channel, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > maxThreadNameLen {
+		return Channel{}, ErrInvalidThreadName
+	}
+	var kind string
+	var serverID *int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT kind, server_id FROM channels WHERE id = $1`, parentID).Scan(&kind, &serverID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Channel{}, ErrChannelNotFound
+	}
+	if err != nil {
+		return Channel{}, err
+	}
+	if kind == "dm" || kind == "thread" {
+		return Channel{}, ErrNotThreadable
+	}
+	parent := parentID
+	c := Channel{Name: name, PostPolicy: "everyone", Kind: "thread", ParentID: &parent}
+	if err := s.pool.QueryRow(ctx,
+		`INSERT INTO channels (name, kind, parent_id, server_id) VALUES ($1, 'thread', $2, $3)
+		   RETURNING id, created_at`,
+		name, parentID, serverID).Scan(&c.ID, &c.CreatedAt); err != nil {
+		return Channel{}, err
+	}
+	return c, nil
+}
+
+// ListThreads returns the threads spawned from parentID, newest first. The caller verifies
+// access to the parent channel.
+func (s *Store) ListThreads(ctx context.Context, parentID int64) ([]Channel, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, name, created_at, parent_id FROM channels
+		  WHERE kind = 'thread' AND parent_id = $1 ORDER BY id DESC`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Channel, 0)
+	for rows.Next() {
+		var c Channel
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.ParentID); err != nil {
+			return nil, err
+		}
+		c.Kind = "thread"
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // ChannelCategory is a named, collapsible grouping of a server's channels.
 type ChannelCategory struct {
 	ID        int64     `json:"id"`
@@ -2252,7 +2322,8 @@ func (s *Store) ListChannelCategories(ctx context.Context, serverID int64) ([]Ch
 // ListServerChannels returns the channels under serverID, oldest first.
 func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds, category_id FROM channels WHERE server_id = $1 ORDER BY id`,
+		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds, category_id FROM channels
+		  WHERE server_id = $1 AND kind <> 'thread' ORDER BY id`,
 		serverID)
 	if err != nil {
 		return nil, err

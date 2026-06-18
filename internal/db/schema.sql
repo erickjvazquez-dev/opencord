@@ -152,6 +152,11 @@ ALTER TABLE server_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT '
 ALTER TABLE server_members ADD COLUMN IF NOT EXISTS timeout_until TIMESTAMPTZ;
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS server_id BIGINT REFERENCES servers(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS channels_server_id_idx ON channels (server_id);
+-- Threads (v0.8): a thread is a channel of kind='thread' with parent_id pointing at its
+-- parent channel; it copies the parent's server_id so access/post gates apply unchanged.
+-- Deleting the parent cascades its threads. parent_id is NULL for every non-thread channel.
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS parent_id BIGINT REFERENCES channels(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS channels_parent_id_idx ON channels (parent_id);
 
 -- Custom colored roles (v0.7): Discord-style COSMETIC roles, separate from the
 -- owner/admin/member permission tier above (which stays in server_members.role). An admin
@@ -187,6 +192,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
     ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
     ON channels (server_id, name) WHERE server_id IS NOT NULL;
+-- Threads (v0.8) carry a name + their parent's server_id but must NOT participate in
+-- channel-name uniqueness — many threads can share a name (like Discord), and a thread may
+-- share a name with a channel. Recreate the partial unique indexes to exclude kind='thread'.
+DROP INDEX IF EXISTS channels_global_name_uniq;
+DROP INDEX IF EXISTS channels_server_name_uniq;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
+    ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL AND kind <> 'thread';
+CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
+    ON channels (server_id, name) WHERE server_id IS NOT NULL AND kind <> 'thread';
 
 -- Server invites (v0.3): joining a server requires a valid, unguessable code created
 -- by a member — replaces the original open join-by-id.

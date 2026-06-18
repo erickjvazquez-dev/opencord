@@ -2433,3 +2433,100 @@ func TestReplyIntegration(t *testing.T) {
 		}
 	}
 }
+
+// TestThreadsIntegration exercises v0.8 threads (slice 1, backend): a thread is a kind='thread'
+// channel under a parent that INHERITS the parent's access, stays out of the channel lists, and
+// reuses the message infra; threading a DM or a thread (nesting) is rejected.
+func TestThreadsIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+	member := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Thread Guild")
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
+	if err := store.AddServerMember(ctx, srv.ID, member.ID); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+	parent, err := store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+
+	th, err := store.CreateThread(ctx, parent.ID, "Release Planning")
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	if th.Kind != "thread" || th.ParentID == nil || *th.ParentID != parent.ID {
+		t.Fatalf("thread wrong: %+v", th)
+	}
+
+	// Access is INHERITED from the parent's server: members in, stranger out.
+	for _, tc := range []struct {
+		who  int64
+		want bool
+		name string
+	}{
+		{owner.ID, true, "owner"},
+		{member.ID, true, "member"},
+		{stranger.ID, false, "stranger (non-member)"},
+	} {
+		got, err := store.CanAccessChannel(ctx, th.ID, tc.who)
+		if err != nil || got != tc.want {
+			t.Fatalf("CanAccessChannel thread for %s = %v (err %v), want %v", tc.name, got, err, tc.want)
+		}
+	}
+
+	// The thread does NOT leak into the server's channel list or the public list.
+	chans, _ := store.ListServerChannels(ctx, srv.ID)
+	for _, c := range chans {
+		if c.ID == th.ID {
+			t.Fatalf("thread %d leaked into ListServerChannels", th.ID)
+		}
+	}
+	publics, _ := store.ListChannels(ctx)
+	for _, c := range publics {
+		if c.ID == th.ID {
+			t.Fatalf("thread %d leaked into ListChannels", th.ID)
+		}
+	}
+
+	// A second thread can SHARE the same name (threads don't enforce name uniqueness).
+	th2, err := store.CreateThread(ctx, parent.ID, "Release Planning")
+	if err != nil {
+		t.Fatalf("duplicate-name thread should be allowed: %v", err)
+	}
+	threads, err := store.ListThreads(ctx, parent.ID)
+	if err != nil || len(threads) != 2 || threads[0].ID != th2.ID {
+		t.Fatalf("ListThreads = %+v err %v (want 2, newest first)", threads, err)
+	}
+
+	// Messages reuse the channel infra: posting in the thread + Recent works.
+	if _, err := store.Save(ctx, th.ID, member.ID, member.Username, "in the thread"); err != nil {
+		t.Fatalf("post in thread: %v", err)
+	}
+	if recent, err := store.Recent(ctx, th.ID, member.ID, 50); err != nil || len(recent) != 1 || recent[0].Body != "in the thread" {
+		t.Fatalf("thread Recent = %+v err %v", recent, err)
+	}
+
+	// Guards: name validation, threading a DM, nesting a thread, unknown parent.
+	if _, err := store.CreateThread(ctx, parent.ID, "  "); !errors.Is(err, chat.ErrInvalidThreadName) {
+		t.Fatalf("blank name err = %v, want ErrInvalidThreadName", err)
+	}
+	if _, err := store.CreateThread(ctx, parent.ID, strings.Repeat("a", 101)); !errors.Is(err, chat.ErrInvalidThreadName) {
+		t.Fatalf("overlong name err = %v, want ErrInvalidThreadName", err)
+	}
+	bob := regUser(t, pool)
+	dm, _ := store.CreateOrGetDM(ctx, owner.ID, bob.ID)
+	if _, err := store.CreateThread(ctx, dm.ID, "no dms"); !errors.Is(err, chat.ErrNotThreadable) {
+		t.Fatalf("thread on a DM err = %v, want ErrNotThreadable", err)
+	}
+	if _, err := store.CreateThread(ctx, th.ID, "no nesting"); !errors.Is(err, chat.ErrNotThreadable) {
+		t.Fatalf("nested thread err = %v, want ErrNotThreadable", err)
+	}
+	if _, err := store.CreateThread(ctx, 1<<40, "ghost"); !errors.Is(err, chat.ErrChannelNotFound) {
+		t.Fatalf("unknown parent err = %v, want ErrChannelNotFound", err)
+	}
+}

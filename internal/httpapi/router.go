@@ -321,6 +321,67 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 				}
 				w.WriteHeader(http.StatusNoContent)
 			})
+			// Threads (v0.8): a thread is a sub-conversation off a parent channel. Both routes
+			// gate on access to the PARENT (which transitively gates the thread, since a thread
+			// inherits the parent's server_id). List threads / start a thread {name}.
+			r.Get("/channels/{id}/threads", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				if ok, err := store.CanAccessChannel(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				threads, err := store.ListThreads(r.Context(), id)
+				if err != nil {
+					http.Error(w, `{"error":"could not load threads"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusOK, threads)
+			})
+			r.Post("/channels/{id}/threads", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				// Must be able to access AND post in the parent to start a thread there.
+				if ok, err := store.CanAccessChannel(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				if ok, err := store.CanPostInChannel(r.Context(), id, me.ID); err != nil || !ok {
+					http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+					return
+				}
+				var in struct {
+					Name string `json:"name"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				thread, err := store.CreateThread(r.Context(), id, in.Name)
+				switch {
+				case errors.Is(err, chat.ErrInvalidThreadName):
+					http.Error(w, `{"error":"thread name must be 1-100 characters"}`, http.StatusBadRequest)
+					return
+				case errors.Is(err, chat.ErrNotThreadable):
+					http.Error(w, `{"error":"cannot start a thread on this channel"}`, http.StatusBadRequest)
+					return
+				case errors.Is(err, chat.ErrChannelNotFound):
+					http.Error(w, `{"error":"channel not found"}`, http.StatusNotFound)
+					return
+				case err != nil:
+					http.Error(w, `{"error":"could not create thread"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusCreated, thread)
+			})
 			r.Get("/dms", chat.HandleListDMs(store))
 			r.Post("/dms", chat.HandleCreateDM(store))
 			r.Post("/dms/group", chat.HandleCreateGroupDM(store))

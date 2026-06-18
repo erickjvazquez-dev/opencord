@@ -110,6 +110,8 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `GET`    | `/api/channels`                | bearer | List public channels                           |
 | `POST`   | `/api/channels`                | bearer | Create a channel `{name}` (2–32 `[a-z0-9_-]`)  |
 | `PATCH`  | `/api/channels/{id}`           | bearer | Channel settings `{postPolicy?, topic?, slowmodeSeconds?}` (admin) |
+| `GET`    | `/api/channels/{id}/threads`   | bearer | List the channel's threads                     |
+| `POST`   | `/api/channels/{id}/threads`   | bearer | Start a thread `{name}` off the channel        |
 | `POST`   | `/api/channels/{id}/read`      | bearer | Mark a channel read (clears its unread/mention badge) |
 | `GET`    | `/api/unreads`                 | bearer | Your channels with unread + @mention counts    |
 | `POST`   | `/api/channels/{id}/mute`      | bearer | Mute a channel (stops its unread/mention/tab badge) |
