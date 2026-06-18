@@ -878,6 +878,7 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		var in struct {
 			Name       string `json:"name"`
 			CategoryID *int64 `json:"categoryId"`
+			Kind       string `json:"kind"` // "" or "public" (text) | "voice"; default text
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
@@ -887,13 +888,23 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 			http.Error(w, `{"error":"channel name must be 2-32 chars of [a-z0-9_-]"}`, http.StatusBadRequest)
 			return
 		}
-		c, err := store.CreateServerChannelInCategory(r.Context(), id, in.Name, in.CategoryID)
+		if in.Kind == "" {
+			in.Kind = "public"
+		}
+		if in.Kind != "public" && in.Kind != "voice" {
+			http.Error(w, `{"error":"channel kind must be 'public' or 'voice'"}`, http.StatusBadRequest)
+			return
+		}
+		c, err := store.CreateServerChannelOfKind(r.Context(), id, in.Name, in.CategoryID, in.Kind)
 		switch {
 		case errors.Is(err, chat.ErrChannelExists):
 			http.Error(w, `{"error":"channel name already taken in this server"}`, http.StatusConflict)
 			return
 		case errors.Is(err, chat.ErrCategoryNotFound):
 			http.Error(w, `{"error":"category not found in this server"}`, http.StatusBadRequest)
+			return
+		case errors.Is(err, chat.ErrInvalidChannelKind):
+			http.Error(w, `{"error":"channel kind must be 'public' or 'voice'"}`, http.StatusBadRequest)
 			return
 		case err != nil:
 			http.Error(w, `{"error":"could not create channel"}`, http.StatusInternalServerError)

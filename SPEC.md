@@ -2429,3 +2429,30 @@ participants per channel in the sidebar — so you see a call on ANY channel. Th
 a channel via WS → `GET /voice-presence` lists them on that channel; a non-member is 403). Full QA green
 incl. a browser assertion that a 🔊 badge appears on a server channel when someone is in its call;
 AI-vision the sidebar badge. Ship + `railway up` + rollout-verify.
+
+## Voice channels as entities (v0.9, slice 3a — backend)
+
+**Why:** slices 1–2 added voice *presence* (who's in a call, per channel + cross-channel sidebar
+badges) as the foundation for **dedicated voice channels** — Discord's core 🔊 channel you click to
+join. Slice 3a makes a voice channel a first-class entity server-side; slice 3b wires the visible
+🔊 channel + click-to-join + participants-beneath in the client. The voice infra (per-channel
+`voiceMembers`, voice-join WS path, `VoiceMembersFor` query) is already keyed by channel id and is
+kind-agnostic, so a `kind='voice'` channel reuses it unchanged.
+
+- **Store:** new `CreateServerChannelOfKind(ctx, serverID, name, categoryID, kind)` — the existing
+  `CreateServerChannel`/`CreateServerChannelInCategory` keep their signatures and delegate with
+  `kind="public"` (zero blast radius). `kind` is validated to `'public'|'voice'` (Rule B — defense in
+  depth even though the route validates); the INSERT sets the `kind` column (schema already has it).
+- **List:** `ListServerChannels` also SELECTs `kind` and sets `Channel.Kind`, but **normalizes
+  `'public'`→`""`** so existing (text) channels' JSON stays byte-identical (omitempty) — only
+  `kind='voice'` channels carry `"kind":"voice"` on the wire.
+- **Route:** `POST /api/servers/{id}/channels` accepts an optional `kind` in the body (default
+  `'public'`, validated to `'public'|'voice'`, 400 otherwise), admin-gated as today, and calls
+  `CreateServerChannelOfKind`. The client's create-channel UI does NOT yet send `kind`, so no voice
+  channels appear in the UI until slice 3b — backend is dormant-but-ready, zero user-visible change.
+
+**Verify (Rule 14/15):** `go build/vet/test` green incl. `TestServerVoiceChannelIntegration` (admin
+creates a `voice` channel → `ListServerChannels` returns it with `kind='voice'`; a text channel returns
+`kind=''`; adversarial: a plain member can't create — route 403; an invalid kind → store rejects /
+route 400). Live E2E on the running stack: create a voice channel via the API, list it, confirm
+`kind='voice'`; bad kind → 400; non-admin → 403. (Browser/visual verification lands with slice 3b's UI.)

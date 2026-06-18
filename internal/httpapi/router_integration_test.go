@@ -183,7 +183,51 @@ func TestRouterAuthorizationIntegration(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil {
 			t.Fatalf("decode created channel: %v", err)
 		}
+		// A text channel carries no kind on the wire (omitempty); voice channels do.
+		if c.Kind != "" {
+			t.Fatalf("text channel kind = %q, want empty", c.Kind)
+		}
 		createdChannelID = c.ID
+	})
+
+	t.Run("voice channels (kind='voice')", func(t *testing.T) {
+		p := fmt.Sprintf("/api/servers/%d/channels", srv.ID)
+		// A non-admin cannot create a voice channel either (admin gate precedes kind parsing).
+		wantStatus(t, hs.req(t, "POST", p, memberTok, `{"name":"member-voice","kind":"voice"}`), http.StatusForbidden, "non-admin creates voice channel")
+		// An invalid kind is a 400, not a silent default.
+		wantStatus(t, hs.req(t, "POST", p, ownerTok, `{"name":"bad-kind","kind":"stage"}`), http.StatusBadRequest, "owner sends bogus kind")
+		// The owner creates a real voice channel → 201 carrying kind='voice'.
+		w := hs.req(t, "POST", p, ownerTok, `{"name":"lounge","kind":"voice"}`)
+		wantStatus(t, w, http.StatusCreated, "owner creates voice channel")
+		var vc chat.Channel
+		if err := json.Unmarshal(w.Body.Bytes(), &vc); err != nil {
+			t.Fatalf("decode created voice channel: %v", err)
+		}
+		if vc.Kind != "voice" {
+			t.Fatalf("voice channel kind = %q, want %q", vc.Kind, "voice")
+		}
+		// It surfaces with kind='voice' in the members' channel list; text channels stay kind=''.
+		lw := hs.req(t, "GET", p, memberTok, "")
+		wantStatus(t, lw, http.StatusOK, "member lists channels incl. voice")
+		var chans []chat.Channel
+		if err := json.Unmarshal(lw.Body.Bytes(), &chans); err != nil {
+			t.Fatalf("decode channel list: %v", err)
+		}
+		var sawVoice, sawText bool
+		for _, ch := range chans {
+			switch ch.ID {
+			case vc.ID:
+				sawVoice = ch.Kind == "voice"
+			case openCh.ID:
+				sawText = ch.Kind == ""
+			}
+		}
+		if !sawVoice {
+			t.Fatalf("voice channel %d missing or not kind='voice' in list: %+v", vc.ID, chans)
+		}
+		if !sawText {
+			t.Fatalf("text channel %d should list with empty kind: %+v", openCh.ID, chans)
+		}
 	})
 
 	t.Run("role changes are owner-only", func(t *testing.T) {

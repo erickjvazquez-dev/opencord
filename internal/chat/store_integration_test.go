@@ -2595,3 +2595,59 @@ func TestThreadsIntegration(t *testing.T) {
 		t.Fatalf("unknown parent err = %v, want ErrChannelNotFound", err)
 	}
 }
+
+// TestServerVoiceChannelIntegration verifies dedicated voice channels (kind='voice') at the
+// store layer: CreateServerChannelOfKind creates a voice channel that surfaces with kind='voice'
+// in ListServerChannels while text channels stay kind='' (byte-identical wire shape), and the
+// kind argument is validated (defense in depth, Rule B — the route validates too).
+func TestServerVoiceChannelIntegration(t *testing.T) {
+	store, _, owner := setup(t)
+	ctx := context.Background()
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Voice Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	// An invalid kind is rejected and writes nothing.
+	if _, err := store.CreateServerChannelOfKind(ctx, srv.ID, "stage-chan", nil, "stage"); !errors.Is(err, chat.ErrInvalidChannelKind) {
+		t.Fatalf("bogus kind err = %v, want ErrInvalidChannelKind", err)
+	}
+
+	// A text channel (default kind) and a voice channel coexist under the server.
+	text, err := store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("create text channel: %v", err)
+	}
+	if text.Kind != "" {
+		t.Fatalf("text channel kind = %q, want empty", text.Kind)
+	}
+	voice, err := store.CreateServerChannelOfKind(ctx, srv.ID, "lounge", nil, "voice")
+	if err != nil {
+		t.Fatalf("create voice channel: %v", err)
+	}
+	if voice.Kind != "voice" {
+		t.Fatalf("voice channel kind = %q, want %q", voice.Kind, "voice")
+	}
+
+	// ListServerChannels surfaces each kind correctly (voice carries it; text omits it).
+	chans, err := store.ListServerChannels(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("list channels: %v", err)
+	}
+	var sawVoice, sawText bool
+	for _, c := range chans {
+		switch c.ID {
+		case voice.ID:
+			sawVoice = c.Kind == "voice"
+		case text.ID:
+			sawText = c.Kind == ""
+		}
+	}
+	if !sawVoice {
+		t.Fatalf("voice channel %d missing or not kind='voice': %+v", voice.ID, chans)
+	}
+	if !sawText {
+		t.Fatalf("text channel %d should list with empty kind: %+v", text.ID, chans)
+	}
+}

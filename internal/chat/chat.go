@@ -27,6 +27,8 @@ var (
 	ErrChannelExists = errors.New("channel name already taken")
 	// ErrCategoryNotFound is returned when a category id doesn't exist in the server.
 	ErrCategoryNotFound = errors.New("category not found")
+	// ErrInvalidChannelKind is returned when a server channel kind is not 'public' or 'voice'.
+	ErrInvalidChannelKind = errors.New("channel kind must be 'public' or 'voice'")
 	// ErrUserNotFound is returned when a DM target username does not exist.
 	ErrUserNotFound = errors.New("user not found")
 	// ErrCannotDMSelf is returned when a user tries to open a DM with themselves.
@@ -2178,11 +2180,29 @@ func (s *Store) CreateServerChannel(ctx context.Context, serverID int64, name st
 	return s.CreateServerChannelInCategory(ctx, serverID, name, nil)
 }
 
-// CreateServerChannelInCategory creates a members-only channel under a server, optionally
+// CreateServerChannelInCategory creates a members-only text channel under a server, optionally
 // inside a category. A non-nil categoryID is validated to belong to serverID (Rule B — a
 // client can't attach a channel to another server's category); a bad/cross-server id
 // returns ErrCategoryNotFound and nothing is written.
 func (s *Store) CreateServerChannelInCategory(ctx context.Context, serverID int64, name string, categoryID *int64) (Channel, error) {
+	return s.CreateServerChannelOfKind(ctx, serverID, name, categoryID, "public")
+}
+
+// CreateServerChannelOfKind creates a members-only channel of the given kind under a server.
+// kind is 'public' (a text channel, the default) or 'voice' (a Discord-style 🔊 channel that
+// reuses the kind-agnostic per-channel voice infra); any other value returns
+// ErrInvalidChannelKind and nothing is written (Rule B — defense in depth even though the route
+// validates). A voice channel is just a channel row with kind='voice'; access + presence reuse
+// the server membership + voiceMembers paths unchanged. The returned Channel.Kind is "" for a
+// text channel (so the wire JSON stays byte-identical to a pre-voice channel) and "voice" for a
+// voice channel.
+func (s *Store) CreateServerChannelOfKind(ctx context.Context, serverID int64, name string, categoryID *int64, kind string) (Channel, error) {
+	if kind == "" {
+		kind = "public"
+	}
+	if kind != "public" && kind != "voice" {
+		return Channel{}, ErrInvalidChannelKind
+	}
 	if categoryID != nil {
 		var ok bool
 		if err := s.pool.QueryRow(ctx,
@@ -2195,9 +2215,12 @@ func (s *Store) CreateServerChannelInCategory(ctx context.Context, serverID int6
 		}
 	}
 	c := Channel{Name: name, PostPolicy: "everyone", CategoryID: categoryID}
+	if kind == "voice" {
+		c.Kind = "voice"
+	}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO channels (name, server_id, category_id) VALUES ($1, $2, $3) RETURNING id, created_at`,
-		name, serverID, categoryID).Scan(&c.ID, &c.CreatedAt)
+		`INSERT INTO channels (name, server_id, category_id, kind) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+		name, serverID, categoryID, kind).Scan(&c.ID, &c.CreatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique within the server
@@ -2340,10 +2363,13 @@ func (s *Store) ListChannelCategories(ctx context.Context, serverID int64) ([]Ch
 	return out, rows.Err()
 }
 
-// ListServerChannels returns the channels under serverID, oldest first.
+// ListServerChannels returns the channels under serverID, oldest first. The kind column is
+// surfaced so the client can tell a 🔊 voice channel apart from a text one, but 'public' is
+// normalized to "" so a text channel's JSON stays byte-identical to a pre-voice channel
+// (omitempty drops it); only a voice channel carries "kind":"voice" on the wire.
 func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Channel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds, category_id FROM channels
+		`SELECT id, name, created_at, post_policy, topic, slowmode_seconds, category_id, kind FROM channels
 		  WHERE server_id = $1 AND kind <> 'thread' ORDER BY id`,
 		serverID)
 	if err != nil {
@@ -2353,8 +2379,12 @@ func (s *Store) ListServerChannels(ctx context.Context, serverID int64) ([]Chann
 	out := make([]Channel, 0)
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic, &c.SlowmodeSeconds, &c.CategoryID); err != nil {
+		var kind string
+		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt, &c.PostPolicy, &c.Topic, &c.SlowmodeSeconds, &c.CategoryID, &kind); err != nil {
 			return nil, err
+		}
+		if kind != "public" {
+			c.Kind = kind
 		}
 		out = append(out, c)
 	}
