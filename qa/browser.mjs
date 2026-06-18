@@ -580,6 +580,26 @@ async function main() {
   await page.locator('.voice-channel-view').waitFor({ timeout: 8000 })
   check(await page.locator('.voice-channel-view').isVisible(), 'opening a voice channel shows the join view')
   check((await page.locator('.composer').count()) === 0, 'the text composer is hidden in a voice channel')
+  // slice 3c: a voice channel's header reads as a call, not a text room — the brand shows 🔊
+  // and the inapplicable text-channel actions (read-only/slowmode/topic/pins/threads/search)
+  // are hidden. (Regression guard for the P1 the AI-vision pass surfaced in slice 3b.)
+  check(
+    (await page.locator('.chat-header .channel').textContent())?.includes('🔊'),
+    'voice channel header brand shows 🔊 (not #)',
+  )
+  for (const sel of [
+    '.readonly-toggle',
+    '.slowmode-edit',
+    '.topic-edit',
+    '.pins-open',
+    '.threads-open',
+    '.search-form',
+  ]) {
+    check(
+      (await page.locator(`.chat-header ${sel}`).count()) === 0,
+      `voice channel header hides ${sel} (text-only action)`,
+    )
+  }
   await page.locator('.voice-channel-view').screenshot({ path: join(SHOTS, '07-voice-channel.png') })
   // Join the call (Chromium fake mic, auto-granted) → the in-call voice bar + Disconnect appear.
   await page.getByRole('button', { name: /Join Voice/ }).click()

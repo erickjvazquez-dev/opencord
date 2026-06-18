@@ -2483,3 +2483,17 @@ join view, the in-call view, and the sidebar participants-beneath. Ship + `railw
 **P1 follow-ups (slice 3c polish):** the channel *header* still shows `#` + text-channel actions
 (pins/threads/edit-topic/make-read-only/slowmode/search) for a voice channel — swap to 🔊 and hide the
 inapplicable actions. **3d:** auto-join on click; background voice while viewing a text channel.
+
+## Voice channel header polish (v0.9, slice 3c)
+
+**Why:** slice 3b's AI-vision pass surfaced a P1 — a voice channel's header still showed `#` + the
+text-channel actions (make-read-only, slowmode, edit-topic, pins, threads, message search) that don't
+apply to a call. 3c makes the header read as a voice channel: the brand shows `🔊 <name>` (not `#`),
+and the inapplicable actions are hidden (`!activeChannelIsVoice`). The header's own Join-voice /
+N-in-voice buttons are hidden too (the main voice view carries its own Join + roster — no duplicate).
+The `🔔 mute` notification toggle stays (harmless). Frontend-only; text/DM/thread headers unchanged.
+
+**Verify (Rule 14):** tsc clean, vitest 77/77, go build/vet/test green; browser QA grew a regression
+guard — on the open voice channel it asserts the header brand contains 🔊 and that
+`.readonly-toggle/.slowmode-edit/.topic-edit/.pins-open/.threads-open/.search-form` are all absent;
+AI-vision confirmed the cleaned-up header. Ship + `railway up` + rollout-verify.

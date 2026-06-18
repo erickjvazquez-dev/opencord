@@ -2282,7 +2282,9 @@ export function Chat({
                   ? dmIsGroup(activeDM)
                     ? dmTitle(activeDM)
                     : `@${dmTitle(activeDM)}`
-                  : `#${activeChannelName ?? '…'}`}
+                  : activeChannelIsVoice
+                    ? `🔊 ${activeChannelName ?? '…'}`
+                    : `#${activeChannelName ?? '…'}`}
             </span>
             {activeIsReadOnly && (
               <span className="readonly-badge" title="read-only — only admins can post">
@@ -2303,27 +2305,29 @@ export function Chat({
               </span>
             )}
           </div>
-          {activeServerChannel && canModerate && (
+          {/* Text-channel actions (post policy, slowmode, topic, pins, threads, search) don't
+              apply to a voice channel — hide them so its header reads as a call, not a text room. */}
+          {activeServerChannel && canModerate && !activeChannelIsVoice && (
             <button className="link readonly-toggle" onClick={() => void toggleReadOnly()}>
               {activeIsReadOnly ? 'allow everyone' : 'make read-only'}
             </button>
           )}
-          {activeServerChannel && canModerate && (
+          {activeServerChannel && canModerate && !activeChannelIsVoice && (
             <button className="link slowmode-edit" onClick={() => void editSlowmode()}>
               slowmode
             </button>
           )}
-          {activeServerChannel && canModerate && (
+          {activeServerChannel && canModerate && !activeChannelIsVoice && (
             <button className="link topic-edit" onClick={() => void editTopic()}>
               edit topic
             </button>
           )}
-          {channelId != null && (
+          {channelId != null && !activeChannelIsVoice && (
             <button className="link pins-open" onClick={() => void openPins()}>
               pins
             </button>
           )}
-          {channelId != null && !activeDM && !inThread && (
+          {channelId != null && !activeDM && !inThread && !activeChannelIsVoice && (
             <button className="link threads-open" onClick={() => void openThreads()}>
               🧵 threads
             </button>
@@ -2342,7 +2346,9 @@ export function Chat({
               {mutedChannels.has(channelId) ? '🔕 muted' : '🔔 mute'}
             </button>
           )}
-          {channelId != null && !inCall && (
+          {/* In a voice channel the main view carries its own Join/roster, so the header's
+              voice buttons would duplicate it — show them only for non-voice channels. */}
+          {channelId != null && !inCall && !activeChannelIsVoice && (
             <button
               className="link voice-join"
               onClick={() => void joinVoice()}
@@ -2352,7 +2358,7 @@ export function Chat({
               🎙 Join voice
             </button>
           )}
-          {channelId != null && voicePresence.length > 0 && (
+          {channelId != null && voicePresence.length > 0 && !activeChannelIsVoice && (
             <button
               className="link voice-presence"
               onClick={() => !inCall && void joinVoice()}
@@ -2362,15 +2368,17 @@ export function Chat({
               🔊 {voicePresence.length} in voice
             </button>
           )}
-          <form className="search-form" onSubmit={runSearch}>
-            <input
-              className="search-input"
-              placeholder="Search… (try from:user has:link before:2024-01-31)"
-              title="Filters: from:<user>, has:link, has:image, has:file, before:<YYYY-MM-DD>, after:<YYYY-MM-DD>"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </form>
+          {!activeChannelIsVoice && (
+            <form className="search-form" onSubmit={runSearch}>
+              <input
+                className="search-input"
+                placeholder="Search… (try from:user has:link before:2024-01-31)"
+                title="Filters: from:<user>, has:link, has:image, has:file, before:<YYYY-MM-DD>, after:<YYYY-MM-DD>"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </form>
+          )}
           <div className="meta">
             <span className={connected ? 'dot online' : 'dot offline'} />
             {online} online
