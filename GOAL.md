@@ -306,9 +306,21 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   query + `GET /api/servers/{id}/voice-presence` (members only); the client polls per server (15s +
   an immediate refresh on any voice-presence WS event) and shows a **🔊 N** badge on each server
   channel with an active call. Hub query + route-auth tests; full QA green (a raw-WS voice-join shows
-  the badge during the call + clears on disconnect); AI-vision. **Slice 3 NEXT:** dedicated
-  `kind='voice'` channels (a 🔊 channel you click to join, listing participants beneath it).
-  *Next voice polish: voice channels as entities, screen share, video, soundboard.*
+  the badge during the call + clears on disconnect); AI-vision.
+  **Slice 3a DONE (iter 172): voice channels as entities (backend).** A dedicated voice channel is now
+  a first-class `kind='voice'` server channel. Store `CreateServerChannelOfKind` (validates kind ∈
+  {public,voice}, Rule B; `CreateServerChannel`/`InCategory` keep their signatures and delegate with
+  "public" — zero blast radius); `ListServerChannels` surfaces `kind` but normalizes `'public'→""` so a
+  text channel's JSON stays byte-identical (only voice carries `"kind":"voice"`). `POST .../channels`
+  accepts an optional `kind` (default public, 400 on anything but public|voice), admin-gated as before.
+  The voice infra (per-channel `voiceMembers`, voice-join WS path, `VoiceMembersFor`) is kind-agnostic,
+  so a voice channel reuses it unchanged. Store + route integration tests (create voice + list kind +
+  invalid-kind rejected; route 403 non-admin / 400 bad kind / 201 kind='voice'); go build/vet/test green;
+  shipped + `railway up` + **live E2E verified** (201 voice / unchanged text / 400 bad-kind / 403
+  non-admin on the deploy). The client create-channel UI doesn't send `kind` yet → no UI change until 3b.
+  **Slice 3b NEXT (client):** render `kind='voice'` channels with a 🔊 icon, click-to-join the call, and
+  list participants beneath the channel in the sidebar (reusing `serverVoice` presence).
+  *Next voice polish: screen share, video, soundboard.*
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
   contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live
   video tiles for every viewer; **screen-audio mixing** — sharer scales the level sent to all

@@ -3634,3 +3634,33 @@ paths. Logged as the go-to pattern for "the UI should react to another connectio
 Well-covered. Next: dedicated kind='voice' channels (slice 3) reuse this presence query under each channel.
 
 **Cadence:** shipped a feature; slice 3 queued → ACTIVE (1800s).
+
+## 2026-06-18 (tick 172) — voice channels as entities (v0.9 slice 3a, backend) shipped
+
+Made a dedicated voice channel a first-class `kind='voice'` server channel — the backend foundation
+for Discord's core 🔊 click-to-join channel (slice 3b). Lowest-blast-radius design: a new
+`CreateServerChannelOfKind` (existing `CreateServerChannel`/`InCategory` keep their signatures and
+delegate with "public"); `ListServerChannels` surfaces `kind` but normalizes `'public'→""` so every
+existing text channel's JSON stays byte-identical (only voice carries `"kind":"voice"`). A blast-radius
+guard sub-agent (Rule 18) confirmed PASS before the edit: no Go consumer of `ListServerChannels` reads
+`kind` (all only pull `.ID`), and the client's `Channel.kind` is already optional. Verified store + route
+integration tests, then **live E2E on the deploy** (201 voice / unchanged text / 400 bad-kind / 403
+non-admin) — proving the rolled-out binary really carries the new validation (the old build had no `kind`
+field and would have 201'd `kind=stage`).
+
+**Highest-value loop improvement (a QA gap to close next tick, now named):**
+This was a backend-only slice, so it shipped WITHOUT a browser/AI-vision pass — correct for this tick
+(there's no UI yet), but it leaves a standing rule for slice 3b: **the browser QA must gain a
+create-AND-join-a-voice-channel flow.** Concretely, `qa/browser.mjs` should, in slice 3b: (1) create a
+channel via a UI control that sends `kind='voice'` (the create-channel modal needs a type picker), (2)
+assert the sidebar row renders a 🔊 (not #) icon, (3) click it → assert the voice bar appears and the
+participant list shows self, (4) AI-vision the rendered voice-channel row + participant list. Until 3b
+lands that UI, the only coverage for voice channels is the Go integration tests + live API E2E — which
+is the right floor for a dormant-but-ready backend, but is explicitly NOT enough once the UI exists.
+Logged so 3b can't ship the UI without its browser+vision coverage (the GAP-026 result-region lesson:
+a feature isn't QA-covered until the rendered RESULT is exercised by eye, not just the API).
+
+**Coverage note:** voice-channel CREATE/LIST now has store-integration + route-integration + live-API
+adversarial coverage. The CLICK-TO-JOIN + participant-list-beneath UI is uncovered until slice 3b.
+
+**Cadence:** shipped a feature; slice 3b queued → ACTIVE (1800s).
