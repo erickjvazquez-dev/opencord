@@ -850,6 +850,10 @@ async function main() {
     'the new role appears in the roles manager',
   )
   await shot('07d-roles-manager.png')
+  // Mark the role hoisted (its members get their own member-list section). The checkbox is
+  // controlled by an async server round-trip, so click (don't .check, which asserts a sync flip).
+  await page.locator('.roles-row', { hasText: 'qa-mod' }).locator('input[type="checkbox"]').click()
+  await page.locator('.roles-row', { hasText: 'qa-mod' }).locator('input[type="checkbox"]:checked').waitFor({ timeout: 6000 })
   // Close the manager (Esc), then open my own profile from the sidebar member list and assign.
   await page.keyboard.press('Escape')
   await page.locator('.roles-modal').waitFor({ state: 'detached', timeout: 4000 })
@@ -868,6 +872,11 @@ async function main() {
     (await page.locator('.member-list .member-list-row .author').first().getAttribute('style')) || ''
   check(namedStyle.includes('color'), `member name is tinted by the assigned role (style="${namedStyle}")`)
   await shot('07d-roles-colored-name.png')
+  // Role hoisting (slice 3): the hoisted role now renders as its own member-list section header.
+  const hoistHead = page.locator('.member-list .member-group-head', { hasText: 'qa-mod' })
+  await hoistHead.waitFor({ timeout: 6000 })
+  check(await hoistHead.isVisible(), 'the hoisted role shows as its own member-list section')
+  await shot('07d-roles-hoist.png')
 
   // 7d-roles-msg (slice 2b) — message-author coloring: close the panel, re-open the server
   // channel (a fresh history fetch now carries the author's role color), and assert a message

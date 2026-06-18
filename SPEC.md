@@ -2360,3 +2360,27 @@ discoverability gap. Discord anchors a thread to the message it was started from
 anchor to a cross-channel/bogus/deleted message is rejected or dropped). Full QA green incl. a new flow:
 start a thread from a message → a 🧵 chip appears on that message → click it → the thread opens; AI-vision
 the chip. Ship + `railway up` + rollout-verify.
+
+## Custom colored roles — hoisting (v0.7, slice 3)
+
+**Why:** Discord groups the member list by "hoisted" roles (a role displayed as its own section). This
+completes the colored-roles feature and is the owner's "feels like Discord" polish bar.
+
+**Design (ADDITIVE, low-risk).** A role gains a `hoist` flag. In the member list, for each hoisted role
+(highest position first) a section lists the members whose TOP hoisted role is that one (header = role
+name in its color); the remaining members fall into the EXISTING Admins/Members grouping unchanged. With
+no role hoisted (the default + every existing server) the member list renders exactly as today — so the
+existing member-list QA stays green and the feature only activates when an admin opts in.
+
+- **Schema:** `server_roles.hoist BOOLEAN NOT NULL DEFAULT false`.
+- **`chat.go`:** `Role.Hoist`; `CreateServerRole`/`UpdateServerRole` accept `hoist`; `ListServerRoles`
+  returns it. No `ListServerMembers` change — the client already has `member.roleIds` + the roles list, so
+  it computes each member's top hoisted role itself.
+- **`api.ts`/`types.ts`:** `hoist` on create/update + the `Role` type.
+- **`RolesManagerModal`:** a "Display separately" checkbox per role + on the create row.
+- **`Chat.tsx` member list:** group hoisted-role members into role sections above Admins/Members.
+
+**Verify (Rule 14):** `go build/vet/test` green incl. extending `TestServerCustomRolesIntegration`
+(`hoist` round-trips through create/update + list). Full QA green incl. a new flow: hoist a role → the
+assigned member appears under a role-named section in the member list; AI-vision the hoisted section.
+Ship + `railway up` + rollout-verify.

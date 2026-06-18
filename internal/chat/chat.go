@@ -149,6 +149,9 @@ type Role struct {
 	Name     string `json:"name"`
 	Color    string `json:"color"`
 	Position int    `json:"position"`
+	// Hoist (slice 3): show this role as its own section in the member list (Discord's
+	// "Display role members separately"). Default false.
+	Hoist bool `json:"hoist"`
 }
 
 // ValidChannelName reports whether name is a valid channel slug (2-32 [a-z0-9_-]).
@@ -1889,7 +1892,7 @@ func validateRole(name, color string) (string, string, error) {
 // CreateServerRole creates a cosmetic role in serverID (admin-gated). The new role takes the
 // next position (max+1) so it sits on top by default. Returns ErrForbidden if the actor isn't
 // an admin/owner, ErrInvalidRoleName/ErrInvalidColor for bad input.
-func (s *Store) CreateServerRole(ctx context.Context, serverID, actorID int64, name, color string) (Role, error) {
+func (s *Store) CreateServerRole(ctx context.Context, serverID, actorID int64, name, color string, hoist bool) (Role, error) {
 	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
 		return Role{}, err
 	} else if !admin {
@@ -1899,18 +1902,18 @@ func (s *Store) CreateServerRole(ctx context.Context, serverID, actorID int64, n
 	if err != nil {
 		return Role{}, err
 	}
-	r := Role{ServerID: serverID, Name: name, Color: color}
+	r := Role{ServerID: serverID, Name: name, Color: color, Hoist: hoist}
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO server_roles (server_id, name, color, position)
-		 VALUES ($1, $2, $3, COALESCE((SELECT MAX(position) + 1 FROM server_roles WHERE server_id = $1), 0))
-		 RETURNING id, position`, serverID, name, color).Scan(&r.ID, &r.Position)
+		`INSERT INTO server_roles (server_id, name, color, hoist, position)
+		 VALUES ($1, $2, $3, $4, COALESCE((SELECT MAX(position) + 1 FROM server_roles WHERE server_id = $1), 0))
+		 RETURNING id, position`, serverID, name, color, hoist).Scan(&r.ID, &r.Position)
 	return r, err
 }
 
 // ListServerRoles returns serverID's cosmetic roles, highest position first.
 func (s *Store) ListServerRoles(ctx context.Context, serverID int64) ([]Role, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, server_id, name, color, position FROM server_roles
+		`SELECT id, server_id, name, color, position, hoist FROM server_roles
 		  WHERE server_id = $1 ORDER BY position DESC, id DESC`, serverID)
 	if err != nil {
 		return nil, err
@@ -1919,7 +1922,7 @@ func (s *Store) ListServerRoles(ctx context.Context, serverID int64) ([]Role, er
 	out := make([]Role, 0)
 	for rows.Next() {
 		var r Role
-		if err := rows.Scan(&r.ID, &r.ServerID, &r.Name, &r.Color, &r.Position); err != nil {
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.Name, &r.Color, &r.Position, &r.Hoist); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -1927,9 +1930,9 @@ func (s *Store) ListServerRoles(ctx context.Context, serverID int64) ([]Role, er
 	return out, rows.Err()
 }
 
-// UpdateServerRole renames/recolors a role (admin-gated). The role must belong to serverID
-// (ErrRoleNotFound otherwise).
-func (s *Store) UpdateServerRole(ctx context.Context, serverID, actorID, roleID int64, name, color string) error {
+// UpdateServerRole renames/recolors/re-hoists a role (admin-gated). The role must belong to
+// serverID (ErrRoleNotFound otherwise).
+func (s *Store) UpdateServerRole(ctx context.Context, serverID, actorID, roleID int64, name, color string, hoist bool) error {
 	if admin, err := s.IsServerAdmin(ctx, serverID, actorID); err != nil {
 		return err
 	} else if !admin {
@@ -1940,8 +1943,8 @@ func (s *Store) UpdateServerRole(ctx context.Context, serverID, actorID, roleID 
 		return err
 	}
 	ct, err := s.pool.Exec(ctx,
-		`UPDATE server_roles SET name = $3, color = $4 WHERE id = $2 AND server_id = $1`,
-		serverID, roleID, name, color)
+		`UPDATE server_roles SET name = $3, color = $4, hoist = $5 WHERE id = $2 AND server_id = $1`,
+		serverID, roleID, name, color, hoist)
 	if err != nil {
 		return err
 	}

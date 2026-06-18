@@ -222,35 +222,37 @@ export async function listServerRoles(token: string, serverId: number): Promise<
   return res.json()
 }
 
-// Create a colored role {name, color} (admin). Returns the new role.
+// Create a colored role {name, color, hoist} (admin). Returns the new role.
 export async function createServerRole(
   token: string,
   serverId: number,
   name: string,
   color: string,
+  hoist = false,
 ): Promise<Role> {
   const res = await fetch(`/api/servers/${serverId}/custom-roles`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, color }),
+    body: JSON.stringify({ name, color, hoist }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create role')
   return data as Role
 }
 
-// Rename/recolor a role (admin).
+// Rename/recolor/re-hoist a role (admin).
 export async function updateServerRole(
   token: string,
   serverId: number,
   roleId: number,
   name: string,
   color: string,
+  hoist = false,
 ): Promise<void> {
   const res = await fetch(`/api/servers/${serverId}/custom-roles/${roleId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name, color }),
+    body: JSON.stringify({ name, color, hoist }),
   })
   if (!res.ok && res.status !== 204) {
     const data = await res.json().catch(() => ({}))

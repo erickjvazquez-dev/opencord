@@ -2640,6 +2640,22 @@ button:disabled {
   cursor: pointer;
   padding: 2px 4px;
 }
+/* "Display separately (hoist)" toggle in the roles manager. */
+.roles-hoist {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.roles-hoist input {
+  cursor: pointer;
+}
+.roles-hoist-create {
+  margin-top: 10px;
+}
 .roles-delete:hover {
   text-decoration: underline;
 }

@@ -1212,23 +1212,23 @@ func TestServerCustomRolesIntegration(t *testing.T) {
 	}
 
 	// Mutations are admin-gated; a plain member can't create a role.
-	if _, err := store.CreateServerRole(ctx, srv.ID, member.ID, "Mod", "#ff0000"); !errors.Is(err, chat.ErrForbidden) {
+	if _, err := store.CreateServerRole(ctx, srv.ID, member.ID, "Mod", "#ff0000", false); !errors.Is(err, chat.ErrForbidden) {
 		t.Fatalf("member create role err = %v, want ErrForbidden", err)
 	}
 	// Input validation (admin, but bad data).
-	if _, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Mod", "red"); !errors.Is(err, chat.ErrInvalidColor) {
+	if _, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Mod", "red", false); !errors.Is(err, chat.ErrInvalidColor) {
 		t.Fatalf("bad color err = %v, want ErrInvalidColor", err)
 	}
-	if _, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "   ", "#fff"); !errors.Is(err, chat.ErrInvalidRoleName) {
+	if _, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "   ", "#fff", false); !errors.Is(err, chat.ErrInvalidRoleName) {
 		t.Fatalf("blank name err = %v, want ErrInvalidRoleName", err)
 	}
 
 	// Owner creates two roles; positions auto-increment so the second sits on top.
-	low, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Member+", "#3498db")
+	low, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Member+", "#3498db", false)
 	if err != nil {
 		t.Fatalf("create low role: %v", err)
 	}
-	high, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Moderator", "#e91e63")
+	high, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Moderator", "#e91e63", false)
 	if err != nil {
 		t.Fatalf("create high role: %v", err)
 	}
@@ -1269,8 +1269,33 @@ func TestServerCustomRolesIntegration(t *testing.T) {
 		t.Fatalf("member roleIds = %v, want [%d %d] (top first)", ids, high.ID, low.ID)
 	}
 
+	// Hoist (slice 3) round-trips through create + update + list.
+	hoisted, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Staff", "#f0b232", true)
+	if err != nil || !hoisted.Hoist {
+		t.Fatalf("create hoisted role: %+v err %v", hoisted, err)
+	}
+	roleByID := func(id int64) chat.Role {
+		rs, _ := store.ListServerRoles(ctx, srv.ID)
+		for _, r := range rs {
+			if r.ID == id {
+				return r
+			}
+		}
+		t.Fatalf("role %d not listed", id)
+		return chat.Role{}
+	}
+	if !roleByID(hoisted.ID).Hoist {
+		t.Fatal("listed role should report hoist=true")
+	}
+	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, hoisted.ID, "Staff", "#f0b232", false); err != nil {
+		t.Fatalf("un-hoist: %v", err)
+	}
+	if roleByID(hoisted.ID).Hoist {
+		t.Fatal("role should report hoist=false after update")
+	}
+
 	// Recolor the top role → reflected in the member's color.
-	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, high.ID, "Moderator", "#00ff00"); err != nil {
+	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, high.ID, "Moderator", "#00ff00", false); err != nil {
 		t.Fatalf("update role: %v", err)
 	}
 	if c := memberColor(t, store, srv.ID, member.ID); c != "#00ff00" {
@@ -1286,7 +1311,7 @@ func TestServerCustomRolesIntegration(t *testing.T) {
 	}
 
 	// An unknown / cross-server role id is ErrRoleNotFound on update/delete/assign.
-	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, 1<<40, "X", "#fff"); !errors.Is(err, chat.ErrRoleNotFound) {
+	if err := store.UpdateServerRole(ctx, srv.ID, owner.ID, 1<<40, "X", "#fff", false); !errors.Is(err, chat.ErrRoleNotFound) {
 		t.Fatalf("update unknown role err = %v, want ErrRoleNotFound", err)
 	}
 
@@ -1311,7 +1336,7 @@ func TestMessageAuthorColorIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create channel: %v", err)
 	}
-	role, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Mod", "#e67e22")
+	role, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Mod", "#e67e22", false)
 	if err != nil {
 		t.Fatalf("create role: %v", err)
 	}

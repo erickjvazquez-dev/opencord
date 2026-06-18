@@ -83,6 +83,8 @@ export interface Role {
   name: string
   color: string
   position: number
+  // Hoist (slice 3): show this role as its own section in the member list. Default false.
+  hoist?: boolean
 }
 
 // A custom emoji owned by a server. Server-scoped: a `:name:` only renders as an

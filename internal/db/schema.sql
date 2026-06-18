@@ -176,6 +176,9 @@ CREATE TABLE IF NOT EXISTS server_roles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS server_roles_server_id_idx ON server_roles (server_id);
+-- Hoist (v0.7 slice 3): a hoisted role is shown as its own section in the member list
+-- (Discord's "Display role members separately"). Default off — the member list is unchanged.
+ALTER TABLE server_roles ADD COLUMN IF NOT EXISTS hoist BOOLEAN NOT NULL DEFAULT false;
 -- Role assignments: a member can hold many roles; role_id implies the server (via
 -- server_roles.server_id), so it isn't denormalized here. Deleting a role or user cascades.
 CREATE TABLE IF NOT EXISTS member_roles (

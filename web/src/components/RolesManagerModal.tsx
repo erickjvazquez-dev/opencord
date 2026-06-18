@@ -32,6 +32,7 @@ export function RolesManagerModal({
   const [roles, setRoles] = useState<Role[]>([])
   const [name, setName] = useState('')
   const [color, setColor] = useState('#5865f2')
+  const [hoist, setHoist] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -62,8 +63,9 @@ export function RolesManagerModal({
     setBusy(true)
     setError(null)
     try {
-      await createServerRole(token, serverId, trimmed, color)
+      await createServerRole(token, serverId, trimmed, color, hoist)
       setName('')
+      setHoist(false)
       await refresh()
       onChanged()
     } catch (err) {
@@ -73,13 +75,23 @@ export function RolesManagerModal({
     }
   }
 
+  // Recolor preserves the role's hoist; toggleHoist flips it (both via the same PATCH).
   const recolor = async (role: Role, next: string) => {
     try {
-      await updateServerRole(token, serverId, role.id, role.name, next)
+      await updateServerRole(token, serverId, role.id, role.name, next, role.hoist ?? false)
       await refresh()
       onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'could not recolor role')
+    }
+  }
+  const toggleHoist = async (role: Role) => {
+    try {
+      await updateServerRole(token, serverId, role.id, role.name, role.color, !(role.hoist ?? false))
+      await refresh()
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'could not update role')
     }
   }
 
@@ -117,6 +129,15 @@ export function RolesManagerModal({
               <span className="roles-name" style={{ color: r.color }}>
                 {r.name}
               </span>
+              <label className="roles-hoist" title="Display members with this role in their own section">
+                <input
+                  type="checkbox"
+                  checked={r.hoist ?? false}
+                  onChange={() => void toggleHoist(r)}
+                  aria-label={`Display ${r.name} separately`}
+                />
+                hoist
+              </label>
               <button className="roles-delete" onClick={() => void remove(r)} aria-label={`Delete ${r.name}`}>
                 Delete
               </button>
@@ -149,6 +170,10 @@ export function RolesManagerModal({
               {busy ? 'Adding…' : 'Add role'}
             </button>
           </div>
+          <label className="roles-hoist roles-hoist-create" title="Display members with this role in their own section">
+            <input type="checkbox" checked={hoist} onChange={(e) => setHoist(e.target.checked)} />
+            Display separately (hoist)
+          </label>
           <div className="roles-presets" aria-label="preset colors">
             {PRESETS.map((p) => (
               <button

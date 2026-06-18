@@ -1188,12 +1188,13 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		var in struct {
 			Name  string `json:"name"`
 			Color string `json:"color"`
+			Hoist bool   `json:"hoist"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
 		}
-		role, err := store.CreateServerRole(r.Context(), id, me.ID, in.Name, in.Color)
+		role, err := store.CreateServerRole(r.Context(), id, me.ID, in.Name, in.Color, in.Hoist)
 		if err != nil {
 			mapRoleErr(w, err)
 			return
@@ -1216,12 +1217,13 @@ func mountServerRoutes(r chi.Router, store *chat.Store, hub *ws.Hub) {
 		var in struct {
 			Name  string `json:"name"`
 			Color string `json:"color"`
+			Hoist bool   `json:"hoist"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
 		}
-		if err := store.UpdateServerRole(r.Context(), id, me.ID, roleID, in.Name, in.Color); err != nil {
+		if err := store.UpdateServerRole(r.Context(), id, me.ID, roleID, in.Name, in.Color, in.Hoist); err != nil {
 			mapRoleErr(w, err)
 			return
 		}

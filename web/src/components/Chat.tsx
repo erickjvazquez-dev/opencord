@@ -3426,16 +3426,30 @@ export function Chat({
 
       {activeServerId && memberList.length > 0 && (
         <aside className="member-list" aria-label="server members">
-          {(
-            [
-              ['Admins', memberList.filter((m) => m.role === 'owner' || m.role === 'admin')],
-              ['Members', memberList.filter((m) => m.role === 'member')],
-            ] as const
-          )
-            .filter(([, group]) => group.length > 0)
-            .map(([label, group]) => (
+          {(() => {
+            // Hoisted roles (position-desc from the API) get their own member-list section
+            // first; everyone else falls into the default Admins/Members grouping — so with
+            // no role hoisted (the default), this renders exactly as before.
+            const hoisted = serverRoles.filter((r) => r.hoist)
+            const topHoisted = (m: ServerMember) => {
+              const ids = new Set(m.roleIds ?? [])
+              return hoisted.find((r) => ids.has(r.id))
+            }
+            const claimed = new Set<number>()
+            const groups: Array<{ label: string; members: ServerMember[]; color?: string }> = []
+            for (const r of hoisted) {
+              const mem = memberList.filter((m) => !claimed.has(m.userId) && topHoisted(m)?.id === r.id)
+              mem.forEach((m) => claimed.add(m.userId))
+              if (mem.length) groups.push({ label: r.name, members: mem, color: r.color })
+            }
+            const rest = memberList.filter((m) => !claimed.has(m.userId))
+            const admins = rest.filter((m) => m.role === 'owner' || m.role === 'admin')
+            const members = rest.filter((m) => m.role === 'member')
+            if (admins.length) groups.push({ label: 'Admins', members: admins })
+            if (members.length) groups.push({ label: 'Members', members })
+            return groups.map(({ label, members: group, color }) => (
               <div key={label} className="member-group">
-                <div className="member-group-head">
+                <div className="member-group-head" style={color ? { color } : undefined}>
                   {label} — {group.length}
                 </div>
                 {group.map((mb) => (
@@ -3479,7 +3493,8 @@ export function Chat({
                   </div>
                 ))}
               </div>
-            ))}
+            ))
+          })()}
         </aside>
       )}
 

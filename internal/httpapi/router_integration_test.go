@@ -1618,7 +1618,7 @@ func TestCustomRolesAuthorizationIntegration(t *testing.T) {
 	if _, err := hs.store.RedeemInvite(ctx, code, member.ID); err != nil {
 		t.Fatalf("redeem: %v", err)
 	}
-	roleA, err := hs.store.CreateServerRole(ctx, srvA.ID, ownerA.ID, "RoleA", "#3498db")
+	roleA, err := hs.store.CreateServerRole(ctx, srvA.ID, ownerA.ID, "RoleA", "#3498db", false)
 	if err != nil {
 		t.Fatalf("create roleA: %v", err)
 	}
