@@ -2510,3 +2510,23 @@ polled map only until the live list arrives. Roster updates are now instant.
 voice-channel view roster lists SELF after joining (a real end-to-end presence assertion inside the view,
 `waitFor` the roster item → the in-call screenshot is deterministic); AI-vision confirmed the roster +
 sidebar participant both show. Ship + `railway up` + rollout-verify.
+
+## Voice channels are voice-only — reject text posts + threads (v0.9, slice 3e, Rule-15 hardening)
+
+**Finding (reproduced):** slices 3a–3d hid the composer for a voice channel in the UI, but the BACKEND
+still accepted text. `CanPostInChannel` checked only post-policy + membership, not `kind`, so a hostile
+client could POST to a `kind='voice'` channel via the raw WS `message` frame or the REST attachment path
+— the messages were stored + broadcast to others in the call but never displayed (data-integrity
+inconsistency + an unbounded-write abuse vector with no moderation UI). Separately, `CreateThread`
+rejected `dm`/`thread` parents but not `voice`, so a thread could be started under a voice channel.
+
+**Fix (defense in depth, Rule B/15):** `CanPostInChannel` returns false for `kind='voice'` (the single
+chokepoint both the WS send path `SaveReply` and the REST path `SaveWithAttachments` call, so both are
+closed at once); `CreateThread` adds `voice` to the not-threadable kinds. A voice channel is now
+voice-only at the data layer, consistent with the UI.
+
+**Verify (Rule 14/15):** reproduced the break first (`Save` to a voice channel succeeded → test RED),
+applied the fix, re-attacked (`Save`/`SaveWithAttachments`/`CreateThread` → `ErrForbidden`/
+`ErrNotThreadable`, test GREEN), proved legit use intact (text channels still post + thread).
+`TestVoiceChannelRejectsMessages` encodes the exploit; go build/vet/test green. Ship + `railway up` +
+live re-attack on the deploy (raw WS `message` frame to a voice channel → not persisted).

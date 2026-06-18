@@ -510,19 +510,25 @@ func replySnippet(body string, deletedAt *time.Time) string {
 	return body
 }
 
-// CanPostInChannel reports whether userID may post in channelID. True unless the
-// channel's policy is 'admins' AND it's a server channel AND the user isn't a server
-// admin (read-only / announcement channel).
+// CanPostInChannel reports whether userID may post in channelID. False for a voice
+// channel (kind='voice') — it's voice-only, so NOBODY posts text (Rule B/15: the UI
+// hides the composer, but a hostile client could POST via the raw WS 'message' frame or
+// the REST attachment path; this is the gate that actually rejects it). Otherwise true
+// unless the channel's policy is 'admins' AND it's a server channel AND the user isn't a
+// server admin (read-only / announcement channel).
 func (s *Store) CanPostInChannel(ctx context.Context, channelID, userID int64) (bool, error) {
-	var policy string
+	var policy, kind string
 	var serverID *int64
 	err := s.pool.QueryRow(ctx,
-		`SELECT post_policy, server_id FROM channels WHERE id = $1`, channelID).Scan(&policy, &serverID)
+		`SELECT post_policy, kind, server_id FROM channels WHERE id = $1`, channelID).Scan(&policy, &kind, &serverID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
+	}
+	if kind == "voice" {
+		return false, nil // a voice channel takes no text posts
 	}
 	if policy != "admins" || serverID == nil {
 		return true, nil
@@ -2257,8 +2263,8 @@ func (s *Store) CreateThread(ctx context.Context, parentID int64, name string, f
 	if err != nil {
 		return Channel{}, err
 	}
-	if kind == "dm" || kind == "thread" {
-		return Channel{}, ErrNotThreadable
+	if kind == "dm" || kind == "thread" || kind == "voice" {
+		return Channel{}, ErrNotThreadable // no nesting, no DM threads, and a voice channel is voice-only
 	}
 	// Validate the anchor message lives (non-deleted) in THIS parent channel; drop it otherwise.
 	if fromMessageID != nil {

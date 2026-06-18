@@ -2598,7 +2598,7 @@ func TestThreadsIntegration(t *testing.T) {
 
 // TestServerVoiceChannelIntegration verifies dedicated voice channels (kind='voice') at the
 // store layer: CreateServerChannelOfKind creates a voice channel that surfaces with kind='voice'
-// in ListServerChannels while text channels stay kind='' (byte-identical wire shape), and the
+// in ListServerChannels while text channels stay kind=” (byte-identical wire shape), and the
 // kind argument is validated (defense in depth, Rule B — the route validates too).
 func TestServerVoiceChannelIntegration(t *testing.T) {
 	store, _, owner := setup(t)
@@ -2649,5 +2649,53 @@ func TestServerVoiceChannelIntegration(t *testing.T) {
 	}
 	if !sawText {
 		t.Fatalf("text channel %d should list with empty kind: %+v", text.ID, chans)
+	}
+}
+
+// TestVoiceChannelRejectsMessages is the Rule-15 regression guard for the voice-channel
+// surface: a voice channel (kind='voice') is voice-only, so the message-post path must
+// REJECT text posts — even though the UI hides the composer, a hostile client could POST
+// to it via the raw WS 'message' frame or the REST attachment path. Both go through
+// CanPostInChannel, so rejecting there closes both. A text channel still accepts posts.
+func TestVoiceChannelRejectsMessages(t *testing.T) {
+	store, _, owner := setup(t)
+	ctx := context.Background()
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Voice Post Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	text, err := store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("create text channel: %v", err)
+	}
+	voice, err := store.CreateServerChannelOfKind(ctx, srv.ID, "lounge", nil, "voice")
+	if err != nil {
+		t.Fatalf("create voice channel: %v", err)
+	}
+
+	// Legit use: a text channel still accepts posts.
+	if _, err := store.Save(ctx, text.ID, owner.ID, owner.Username, "hi"); err != nil {
+		t.Fatalf("posting to a text channel should work: %v", err)
+	}
+	// Adversarial: posting to a voice channel is rejected (defense in depth — the gate, not
+	// just the hidden composer). Covers the raw-WS message frame + REST attachment paths.
+	if _, err := store.Save(ctx, voice.ID, owner.ID, owner.Username, "sneaky text in a voice channel"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("Save to a voice channel = %v, want ErrForbidden", err)
+	}
+	if _, err := store.SaveWithAttachments(ctx, voice.ID, owner.ID, owner.Username, "x", nil, nil); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("SaveWithAttachments to a voice channel = %v, want ErrForbidden", err)
+	}
+	// And the gate itself reports no-post for a voice channel.
+	if ok, err := store.CanPostInChannel(ctx, voice.ID, owner.ID); err != nil || ok {
+		t.Fatalf("CanPostInChannel(voice) = %v,%v want false,nil", ok, err)
+	}
+	// A voice channel is voice-only: you can't start a thread off it either (no messages to
+	// anchor, no text) — a text channel still threads fine.
+	if _, err := store.CreateThread(ctx, voice.ID, "ghost thread", nil); !errors.Is(err, chat.ErrNotThreadable) {
+		t.Fatalf("CreateThread on a voice channel = %v, want ErrNotThreadable", err)
+	}
+	if _, err := store.CreateThread(ctx, text.ID, "real thread", nil); err != nil {
+		t.Fatalf("CreateThread on a text channel should work: %v", err)
 	}
 }
