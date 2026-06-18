@@ -1648,6 +1648,50 @@ async function main() {
     'deleting a server removes it from the sidebar',
   )
 
+  // 7k — Group DMs (v0.6 slice 2): create a group from the "+ New DM" modal and see it
+  // rendered in the DM list titled by its members (groups are unnamed). Register two extra
+  // users first so there are real people to add.
+  step('create a group DM from the New DM modal → it appears in the DM list titled by members')
+  const grpA = 'qagrpa' + String(Date.now()).slice(-6)
+  const grpB = 'qagrpb' + String(Date.now()).slice(-6)
+  const regBoth = await page.evaluate(async (names) => {
+    for (const n of names) {
+      const r = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: n, password: 'hunter2' }),
+      })
+      if (!r.ok) return 'register ' + n + ' failed ' + r.status
+    }
+    return 'ok'
+  }, [grpA, grpB])
+  check(regBoth === 'ok', `registered two users to group with (${regBoth})`)
+
+  await page.locator('.add-channel', { hasText: 'New DM' }).click()
+  await page.locator('.group-modal').waitFor({ timeout: 4000 })
+  const chipInput = page.locator('.group-chip-input')
+  await chipInput.click()
+  await chipInput.fill(grpA)
+  await chipInput.press('Enter')
+  await chipInput.fill(grpB)
+  await chipInput.press('Enter')
+  check((await page.locator('.group-chip').count()) === 2, 'both members became chips in the modal')
+  await shot('07k-group-modal.png')
+  await page.locator('.group-modal').getByRole('button', { name: /Create Group/ }).click()
+  await page.locator('.group-modal').waitFor({ state: 'detached', timeout: 8000 })
+  const groupRow = page.locator('.dm-list .channel-item', { hasText: grpA }).first()
+  await groupRow.waitFor({ timeout: 6000 })
+  check(
+    (await groupRow.locator('.dm-group-avatar').count()) === 1,
+    'the group DM row shows the group-glyph avatar',
+  )
+  const groupTitle = (await groupRow.locator('.item-name').textContent()) || ''
+  check(
+    groupTitle.includes(grpA) && groupTitle.includes(grpB),
+    `group row is titled by both members (got "${groupTitle}")`,
+  )
+  await shot('07k-group-row.png')
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

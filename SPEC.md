@@ -2155,3 +2155,36 @@ member rejected at create; group survives a later block while the 1:1 with that 
 too-few guards; 1-other delegates to the idempotent 1:1). WS fanout to all N members is already covered
 by the per-channel hub (verified manually next slice with the create UI). No client UI yet → no browser
 QA delta this slice; slice 2 adds the create-group flow + group rendering + its QA.
+
+## Group DMs — client (v0.6, slice 2)
+
+**Why:** slice 1 shipped the N-member backend + `POST /api/dms/group`; slice 2 is the client so a
+user can actually create and see group DMs. Also closes the slice-1 QA gap: a 3-client WS fanout test.
+
+- **`dm.ts` (new, pure + vitest):** `dmOthers(dm)` (the `users[]` array, falling back to legacy singular
+  `user`), `dmIsGroup(dm)` (>1 other), `dmTitle(dm)` (the other usernames comma-joined — Discord's
+  default title for an *unnamed* group), `parseIdentifiers(raw)` (split a typed string on
+  whitespace/commas, dedupe, drop blanks). Unit-tested incl. the legacy-payload fallback.
+- **`api.ts`:** `createGroupDM(token, identifiers[])` → `POST /api/dms/group`.
+- **`NewGroupModal.tsx` (new):** a compact create dialog (reuses the `.settings-overlay` backdrop):
+  a chips input (type a username/id, Enter/comma adds a chip; ✕ or Backspace-on-empty removes;
+  ≤9 chips), inline error from the server, a Create button that adapts its label (Create DM for one
+  person / Create Group for 2+) and is disabled until ≥1 chip. Esc + overlay-click + ✕ close.
+- **`Chat.tsx`:** the `+ New DM` button now opens this modal (replacing the old double `window.prompt`
+  1:1 flow — a polish win; a single chip still creates the idempotent 1:1 via the group endpoint).
+  DM list, header, and welcome render via `dmTitle`/`dmIsGroup`; a group shows a group-glyph avatar
+  (`.dm-group-avatar`) instead of a single user Avatar, with the full member list in the `title`.
+  On create, the new channel is added to `dms` (de-duped) and selected.
+- **`styles.css`:** `.dm-group-avatar` (accent-tinted circle + people glyph) and the chips modal
+  (`.group-modal`, `.group-chips`, `.group-chip`) — compact, dark-theme-consistent.
+- **`types.ts`:** `users` already added in slice 1.
+
+**Verify (Rule 14):** vitest for `dm.ts`; `go build/vet/test` green incl. a NEW
+`TestServeWSGroupDMFanoutIntegration` (3 ws clients on a group channel — A sends → B AND C both
+receive; a 4th non-member's handshake to the group channel is refused 403). Browser QA: a new
+create-group flow (open modal → add two members → create → the group appears in the DM list titled by
+its members → open it) added to `qa/browser.mjs`; AI-vision review the modal + the rendered group row.
+Then ship + `railway up` + rollout-verify the live bundle carries the new flow.
+
+Later sub-slices: group naming (needs a non-UNIQUE name column), add/remove member, leave group,
+stacked member avatars.

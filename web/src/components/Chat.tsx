@@ -22,7 +22,6 @@ import {
   fetchPins,
   fetchServerMembers,
   fetchServers,
-  openDM,
   redeemInvite,
   removeReaction,
   searchMessages,
@@ -78,6 +77,8 @@ import { Avatar } from './Avatar'
 import { EmojiImg } from './EmojiImg'
 import { Settings } from './Settings'
 import { ProfileCard } from './ProfileCard'
+import { NewGroupModal } from './NewGroupModal'
+import { dmTitle, dmIsGroup, dmOthers } from '../dm'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -187,6 +188,7 @@ export function Chat({
 }) {
   const [channels, setChannels] = useState<Channel[]>([])
   const [dms, setDms] = useState<DMChannel[]>([])
+  const [newDMOpen, setNewDMOpen] = useState(false)
   const [servers, setServers] = useState<Server[]>([])
   // serverId → its channels (members-only; fetched per server).
   const [serverChannels, setServerChannels] = useState<Record<number, Channel[]>>({})
@@ -1001,16 +1003,10 @@ export function Chat({
     }
   }
 
-  const startDM = async () => {
-    const ident = window.prompt('Direct message who? Enter a username or user ID')?.trim()
-    if (!ident) return
-    try {
-      const dm = await openDM(token, ident)
-      setDms((cur) => (cur.some((d) => d.id === dm.id) ? cur : [...cur, dm]))
-      setChannelId(dm.id)
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'could not open DM')
-    }
+  // A DM/group created via NewGroupModal: add it to the list (de-duped) and open it.
+  const addDM = (dm: DMChannel) => {
+    setDms((cur) => (cur.some((d) => d.id === dm.id) ? cur : [...cur, dm]))
+    setChannelId(dm.id)
   }
 
   const addServer = async () => {
@@ -1926,21 +1922,34 @@ export function Chat({
 
         <div className="sidebar-head">Direct Messages</div>
         <nav className="channel-list dm-list">
-          {dms.map((d) => (
-            <button
-              key={d.id}
-              className={`channel-item${d.id === channelId ? ' active' : ''}${isUnread(d.id) ? ' unread' : ''}${mutedChannels.has(d.id) ? ' muted' : ''}`}
-              onClick={() => selectChannel(d.id)}
-            >
-              <Avatar token={token} userId={d.user.id} username={d.user.username} className="dm-avatar" />
-              <span className="item-name" title={d.user.username}>
-                {d.user.username}
-              </span>
-              {unreadIndicator(d.id)}
-            </button>
-          ))}
+          {dms.map((d) => {
+            const group = dmIsGroup(d)
+            const title = dmTitle(d)
+            const lead = dmOthers(d)[0]
+            return (
+              <button
+                key={d.id}
+                className={`channel-item${d.id === channelId ? ' active' : ''}${isUnread(d.id) ? ' unread' : ''}${mutedChannels.has(d.id) ? ' muted' : ''}`}
+                onClick={() => selectChannel(d.id)}
+              >
+                {group ? (
+                  <span className="dm-avatar dm-group-avatar" aria-hidden>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+                    </svg>
+                  </span>
+                ) : (
+                  <Avatar token={token} userId={lead.id} username={lead.username} className="dm-avatar" />
+                )}
+                <span className="item-name" title={title}>
+                  {title}
+                </span>
+                {unreadIndicator(d.id)}
+              </button>
+            )
+          })}
         </nav>
-        <button className="add-channel" onClick={startDM}>
+        <button className="add-channel" onClick={() => setNewDMOpen(true)}>
           + New DM
         </button>
 
@@ -2032,7 +2041,11 @@ export function Chat({
           <div className="brand">
             Opencord{' '}
             <span className="channel">
-              {activeDM ? `@${activeDM.user.username}` : `#${activeChannelName ?? '…'}`}
+              {activeDM
+                ? dmIsGroup(activeDM)
+                  ? dmTitle(activeDM)
+                  : `@${dmTitle(activeDM)}`
+                : `#${activeChannelName ?? '…'}`}
             </span>
             {activeIsReadOnly && (
               <span className="readonly-badge" title="read-only — only admins can post">
@@ -2807,14 +2820,16 @@ export function Chat({
           {membersOf === null && searchResults === null && pins === null && (
             <div className="channel-intro">
               <div className="channel-intro-icon" aria-hidden>
-                {activeDM ? '@' : '#'}
+                {activeDM ? (dmIsGroup(activeDM) ? '👥' : '@') : '#'}
               </div>
               <h2 className="channel-intro-title">
-                {activeDM ? activeDM.user.username : `Welcome to #${activeChannelName ?? ''}!`}
+                {activeDM ? dmTitle(activeDM) : `Welcome to #${activeChannelName ?? ''}!`}
               </h2>
               <p className="channel-intro-sub">
                 {activeDM
-                  ? `This is the beginning of your direct message history with @${activeDM.user.username}.`
+                  ? dmIsGroup(activeDM)
+                    ? `This is the beginning of your group conversation with ${dmTitle(activeDM)}.`
+                    : `This is the beginning of your direct message history with @${dmTitle(activeDM)}.`
                   : `This is the start of the #${activeChannelName ?? ''} channel.`}
               </p>
             </div>
@@ -3135,7 +3150,9 @@ export function Chat({
                   : !canPost
                     ? 'read-only — only admins can post'
                     : activeDM
-                      ? `Message @${activeDM.user.username}`
+                      ? dmIsGroup(activeDM)
+                        ? `Message ${dmTitle(activeDM)}`
+                        : `Message @${dmTitle(activeDM)}`
                       : `Message #${activeChannelName ?? ''}`
             }
             value={draft}
@@ -3291,6 +3308,9 @@ export function Chat({
           onToggleBlock={(id) => void toggleBlock(id)}
           onClose={() => setProfileMember(null)}
         />
+      )}
+      {newDMOpen && (
+        <NewGroupModal token={token} onClose={() => setNewDMOpen(false)} onCreated={addDM} />
       )}
     </div>
   )

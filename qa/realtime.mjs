@@ -244,9 +244,15 @@ async function main() {
 
   // 4 — Direct messages: A opens a private DM with B and sends a message; B reloads,
   // finds the DM in their sidebar, and reads it. Proves the DM UI end-to-end.
-  step('A opens a DM with B (+ New DM) and sends a private message')
-  ans.a = userB // answer the "which user?" prompt
+  step('A opens a DM with B (+ New DM modal) and sends a private message')
   await a.getByRole('button', { name: '+ New DM' }).click()
+  await a.locator('.group-modal').waitFor({ timeout: 4000 })
+  const dmChip = a.locator('.group-chip-input')
+  await dmChip.fill(userB)
+  await dmChip.press('Enter')
+  // One member → the modal's button reads "Create DM" and resolves to the idempotent 1:1.
+  await a.locator('.group-modal').getByRole('button', { name: /Create DM/ }).click()
+  await a.locator('.group-modal').waitFor({ state: 'detached', timeout: 8000 })
   const dmComposer = a.getByPlaceholder('Message @' + userB)
   await dmComposer.waitFor({ timeout: 8000 })
   check(

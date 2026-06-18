@@ -402,6 +402,12 @@ button:disabled {
   user-select: none;
 }
 
+/* Group DMs are unnamed, so the list shows a generic group glyph (accent-tinted) instead
+   of a single user's avatar; the row text is the comma-joined member list (see dmTitle). */
+.dm-group-avatar {
+  background: var(--accent);
+}
+
 /* Servers — an accordion: each server names itself, then lists its channels. */
 .server-list {
   flex: 0 1 auto;
@@ -2450,6 +2456,85 @@ button:disabled {
 .settings-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* New DM / group-create dialog — a compact card on the shared .settings-overlay backdrop. */
+.group-modal {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+.group-modal-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.group-modal-sub {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  background: var(--bg-input);
+  border-radius: 6px;
+  padding: 8px;
+  min-height: 42px;
+  cursor: text;
+}
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 3px 6px 3px 9px;
+  border-radius: 4px;
+}
+.group-chip-x {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+  opacity: 0.85;
+}
+.group-chip-x:hover {
+  opacity: 1;
+}
+.group-chip-input {
+  flex: 1 1 80px;
+  min-width: 80px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  padding: 2px;
+}
+.group-modal-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #f23f43;
+}
+.group-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 .settings-presence {
   background: var(--bg-input);

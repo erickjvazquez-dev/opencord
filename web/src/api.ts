@@ -670,6 +670,20 @@ export async function openDM(token: string, identifier: string): Promise<DMChann
   return data as DMChannel
 }
 
+// Start a group DM with `identifiers` (each a username or numeric user id). One identifier
+// resolves to the idempotent 1:1; 2..9 make a group. The server rejects a block with any
+// member, unknown users, and the 10-member cap.
+export async function createGroupDM(token: string, identifiers: string[]): Promise<DMChannel> {
+  const res = await fetch('/api/dms/group', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ identifiers }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || 'could not create group DM')
+  return data as DMChannel
+}
+
 // Send a message carrying file/image attachments (multipart). Body is optional when
 // files are present; the server broadcasts the finished message over the WS, so the
 // caller relies on the WS echo to render it (same as a plain message). `replyTo` is
