@@ -334,9 +334,16 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   so text/DM/thread headers are byte-identical. tsc/vitest/go green; browser QA grew a regression guard
   (header shows 🔊 + hides readonly/slowmode/topic/pins/threads/search); AI-vision confirmed; shipped +
   rollout-verified. **✅ Voice channels FULLY USABLE + POLISHED (3a backend · 3b UI · 3c header).**
-  **Slice 3d (optional, later):** auto-join on click; background voice while viewing a text channel
-  (needs a separate voice WS so voice isn't tied to the active channel).
-  *Next voice polish: screen share, video, soundboard.*
+  **Slice 3d DONE (iter 175): live roster + presence assertion.** The voice view's "who's here" roster
+  now reads the LIVE `voicePresence` (updated on every WS voice-presence event — the open voice channel
+  IS the active channel) instead of the ~15s polled `serverVoice`, so a join/leave shows instantly with
+  no poll lag (falls back to the polled map only until the live list arrives). Browser QA now asserts the
+  view roster lists SELF after joining (a real end-to-end presence assertion + a deterministic in-call
+  screenshot); AI-vision confirmed roster + sidebar participant both show; shipped + rollout-verified.
+  **✅✅ Voice channels COMPLETE (3a–3d).** Next voice (optional, later): auto-join on click; background
+  voice while viewing a text channel (needs a separate voice WS); screen share, video, soundboard.
+  **Next tick should ROTATE component** (voice had 4 ticks) — candidates: group-DM sub-slices, a Rule-15
+  adversarial pass on the new voice-channel surface, or appearance polish.
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
   contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live
   video tiles for every viewer; **screen-audio mixing** — sharer scales the level sent to all

@@ -3725,3 +3725,33 @@ yet (the timing-race fix above closes it). Auto-join-on-click (3d) remains uncov
 
 **Cadence:** shipped a fix; voice channels feature-complete → still ACTIVE (1800s), but the next tick
 can rotate to another component (group-DM sub-slices, appearance polish, or audio→SFU north star).
+
+## 2026-06-18 (tick 175) — voice-channel live roster + presence assertion (v0.9 slice 3d) shipped
+
+Closed the QA-robustness gap I logged last tick — but at the ROOT, not by papering over it. The flaky
+in-call roster screenshot was a symptom: the voice view listed participants from the ~15s polled
+`serverVoice`, so the roster lagged a join by up to 15s. Fix: the open voice channel IS the active
+channel, so its roster now reads the LIVE `voicePresence` (updated on every WS voice-presence event),
+falling back to the polled map only until the live list arrives. The QA then became a real assertion:
+`waitFor` the `.voice-channel-roster-item` containing the logged-in user → assert SELF is listed. This
+turned a non-deterministic screenshot into an end-to-end presence check INSIDE the voice view (the one
+part of voice channels that wasn't asserted) AND made the screenshot deterministic. Process lesson:
+when a screenshot is flaky, ask whether the product is racy — fixing the data source beat adding a
+longer test timeout.
+
+**Highest-value loop improvement (next-tick QA gap, logged):** the voice-channel-view roster is only
+SINGLE-client tested (self joins → self appears). The existing `qa/voice.mjs` does two-client MESH
+roster, but the new voice-CHANNEL-VIEW roster (the `.voice-channel-roster` UI) isn't cross-client
+tested — a second participant joining a voice channel should appear in the FIRST viewer's
+voice-channel-view roster. Next QA growth: a two-client voice-channel-view assertion (reuse the raw-WS
+second-presence trick from slice 2: open a raw WS as a second identity, voice-join the SAME voice
+channel, assert the first client's `.voice-channel-roster` lists BOTH). This proves cross-client
+presence in the new view, not just self.
+
+**Rotation note (per-component excellence):** voice has had 4 consecutive ticks (3a–3d) and is now
+complete + polished + well-covered. To avoid stagnating other components, NEXT tick should rotate —
+highest-value candidates: a Rule-15 adversarial pass on the new voice-channel create/kind surface
+(hostile kind, non-member join, oversized), a group-DM sub-slice (naming / add-remove-member / leave),
+or the appearance-polish spacing sweep. Pick the one furthest from its north star.
+
+**Cadence:** shipped a fix → ACTIVE (1800s).
