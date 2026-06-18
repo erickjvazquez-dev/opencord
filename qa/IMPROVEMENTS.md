@@ -3394,3 +3394,29 @@ would remove this entirely — noted for a future QA-tooling tick.
 SAME as group DMs at this stage: no UI yet, so no browser/AI-vision coverage — that lands with slice 2.
 
 **Cadence:** shipped a feature with slice 2 queued → ACTIVE (1800s).
+
+## 2026-06-17 (tick 163) — custom colored roles slice 2a (client) shipped + rollout-verified
+
+Completed core colored roles: a `RolesManagerModal` (create/recolor/delete with color picker + preset
+swatches) from the members-panel server settings, per-member assignment via toggle chips in the
+ProfileCard, and member names rendered in their top-role color across the member list + panel + profile.
+One small backend tweak (ServerMember.roleIds) gave the client per-member assignment state. Full QA green
+incl. a new flow that creates a role → assigns it → asserts the member name's inline color style; AI-vision
+confirmed the manager, the colored name (3 surfaces), and the assigned chip. **Component advanced:
+UI/parity** — colored names are a near-universal Discord feature, now live.
+
+**Highest-value loop improvement this tick (the E2E-harness fix from tick 162 PAID OFF):**
+Last tick I codified "derive identity from the auth response, use non-reserved vars + a known-free port"
+after 3 ticks of E2E-scripting foot-guns. This tick had ZERO scripting mis-steps — the browser-QA roles
+flow ran clean first try, AND I caught the assignment-UI-needs-per-member-state gap during DESIGN (added
+`roleIds`) rather than after a failed E2E. The lesson held: **invest the design thought before writing the
+QA, and the loop's own rules compound.** The remaining genuine gap is honest scope, not a miss:
+**message-author coloring is NOT done** (a member's color shows in the member list/profile but NOT on their
+chat messages) — that needs author role-color in the message history + WS payload (a backend change),
+explicitly deferred to slice 2b and logged in GOAL.md so it isn't silently dropped.
+
+**Coverage note:** colored roles now have backend (integration) + live-E2E + browser + AI-vision coverage
+— well-covered for the shipped surface. The untested surface is exactly the deferred one (message-author
+color), which has no code yet.
+
+**Cadence:** shipped a feature with slice 2b queued → ACTIVE (1800s).

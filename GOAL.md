@@ -74,10 +74,20 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   test` green incl. `TestServerCustomRolesIntegration`; **live E2E on a real server** (full CRUD +
   assignment + member-list color resolution + recolor + cascade-on-delete; adversarial: non-admin 403,
   bad hex 400, non-member 404, bogus role 404); shipped + `railway up` + rollout-verified (new route 401
-  not 404). **Slice 2 NEXT:** client — a role manager (create/edit color via a picker/swatches, delete)
-  in server settings, assign/unassign on the member/profile UI, and render each member's name in their
-  `color` (member list + message authors); browser QA + AI-vision. Later: role reordering (drag
-  position), per-role permissions (beyond cosmetic).
+  not 404). **Slice 2a client DONE (iter 163):** `RolesManagerModal` (opened from the members-panel
+  server settings, admin) — list/recolor/delete roles + a create row (name + `<input type=color>` +
+  Discord preset swatches); `ProfileCard` gains a **Roles** section (admin) showing the server's roles as
+  toggle chips filled in their color (assigned via `member.roleIds`), and the name tinted by
+  `member.color`; member names in the sidebar + members panel render in their color; assign/unassign
+  refresh members+roles so colors update live. Backend tweak: `ServerMember.roleIds` (aggregated in
+  `ListServerMembers`) so the client shows assignment state. tsc clean, vitest 77/77, go test green incl.
+  `roleIds`; **full QA green (browser=0 realtime=0 voice=0 search=0** — new flow creates a role → assigns
+  via the profile → asserts the member name is color-tinted); AI-vision verified the manager, the colored
+  name (member panel + admins sidebar + profile header), and the assigned chip; shipped + `railway up` +
+  rollout-verified (live bundle carries "Create colored roles"). **Core colored roles complete (create +
+  assign + colored names).** **Slice 2b NEXT (lower priority):** message-author coloring (needs the
+  author's role color in the message history + WS payload — a backend change); role reordering (drag
+  position); per-role permissions (beyond cosmetic).
 - [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
   "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
   uppercase field labels, **password show/hide toggle**, inline min-length hint, loading
