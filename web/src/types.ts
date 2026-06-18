@@ -26,11 +26,15 @@ export interface ChannelCategory {
 }
 
 // A direct-message channel as seen by one participant: the channel id plus the
-// *other* user in it. DM messages flow through the same per-channel WS as channels.
+// *other* member(s) in it. DM messages flow through the same per-channel WS as channels.
+// `user` is the other member of a 1:1 DM (mirrors users[0]); `users` is every other member
+// — one entry for a 1:1, two or more for a group DM (v0.6, slice 1 backend; rendering lands
+// in slice 2).
 export interface DMChannel {
   id: number
   createdAt: string
   user: { id: number; username: string }
+  users?: { id: number; username: string }[]
 }
 
 // A server (guild) groups channels under a shared membership. Its channels are

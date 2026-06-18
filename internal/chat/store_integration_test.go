@@ -441,6 +441,128 @@ func TestDirectMessagesIntegration(t *testing.T) {
 	}
 }
 
+// TestGroupDMIntegration exercises v0.6 group DMs (slice 1, backend): a group DM is the
+// same kind='dm' channel generalized to 3+ members. It proves the N-member create/list/
+// access paths AND that the existing 2-member model (idempotency, block-hiding) is intact.
+func TestGroupDMIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+	dave := regUser(t, pool)
+
+	// A 1:1 alice↔carol created up-front, so we can later prove a block hides the 1:1 but
+	// NOT the group that also contains carol.
+	solo, err := store.CreateOrGetDM(ctx, alice.ID, carol.ID)
+	if err != nil {
+		t.Fatalf("create 1:1 alice-carol: %v", err)
+	}
+
+	// Alice starts a group with bob + carol → a 3-member channel; the response carries both
+	// others (username-sorted), and User mirrors Users[0].
+	g, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, carol.ID})
+	if err != nil {
+		t.Fatalf("create group: %v", err)
+	}
+	if g.ID == 0 || len(g.Users) != 2 {
+		t.Fatalf("group wrong: %+v", g)
+	}
+	if g.Users[0].ID != g.User.ID {
+		t.Fatalf("User must mirror Users[0]: %+v", g)
+	}
+	if g.Users[0].Username > g.Users[1].Username {
+		t.Fatalf("Users must be username-sorted: %+v", g.Users)
+	}
+	if !hasOther(g.Users, bob.ID) || !hasOther(g.Users, carol.ID) {
+		t.Fatalf("group should contain bob+carol: %+v", g.Users)
+	}
+
+	// Access control: all three members in; dave (non-member) out.
+	for _, tc := range []struct {
+		who  int64
+		want bool
+		name string
+	}{
+		{alice.ID, true, "alice"},
+		{bob.ID, true, "bob"},
+		{carol.ID, true, "carol"},
+		{dave.ID, false, "dave (non-member)"},
+	} {
+		got, err := store.CanAccessChannel(ctx, g.ID, tc.who)
+		if err != nil || got != tc.want {
+			t.Fatalf("CanAccessChannel group for %s = %v (err %v), want %v", tc.name, got, err, tc.want)
+		}
+	}
+
+	// ListDMs is per-viewer: each member sees the OTHER two, never themselves.
+	bobDMs, _ := store.ListDMs(ctx, bob.ID)
+	bg := findDM(bobDMs, g.ID)
+	if bg == nil || len(bg.Users) != 2 || !hasOther(bg.Users, alice.ID) ||
+		!hasOther(bg.Users, carol.ID) || hasOther(bg.Users, bob.ID) {
+		t.Fatalf("bob's view of the group wrong: %+v", bg)
+	}
+
+	// Groups are NOT deduped — the same members again make a fresh channel (unlike a 1:1).
+	g2, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, carol.ID})
+	if err != nil || g2.ID == g.ID {
+		t.Fatalf("group should not dedupe: g2=%+v err=%v (g.ID=%d)", g2, err, g.ID)
+	}
+
+	// Exactly one distinct other delegates to the idempotent 1:1 (incl. after dedupe/self-drop).
+	d1, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID})
+	if err != nil {
+		t.Fatalf("1-other group: %v", err)
+	}
+	if d2, _ := store.CreateOrGetDM(ctx, alice.ID, bob.ID); d1.ID != d2.ID {
+		t.Fatalf("1-other group must resolve to the 1:1 DM: %d vs %d", d1.ID, d2.ID)
+	}
+	if dd, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, bob.ID, alice.ID}); err != nil || dd.ID != d1.ID {
+		t.Fatalf("dedupe/drop-self should resolve to the same 1:1: %+v err=%v", dd, err)
+	}
+
+	// Guards: zero distinct others, and the 10-member cap (creator + >9 others).
+	if _, err := store.CreateGroupDM(ctx, alice.ID, []int64{alice.ID}); !errors.Is(err, chat.ErrCannotDMSelf) {
+		t.Fatalf("zero-others err = %v, want ErrCannotDMSelf", err)
+	}
+	tooMany := make([]int64, 0, 10)
+	for i := 0; i < 10; i++ {
+		tooMany = append(tooMany, regUser(t, pool).ID)
+	}
+	if _, err := store.CreateGroupDM(ctx, alice.ID, tooMany); !errors.Is(err, chat.ErrGroupTooLarge) {
+		t.Fatalf("10-other group err = %v, want ErrGroupTooLarge", err)
+	}
+
+	// A block with ANY prospective member rejects group creation (symmetric).
+	if err := store.BlockUser(ctx, alice.ID, dave.ID); err != nil {
+		t.Fatalf("block dave: %v", err)
+	}
+	if _, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, dave.ID}); !errors.Is(err, chat.ErrBlocked) {
+		t.Fatalf("group incl. blocked dave err = %v, want ErrBlocked", err)
+	}
+
+	// Blocking carol AFTER the group exists must NOT hide the whole group (unlike a 1:1):
+	// the group still lists with carol omitted from Users and access stays open — while the
+	// pre-existing 1:1 alice↔carol IS hidden + denied (the unchanged 2-member rule).
+	if err := store.BlockUser(ctx, alice.ID, carol.ID); err != nil {
+		t.Fatalf("block carol: %v", err)
+	}
+	aliceDMs, _ := store.ListDMs(ctx, alice.ID)
+	if ag := findDM(aliceDMs, g.ID); ag == nil {
+		t.Fatal("group must still appear for alice after blocking one member")
+	} else if hasOther(ag.Users, carol.ID) || !hasOther(ag.Users, bob.ID) {
+		t.Fatalf("blocked carol must be omitted from the group's Users (bob kept): %+v", ag.Users)
+	}
+	if ok, err := store.CanAccessChannel(ctx, g.ID, alice.ID); err != nil || !ok {
+		t.Fatalf("alice must still access the group after blocking carol: %v err %v", ok, err)
+	}
+	if findDM(aliceDMs, solo.ID) != nil {
+		t.Fatal("the 1:1 with the blocked carol must be hidden from alice's DM list")
+	}
+	if ok, _ := store.CanAccessChannel(ctx, solo.ID, alice.ID); ok {
+		t.Fatal("alice must be denied the 1:1 with the blocked carol")
+	}
+}
+
 // TestUserBlockingIntegration exercises the v0.5 user-blocking store layer (slice 1:
 // DM-only enforcement). A block is SYMMETRIC for DMs — if A blocked B OR B blocked A,
 // neither can open, read, or send in their DM — and it must not touch server/global
@@ -2010,6 +2132,26 @@ func hasServer(servers []chat.Server, id int64) bool {
 func hasDM(dms []chat.DMChannel, channelID, otherUserID int64) bool {
 	for _, d := range dms {
 		if d.ID == channelID && d.User.ID == otherUserID {
+			return true
+		}
+	}
+	return false
+}
+
+// findDM returns the listed DM channel with the given id, or nil. hasOther reports whether
+// userID appears among a DM's other-member list (Users). Used by the group-DM tests.
+func findDM(dms []chat.DMChannel, channelID int64) *chat.DMChannel {
+	for i := range dms {
+		if dms[i].ID == channelID {
+			return &dms[i]
+		}
+	}
+	return nil
+}
+
+func hasOther(users []chat.DMUser, userID int64) bool {
+	for _, u := range users {
+		if u.ID == userID {
 			return true
 		}
 	}

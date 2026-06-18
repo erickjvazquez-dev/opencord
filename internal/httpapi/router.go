@@ -323,6 +323,7 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			})
 			r.Get("/dms", chat.HandleListDMs(store))
 			r.Post("/dms", chat.HandleCreateDM(store))
+			r.Post("/dms/group", chat.HandleCreateGroupDM(store))
 			mountServerRoutes(r, store, hub)
 			r.Get("/messages", chat.HandleRecent(store))
 			// Create a message carrying file/image attachments (multipart). Plain

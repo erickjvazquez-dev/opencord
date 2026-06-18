@@ -2113,3 +2113,45 @@ list, and hiding blocked users' messages in channels.
   Settings → Privacy lists them → Unblock → message reappears. vitest for `visibleMessages`.
 - **Verify (done):** build clean, vitest 65/65, full QA `browser=0 realtime=0 voice=0 search=0`,
   AI-vision (block button + Privacy list + message-hide). **User blocking complete (backend + client).**
+
+## Group DMs — backend (v0.6, slice 1)
+
+**Why:** the highest-ROI parity item after blocking (decided tick 159). DMs are already channels of
+`kind='dm'` with an N-member `channel_members` join table, and the WS hub fans out per channel id — so
+N-member group DMs are a clean generalization of the existing 2-member model. Backend-first slice
+(mirrors the blocking epic); the client UI (create-group flow, group avatar/title) is slice 2.
+
+**Model (no schema change — `channel_members` already N-member, Rule A).** A group DM is the same
+`kind='dm'` channel with 3+ members. 1:1 DMs stay exactly as they are (2 members). Group naming is
+deferred (channels.name carries a UNIQUE constraint, unsuitable for free-form group names) — slice-1
+groups are unnamed and the client will render them as a comma-joined member list (Discord's default).
+
+- **Generalize the DM shape (`chat.go`):** `DMChannel` gains `Users []DMUser` (ALL other members,
+  username-sorted). `User DMUser` is RETAINED (= `Users[0]`) so the existing 2-member client keeps
+  working unchanged after this slice deploys; slice 2 switches the client to `Users`.
+- **`CreateGroupDM(ctx, creator, otherIDs)` (new store fn):** dedupe + drop self; resolve each id
+  (`ErrUserNotFound` if any missing); reject if creator is in a block relationship with ANY member
+  (`ErrBlocked`, symmetric — you can't form a group with someone you've blocked / who blocked you —
+  conservative, avoids the "hide a whole group for one block" problem at the source). 0 others →
+  `ErrCannotDMSelf`-style guard; exactly 1 other → delegate to `CreateOrGetDM` (idempotent 1:1);
+  2..9 others → create a NEW channel (groups are NOT deduped, like Discord). Cap total at 10 members
+  (`ErrGroupTooLarge`).
+- **`ListDMs` generalized:** aggregate ALL non-blocked others per channel into `Users` (group consecutive
+  rows by channel id). A channel with zero non-blocked others is dropped — this preserves the existing
+  2-member behavior (a 1:1 whose sole other is blocked disappears) AND, for a group, simply omits a
+  later-blocked member from `Users` without hiding the whole group.
+- **`CanAccessChannel` DM branch generalized:** the block-deny is now gated on `member count = 2`, so a
+  1:1 with a block stays denied (unchanged, tested) but a group member is never denied access just
+  because one co-member is blocked (message-level hiding from blocking slice-2 covers their messages).
+- **`POST /api/dms/group` (new route + `HandleCreateGroupDM`):** body `{"identifiers":[...]}` (usernames
+  or numeric ids), 64 KiB bounded (Rule B). Maps `ErrUserNotFound`→404, `ErrBlocked`→403,
+  `ErrGroupTooLarge`/too-few→400. Returns the `DMChannel` (with `Users`) as seen by the creator.
+- **`types.ts`:** `DMChannel` gains an optional `users?: {id,username}[]` (additive, documents the new
+  contract for slice 2; no rendering change this slice).
+
+**Verify (Rule 14):** `go build`/`vet`/`test` green incl. a new `TestGroupDMIntegration` (3-member create
++ access for all members + non-member denied; per-viewer `ListDMs` aggregates the right others; blocked
+member rejected at create; group survives a later block while the 1:1 with that user is hidden; cap +
+too-few guards; 1-other delegates to the idempotent 1:1). WS fanout to all N members is already covered
+by the per-channel hub (verified manually next slice with the create UI). No client UI yet → no browser
+QA delta this slice; slice 2 adds the create-group flow + group rendering + its QA.

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -57,22 +58,27 @@ var (
 	ErrSlowMode = errors.New("slow mode active")
 	// ErrInvalidSlowmode is returned when a slowmode value is out of range.
 	ErrInvalidSlowmode = errors.New("invalid slowmode (0..21600 seconds)")
+	// ErrGroupTooLarge is returned when a group DM would exceed the 10-member cap.
+	ErrGroupTooLarge = errors.New("group DM exceeds the 10-member limit")
 	// channelNameRe mirrors a Discord-style channel slug: lowercase, 2-32 chars.
 	channelNameRe = regexp.MustCompile(`^[a-z0-9_-]{2,32}$`)
 )
 
-// DMUser is the other participant in a direct message channel.
+// DMUser is one of the other participants in a direct message channel.
 type DMUser struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
 }
 
 // DMChannel is a direct-message channel as seen by one participant: the channel
-// plus the *other* user in it.
+// plus the *other* members in it. Users holds every other member (one entry for a
+// 1:1 DM, two or more for a group DM), username-sorted. User mirrors Users[0] and is
+// retained for the 1:1 client contract (v0.6 group DMs, slice 1).
 type DMChannel struct {
 	ID        int64     `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	User      DMUser    `json:"user"`
+	Users     []DMUser  `json:"users"`
 }
 
 // Server is a guild grouping channels under a shared membership. Role is the
@@ -930,11 +936,13 @@ func (s *Store) Unreads(ctx context.Context, userID int64, username string) ([]C
 // channels are open to everyone; DM (and future private) channels require
 // membership. A non-existent channel returns (false, nil).
 //
-// For DM channels there is an ADDITIONAL gate (v0.5 user blocking, slice 1): even a
-// member is denied if they are in a block relationship with the OTHER DM member —
+// For DM channels there is an ADDITIONAL gate (v0.5 user blocking, slice 1): in a 1:1
+// DM a member is denied if they are in a block relationship with the OTHER member —
 // symmetric, so it holds whichever side did the blocking. This makes block enforcement
 // flow through every read/send/react path that already routes through this gate, while
-// leaving server/global channel access completely unchanged.
+// leaving server/global channel access completely unchanged. The block-deny is gated on
+// a 2-member channel (v0.6 group DMs): a group member is never denied the whole channel
+// just because one co-member is blocked — their messages are hidden at render instead.
 func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx,
@@ -942,12 +950,14 @@ func (s *Store) CanAccessChannel(ctx context.Context, channelID, userID int64) (
 		          WHEN c.kind = 'dm' THEN
 		            EXISTS (SELECT 1 FROM channel_members m
 		                     WHERE m.channel_id = c.id AND m.user_id = $2)
-		            AND NOT EXISTS (
-		                  SELECT 1 FROM channel_members other
-		                    JOIN user_blocks b
-		                      ON (b.blocker_id = $2 AND b.blocked_id = other.user_id)
-		                      OR (b.blocker_id = other.user_id AND b.blocked_id = $2)
-		                   WHERE other.channel_id = c.id AND other.user_id <> $2)
+		            AND NOT (
+		                  (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) = 2
+		                  AND EXISTS (
+		                    SELECT 1 FROM channel_members other
+		                      JOIN user_blocks b
+		                        ON (b.blocker_id = $2 AND b.blocked_id = other.user_id)
+		                        OR (b.blocker_id = other.user_id AND b.blocked_id = $2)
+		                     WHERE other.channel_id = c.id AND other.user_id <> $2))
 		          WHEN c.server_id IS NOT NULL THEN
 		            EXISTS (SELECT 1 FROM server_members sm
 		                     WHERE sm.server_id = c.server_id AND sm.user_id = $2)
@@ -1007,6 +1017,7 @@ func (s *Store) CreateOrGetDM(ctx context.Context, a, b int64) (DMChannel, error
 	// Existing DM with exactly {a, b}?
 	var dm DMChannel
 	dm.User = other
+	dm.Users = []DMUser{other}
 	err = s.pool.QueryRow(ctx,
 		`SELECT c.id, c.created_at FROM channels c
 		  WHERE c.kind = 'dm'
@@ -1043,6 +1054,90 @@ func (s *Store) CreateOrGetDM(ctx context.Context, a, b int64) (DMChannel, error
 	return dm, nil
 }
 
+// CreateGroupDM creates a NEW group direct-message channel (kind='dm') whose members are
+// the creator plus otherIDs. Like Discord, group DMs are NOT deduplicated — each call makes
+// a fresh channel. otherIDs is deduped and the creator is dropped from it; the resulting
+// distinct-other count must be 1..9 (total 2..10 — ErrGroupTooLarge above that, an
+// ErrCannotDMSelf-style guard at zero). Exactly one other delegates to CreateOrGetDM (the
+// idempotent 1:1). The creator must not be in a block relationship with ANY member (ErrBlocked,
+// symmetric — you can't form a group with someone you've blocked / who blocked you). Returns
+// the channel as seen by the creator (Users = the others username-sorted, User = Users[0]).
+func (s *Store) CreateGroupDM(ctx context.Context, creator int64, otherIDs []int64) (DMChannel, error) {
+	// Dedupe and drop the creator's own id.
+	seen := make(map[int64]struct{}, len(otherIDs))
+	others := make([]int64, 0, len(otherIDs))
+	for _, id := range otherIDs {
+		if id == creator {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		others = append(others, id)
+	}
+	if len(others) == 0 {
+		return DMChannel{}, ErrCannotDMSelf
+	}
+	if len(others) > 9 {
+		return DMChannel{}, ErrGroupTooLarge
+	}
+	if len(others) == 1 {
+		return s.CreateOrGetDM(ctx, creator, others[0])
+	}
+
+	// Resolve every member (ErrUserNotFound if any is gone) and verify no block
+	// relationship with the creator (symmetric) BEFORE creating anything.
+	members := make([]DMUser, 0, len(others))
+	for _, id := range others {
+		u, err := s.LookupUserByID(ctx, id)
+		if err != nil {
+			return DMChannel{}, err
+		}
+		if blocked, err := s.IsBlocked(ctx, creator, id); err != nil {
+			return DMChannel{}, err
+		} else if blocked {
+			return DMChannel{}, ErrBlocked
+		}
+		members = append(members, u)
+	}
+	sort.Slice(members, func(i, j int) bool { return members[i].Username < members[j].Username })
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return DMChannel{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var dm DMChannel
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO channels (kind) VALUES ('dm') RETURNING id, created_at`).
+		Scan(&dm.ID, &dm.CreatedAt); err != nil {
+		return DMChannel{}, err
+	}
+	// One multi-row insert: the creator + every other member. $1 is the channel id;
+	// each member id is its own placeholder (mirrors the 1:1 VALUES ($1,$2),($1,$3) style).
+	ids := append([]int64{creator}, others...)
+	args := make([]interface{}, 0, len(ids)+1)
+	args = append(args, dm.ID)
+	values := make([]string, 0, len(ids))
+	for i, id := range ids {
+		values = append(values, "($1, $"+strconv.Itoa(i+2)+")")
+		args = append(args, id)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO channel_members (channel_id, user_id) VALUES `+strings.Join(values, ", "),
+		args...); err != nil {
+		return DMChannel{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return DMChannel{}, err
+	}
+	dm.Users = members
+	dm.User = members[0]
+	return dm, nil
+}
+
 // LookupUserByID resolves a user id to id+username, ErrUserNotFound if absent.
 func (s *Store) LookupUserByID(ctx context.Context, id int64) (DMUser, error) {
 	var u DMUser
@@ -1054,9 +1149,13 @@ func (s *Store) LookupUserByID(ctx context.Context, id int64) (DMUser, error) {
 	return u, err
 }
 
-// ListDMs returns userID's direct-message channels, each with the other member. DMs
-// whose other member is in a block relationship with the caller (either direction) are
-// filtered out (v0.5, symmetric) so the sidebar never shows an un-openable DM.
+// ListDMs returns userID's direct-message channels, each with its other member(s): one
+// entry in Users for a 1:1 DM, two or more for a group DM (username-sorted; User mirrors
+// Users[0]). A member in a block relationship with the caller (either direction) is
+// filtered OUT of Users (v0.5 symmetric block); a channel left with no visible others —
+// a 1:1 whose sole other is blocked — is dropped, so the sidebar never shows an
+// un-openable DM. A group is never hidden for one blocked co-member (v0.6 group DMs):
+// the blocked member is simply omitted from Users.
 func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT c.id, c.created_at, u.id, u.username
@@ -1069,19 +1168,27 @@ func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) 
 		          SELECT 1 FROM user_blocks b
 		           WHERE (b.blocker_id = $1 AND b.blocked_id = other.user_id)
 		              OR (b.blocker_id = other.user_id AND b.blocked_id = $1))
-		  ORDER BY c.id`, userID)
+		  ORDER BY c.id, u.username`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	dms := make([]DMChannel, 0)
+	byID := make(map[int64]int) // channel id -> index into dms (first sighting wins ordering)
 	for rows.Next() {
-		var d DMChannel
-		if err := rows.Scan(&d.ID, &d.CreatedAt, &d.User.ID, &d.User.Username); err != nil {
+		var cid int64
+		var created time.Time
+		var ou DMUser
+		if err := rows.Scan(&cid, &created, &ou.ID, &ou.Username); err != nil {
 			return nil, err
 		}
-		dms = append(dms, d)
+		if idx, ok := byID[cid]; ok {
+			dms[idx].Users = append(dms[idx].Users, ou)
+			continue
+		}
+		byID[cid] = len(dms)
+		dms = append(dms, DMChannel{ID: cid, CreatedAt: created, User: ou, Users: []DMUser{ou}})
 	}
 	return dms, rows.Err()
 }
@@ -2560,6 +2667,68 @@ func HandleCreateDM(store *Store) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(dm)
+	}
+}
+
+// HandleCreateGroupDM creates a group direct message from {"identifiers":[...]} — a list
+// of usernames or numeric user ids (the same identifier form HandleCreateDM accepts). The
+// caller is always a member; 2..9 distinct others form a group (one other delegates to the
+// idempotent 1:1). Maps not-found→404, a block relationship with any member→403, and the
+// 10-member cap / empty list→400. Returns the DMChannel (with Users) as seen by the creator.
+func HandleCreateGroupDM(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		me, _ := auth.UserFrom(r.Context())
+		var in struct {
+			Identifiers []string `json:"identifiers"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if len(in.Identifiers) == 0 {
+			http.Error(w, `{"error":"a group DM needs at least one other member"}`, http.StatusBadRequest)
+			return
+		}
+		// 10-member cap (creator + 9) — reject early before any DB work (Rule B: bound input).
+		if len(in.Identifiers) > 9 {
+			http.Error(w, `{"error":"group DM exceeds the 10-member limit"}`, http.StatusBadRequest)
+			return
+		}
+		ids := make([]int64, 0, len(in.Identifiers))
+		for _, ident := range in.Identifiers {
+			u, err := store.LookupUserByIdentifier(r.Context(), ident)
+			if errors.Is(err, ErrUserNotFound) {
+				http.Error(w, `{"error":"no user found for that username or id"}`, http.StatusNotFound)
+				return
+			}
+			if err != nil {
+				http.Error(w, `{"error":"could not look up user"}`, http.StatusInternalServerError)
+				return
+			}
+			ids = append(ids, u.ID)
+		}
+		dm, err := store.CreateGroupDM(r.Context(), me.ID, ids)
+		if errors.Is(err, ErrCannotDMSelf) {
+			http.Error(w, `{"error":"a group DM needs at least one other member"}`, http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, ErrGroupTooLarge) {
+			http.Error(w, `{"error":"group DM exceeds the 10-member limit"}`, http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, ErrBlocked) {
+			// A block (either direction) with any member forbids the group (v0.5/v0.6,
+			// symmetric). 403 without naming who blocked whom (no information leak, Rule 15).
+			http.Error(w, `{"error":"cannot start a group with one of these users"}`, http.StatusForbidden)
+			return
+		}
+		if err != nil {
+			http.Error(w, `{"error":"could not create group dm"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(dm)
 	}
 }
