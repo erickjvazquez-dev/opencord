@@ -37,6 +37,21 @@ then **browser QA + AI-vision verify** the rendered result before "done" (Rule 1
 account/voice controls are scattered in the 2604-LOC `Chat.tsx` header + voice bar; there is no
 settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settings + UI polish".
 
+- [~] **Group DMs (Discord parity, highest-ROI per tick-159 plan)** — **slice 1 backend DONE (iter
+  160):** generalized the 2-member DM model (`kind='dm'` channels) to N members with **no schema change**
+  (the `channel_members` join table + per-channel WS hub are already N-member). `DMChannel` gains
+  `Users []DMUser` (all others, username-sorted; `User` kept = `Users[0]` so the 1:1 client is unbroken
+  until slice 2); `CreateGroupDM` (dedupe/drop-self, resolve every member, reject a block with any member,
+  1-other→idempotent 1:1, 2..9-others→fresh non-deduped group, 10-cap); `ListDMs` aggregates non-blocked
+  others (a group with one blocked co-member just omits them, never hidden); `CanAccessChannel` block-deny
+  now gated on member-count=2 (a group member is never denied for a blocked co-member). New
+  `POST /api/dms/group {identifiers:[...]}` (64 KiB bounded). `go build/vet/test` green incl.
+  `TestGroupDMIntegration`; **live E2E on a real server** (sorted users, per-viewer ListDMs, member-200/
+  non-member-403, 404/400 guards, 1-other==1:1); shipped + `railway up` + rollout-verified (new route 401
+  not 404). **Slice 2 NEXT:** client — a "Create Group DM" flow (multi-select), group rendering in the DM
+  list (stacked/group avatar + comma-joined member names since groups are unnamed) + header + welcome,
+  switch the client to `users[]`; browser QA (create-group flow) + AI-vision. Later sub-slices: group
+  naming (needs a non-UNIQUE name column), add/remove member, leave group.
 - [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
   "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
   uppercase field labels, **password show/hide toggle**, inline min-length hint, loading

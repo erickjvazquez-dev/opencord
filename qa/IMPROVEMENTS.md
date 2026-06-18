@@ -3316,3 +3316,28 @@ review tick, not genuine idleness), and I ship a feature next tick.
 4. **Friends/requests** — a social surface, but lower functional ROI here (DMs are already open, so it
    gates nothing; blocking already provides privacy).
 Lean GROUP DMS next (best ROI/scope), or colored roles if favouring a bigger visible win.
+
+## 2026-06-17 (tick 160) — group DMs slice 1 (backend) shipped + rollout-verified
+
+Advanced the tick-159 plan's #1 item (group DMs, best ROI/scope). Backend-first slice (mirrors the
+blocking epic): generalized the 2-member DM to N members with NO schema change — the win was recognizing
+`channel_members` + the per-channel WS hub were already N-member, so the work was purely loosening the
+hardcoded `COUNT=2` assumptions (create/list/access) + a new `POST /api/dms/group`. Verified end-to-end
+on a REAL running server (not just `go test`): sorted `users`, per-viewer `ListDMs`, member-200/
+non-member-403, 404/400 guards, 1-other delegating to the idempotent 1:1 — then `railway up` +
+rollout-proof (the new route returns 401 not 404, vs a genuinely-unknown path still 404).
+
+**Highest-value loop improvement this tick (QA + process):**
+1. **QA gap (will close in slice 2):** there is NO automated coverage of the N-member DM **fanout** —
+   the integration test proves membership/access, and the live E2E proves the HTTP surface, but neither
+   asserts that a message sent in a group is actually *received* by all N members over the WS. Slice 2
+   should add a **3-client WS test** (A sends → B and C both receive) to `qa/` — the per-channel hub
+   makes this free, but "free" is exactly the kind of thing that silently breaks later. This is the one
+   real verification I could not run in-context this tick (stated per Rule 14).
+2. **Process win to keep:** caught TWO env traps that could have produced a false-red/false-green —
+   (a) a **stale `oc-local` dev server already on :8090** made the first E2E hit an OLD binary (the new
+   route 404'd) → always pick a *known-free* port for loop E2E and confirm the build under test is mine;
+   (b) **`GID` is a read-only special var in zsh** — assigning to it aborts the script. Cheap, recurring
+   foot-guns; noting them so the next E2E tick uses `CID`/a free port from the start.
+
+**Cadence:** shipped a real feature with a follow-on slice queued → stay ACTIVE (1800s).
