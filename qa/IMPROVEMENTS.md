@@ -3755,3 +3755,35 @@ highest-value candidates: a Rule-15 adversarial pass on the new voice-channel cr
 or the appearance-polish spacing sweep. Pick the one furthest from its north star.
 
 **Cadence:** shipped a fix → ACTIVE (1800s).
+
+## 2026-06-18 (tick 176) — Rule-15 hardening: voice channels are voice-only (v0.9 slice 3e) shipped
+
+ROTATED component (voice/UI had 4 ticks → security this tick) with a Rule-15 adversarial pass on the
+brand-new voice-channel surface — and it found a real hole. The UI hid the composer for voice channels
+(slices 3b/3c), but the BACKEND never checked `kind` on the post path: `CanPostInChannel` gated only
+post-policy + membership, so a hostile client could bypass the hidden composer and POST text to a
+`kind='voice'` channel via the raw WS `message` frame or the REST attachment path. The messages were
+stored + broadcast to people in the call but never displayed — a data-integrity inconsistency and an
+unbounded-write abuse vector in a channel with no moderation UI. A second instance: `CreateThread` didn't
+reject a voice parent. Fixed both at their chokepoints; voice channels are now voice-only at the data
+layer, consistent with the UI.
+
+Followed the full Rule-15 cycle (the discipline, not just "add a test"): (1) **reproduced the break
+first** — wrote the guard, ran it RED (`Save` to a voice channel succeeded today); (2) fixed
+`CanPostInChannel` (the single chokepoint BOTH `SaveReply`/WS and `SaveWithAttachments`/REST call, so
+one change closes both); (3) **re-attacked on the LIVE deploy** with a raw Node WebSocket sending a
+`{body}` frame to a voice channel → got `{"type":"error"}`, no broadcast, not persisted on reconnect =
+BLOCKED; (4) proved legit use intact (text channels still post + thread); (5) the test
+`TestVoiceChannelRejectsMessages` encodes the exploit in the gate.
+
+**Highest-value loop improvement (a standing QA rule, logged):** the lesson is "UI-hides-X is not
+backend-rejects-X." Whenever a slice HIDES an action for a channel/entity type in the UI (composer,
+threads, pins, a button), the loop must also verify the BACKEND rejects that action via the raw
+WS/REST — the UI is not an enforcement boundary (Rule B). Next-tick QA candidate: audit the other
+"hidden in the UI for context Y" actions (read-only channels, DM-only flows, non-member views) for the
+same UI-only-gate gap, and add raw-path adversarial probes where the backend is the only real boundary.
+
+**Coverage note:** the voice-channel surface now has store+route (3a), UI flow (3b), header (3c), live
+roster (3d), AND adversarial post/thread rejection with a live-verified exploit (3e). Well-hardened.
+
+**Cadence:** shipped a security fix → ACTIVE (1800s).

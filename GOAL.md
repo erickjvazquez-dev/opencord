@@ -340,10 +340,19 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   no poll lag (falls back to the polled map only until the live list arrives). Browser QA now asserts the
   view roster lists SELF after joining (a real end-to-end presence assertion + a deterministic in-call
   screenshot); AI-vision confirmed roster + sidebar participant both show; shipped + rollout-verified.
-  **✅✅ Voice channels COMPLETE (3a–3d).** Next voice (optional, later): auto-join on click; background
-  voice while viewing a text channel (needs a separate voice WS); screen share, video, soundboard.
-  **Next tick should ROTATE component** (voice had 4 ticks) — candidates: group-DM sub-slices, a Rule-15
-  adversarial pass on the new voice-channel surface, or appearance polish.
+  **Slice 3e DONE (iter 176): Rule-15 hardening — voice channels are voice-only.** An adversarial pass
+  found the UI hid the composer but the BACKEND still accepted text: `CanPostInChannel` checked
+  post-policy + membership but not `kind`, so a hostile client could POST to a `kind='voice'` channel via
+  the raw WS `message` frame or the REST attachment path (stored + broadcast to the call, never shown —
+  data-integrity + unbounded-write abuse). `CreateThread` also didn't reject a voice parent. Fixed at the
+  single chokepoint (`CanPostInChannel` → false for voice, closing both WS + REST paths; `CreateThread`
+  adds voice to not-threadable). Reproduced the break (test RED), fixed, **re-attacked on the live
+  deploy** (raw-WS post → `error` frame, not broadcast, not persisted = BLOCKED ✅), proved text channels
+  still post + thread; `TestVoiceChannelRejectsMessages` encodes the exploit. **✅✅✅ Voice channels
+  COMPLETE + HARDENED (3a–3e).** Next voice (optional, later): auto-join on click; background voice
+  (separate WS); screen share, video, soundboard.
+  **Next tick should ROTATE component** (voice had 5 ticks) — candidates: group-DM sub-slices, appearance
+  polish, or a Rule-15 pass on another surface.
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
   contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live
   video tiles for every viewer; **screen-audio mixing** — sharer scales the level sent to all
