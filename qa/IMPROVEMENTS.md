@@ -3787,3 +3787,35 @@ same UI-only-gate gap, and add raw-path adversarial probes where the backend is 
 roster (3d), AND adversarial post/thread rejection with a live-verified exploit (3e). Well-hardened.
 
 **Cadence:** shipped a security fix → ACTIVE (1800s).
+
+## 2026-06-18 (tick 177) — leave a group DM (v0.2 DM sub-slice) shipped
+
+ROTATED to UI Discord-parity (the owner's TOP PRIORITY): the highest unchecked item is Group DMs, whose
+biggest functional gap was that you couldn't LEAVE one (a group DM you can't leave is a trap). Shipped a
+"🚪 leave group" header action (groups only) → `POST /api/dms/{id}/leave`; remaining members refresh
+live via a `dm-membership` WS broadcast; the leaver's socket is evicted. Mirrored the existing
+server-leave/kick eviction pattern, so this reused proven realtime plumbing. Full vertical slice
+(store + route + WS event + client + types + docs + test + QA), all additive (221 insertions, 0
+deletions).
+
+**The blast-radius guard earned its keep again (Rule 18):** it caught TWO breaks BEFORE the gate that I
+would otherwise have hit — (1) the new `dm-membership` WS type wasn't in the client's `ServerEvent.type`
+union → tsc TS2367; (2) the new route wasn't in the README API table → `TestREADMEAPITableMatchesRoutes`
+would fail (the docs-sync guard). Fixed both pre-gate. Lesson reinforced: a new WS event type needs the
+client union updated, and a new route needs README — both are enforced by tests, so the guard running
+FIRST turns two red-gate cycles into zero.
+
+**Highest-value loop improvement (a QA gap, logged):** the browser leave-group test is SINGLE-client
+(the leaver leaves → gone from THEIR sidebar). The "remaining members see them gone LIVE via
+dm-membership" path is covered by the store test + the WS broadcast logic, but NOT asserted in a
+two-client browser flow. Next-tick QA candidate: in realtime.mjs (which already runs 2 contexts), add a
+group-DM leave assertion — A+B+C in a group, A leaves, assert B's DM header member list updates live
+(the dm-membership refetch) without a reload. This would prove the live-refresh path end-to-end through
+the real UI, closing the one untested edge of this feature.
+
+**Coverage note:** leave-group now has store-integration (group/1:1/non-member/unknown) + live-API E2E
+(204 + leaver-drops/others-keep + re-leave 404) + single-client browser flow + AI-vision. Gap: the
+remaining-members live refresh (two-client). Other group-DM sub-slices (naming, add/remove member,
+stacked avatars) remain unbuilt.
+
+**Cadence:** shipped a feature → ACTIVE (1800s).

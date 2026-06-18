@@ -59,9 +59,15 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   (browser=0 realtime=0 voice=0 search=0** — new create-group browser flow + realtime migrated to the
   modal), AI-vision verified (modal + sidebar row + header + welcome + composer), go test green;
   shipped + `railway up` + rollout-verified (live bundle byte-identical, carries "New Direct Message"/
-  "Create Group"). **Core group DMs complete (create + render + realtime).** Later sub-slices (lower
-  priority): group naming (needs a non-UNIQUE name column), add/remove member, leave group, stacked
-  member avatars.
+  "Create Group"). **Core group DMs complete (create + render + realtime).**
+  **Leave-group DONE (iter 177):** a "🚪 leave group" header action (groups only) removes you via
+  `POST /api/dms/{id}/leave` (store `LeaveGroupDM`: group-only ≥3 members, membership-first so a
+  non-member never leaks kind/size, Rule B); remaining members refresh live via a `dm-membership` WS
+  broadcast, the leaver's socket is evicted. `TestLeaveGroupDMIntegration` + browser create→leave→gone
+  flow + AI-vision; blast-radius guard caught+fixed 2 pre-gate breaks (tsc event union + README
+  docs-sync); shipped + rollout-verified (live: leave→204, leaver's list drops it / others keep it,
+  re-leave→404). Later sub-slices (lower priority): group naming (needs a non-UNIQUE name column),
+  add/remove member, stacked member avatars.
 - [~] **Custom colored roles (Discord parity, tick-159 ROI #2)** — **slice 1 backend DONE (iter 162):**
   Discord-style COSMETIC colored roles, additive to and separate from the owner/admin/member PERMISSION
   tier (untouched — low blast radius). New `server_roles` (id, server_id, name, color, position) +
