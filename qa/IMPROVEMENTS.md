@@ -3556,3 +3556,31 @@ anchor-chip + AI-vision). Threads is feature-complete for parity; remaining thre
 unread counts, archive) are niche polish. Next epic candidates: voice channels as entities, role hoisting.
 
 **Cadence:** shipped a feature; threads complete. Parity backlog remains → ACTIVE (1800s).
+
+## 2026-06-18 (tick 169) — role hoisting shipped (colored roles fully complete)
+
+Completed colored roles with Discord's role hoisting (member list grouped by hoisted role). Key design
+choice that made it LOW-RISK on a tested surface: ADDITIVE — hoisted-role members get pulled into role
+sections ABOVE the existing Admins/Members grouping, so with no role hoisted (the default + every existing
+server) the member list renders byte-identically to before. No backend `ListServerMembers` change: the
+client already had `member.roleIds` + the roles list, so it computes the grouping itself. AI-vision
+confirmed the "QA-MOD" hoisted section. Considered voice-channels-as-entities first but deferred it — the
+defining feature (live participant list) needs persistent voice-presence in the HUB (the single-goroutine,
+most-concurrency-sensitive code), which deserves a dedicated tick, not a quick add.
+
+**Highest-value loop improvement (a concrete QA-harness rule, hit live this tick):**
+The browser-QA `.check()` on the hoist checkbox FAILED: "Clicking the checkbox did not change its state."
+The cause: it's a CONTROLLED checkbox whose `checked` is driven by an async server round-trip (toggle →
+PATCH → refetch → re-render), so the state doesn't flip synchronously on click — and Playwright's
+`.check()` asserts a synchronous flip. **Rule: for a controlled input whose value updates via an async
+server round-trip, use `.click()` (which doesn't assert the resulting state) + an explicit
+`:checked`/value `waitFor`, NEVER `.check()`/`.fill()`-with-implicit-assert.** This is the input-side
+analogue of the tick-167 "navigate away+back to refetch a server-computed field" rule — both stem from
+the same root: client state that only reflects truth after a server round-trip. Logged so the next
+async-controlled-input QA doesn't re-discover it.
+
+**Coverage note:** colored roles now fully covered (create/assign/recolor/delete/cascade + colored names
+in 3 surfaces + hoisting + route-level security from tick 165). Genuinely complete. Next epic candidate:
+voice channels as entities (needs the hub voice-presence work) or audit log.
+
+**Cadence:** shipped a feature; colored roles complete. Parity backlog remains → ACTIVE (1800s).

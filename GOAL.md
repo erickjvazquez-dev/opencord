@@ -92,9 +92,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   (head + search + pins) in `m.authorColor`. `TestMessageAuthorColorIntegration` (server message colored
   via Save + Recent; DM none); full QA green incl. a new flow that re-enters a server channel after a role
   assignment (forced history refetch via a channel hop) and asserts the message author is tinted;
-  AI-vision verified. Shipped + `railway up` + rollout-verified. **✅ Custom colored roles FULLY COMPLETE
-  (create + assign + colored names in member list, profile, AND chat messages).** Later (optional): role
-  reordering (drag position), per-role permissions (beyond cosmetic).
+  AI-vision verified. Shipped + `railway up` + rollout-verified. **Slice 3 DONE (iter 169): role hoisting**
+  — `server_roles.hoist`; Create/Update/List round-trip it; the member list shows each hoisted role
+  (position desc) as its own role-named, role-colored section above Admins/Members. **ADDITIVE** — with no
+  role hoisted (default), the member list is unchanged; the client groups using `roleIds` + the roles list
+  (no `ListServerMembers` change). RolesManagerModal gained a "Display separately (hoist)" toggle. go test
+  green (hoist round-trips); full QA green incl. a hoist→section flow; AI-vision verified the "QA-MOD"
+  section; shipped + rollout-verified. **✅ Custom colored roles FULLY COMPLETE (create + assign + colored
+  names everywhere + hoisting).** Later (optional): role reordering (drag), per-role permissions.
 - [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
   "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
   uppercase field labels, **password show/hide toggle**, inline min-length hint, loading
