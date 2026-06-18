@@ -302,8 +302,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   voice-join/leave/disconnect update it) and broadcasts a `voice-presence` event; the client
   shows a live **"🔊 N in voice"** header chip so you see a call WITHOUT joining (foundation
   for discoverable calls + dedicated voice channels). WS test + 3-client browser E2E + AI-vision.
-  **Slice 2 NEXT:** a `Hub.VoiceMembers(channelID)` HTTP query + cross-channel sidebar presence
-  (see who's in voice on EACH channel, like Discord), then dedicated `kind='voice'` channels.
+  **Slice 2 DONE (iter 171): cross-channel sidebar presence** — a lock-free `Hub.VoiceMembersFor`
+  query + `GET /api/servers/{id}/voice-presence` (members only); the client polls per server (15s +
+  an immediate refresh on any voice-presence WS event) and shows a **🔊 N** badge on each server
+  channel with an active call. Hub query + route-auth tests; full QA green (a raw-WS voice-join shows
+  the badge during the call + clears on disconnect); AI-vision. **Slice 3 NEXT:** dedicated
+  `kind='voice'` channels (a 🔊 channel you click to join, listing participants beneath it).
   *Next voice polish: voice channels as entities, screen share, video, soundboard.*
 - [~] Screen share — mesh: share screen (getDisplayMedia, configured for up to 4K@60 —
   contentHint detail, 8 Mbps, maintain-resolution) with optional system/tab audio; live

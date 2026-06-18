@@ -3609,3 +3609,28 @@ component's GOAL.md NORTH STAR note + grep its code before assuming it's the lag
 surface is the cross-channel sidebar presence (slice 2) which needs the HTTP query — not built yet.
 
 **Cadence:** shipped a feature; voice-presence slice 1 done with slice 2 queued → ACTIVE (1800s).
+
+## 2026-06-18 (tick 171) — voice presence slice 2 (cross-channel sidebar 🔊 badges) shipped
+
+Extended voice presence from the active-channel header (slice 1) to the WHOLE sidebar: a 🔊 N badge on
+each server channel with a call. The architectural constraint was real — the client's WS is scoped to ONE
+channel, so it can't see other channels' calls live; resolved with an HTTP query (lock-free
+`Hub.VoiceMembersFor`, mirroring `OnlineUserIDs`) the client polls per server (15s) + refreshes instantly
+on any voice-presence WS event near you. Verified the hub query inside the WS test, the route auth via the
+httpapi suite, AND the visual badge via a clever browser-QA trick: a raw WS opened as the logged-in owner
+(token from `localStorage['opencord.token']`) sends voice-join on the server channel → badge appears →
+close the WS → badge clears. Component advanced: **audio/UI**.
+
+**Highest-value loop improvement (a reusable browser-QA technique, now named):**
+Testing realtime presence in the browser usually needs a SECOND participant, which is heavy. The trick
+that made this tick's QA tractable: **drive a raw `WebSocket` from inside `page.evaluate` using the
+logged-in user's own token (`localStorage['opencord.token']`), kept open on `window.__qaVoiceWS`, to
+simulate a second presence-bearing connection — then assert the UI reacts, and close it to assert the
+teardown.** This is far lighter than launching a second browser context, works for any WS-driven state
+(voice presence, typing, future read-receipts), and tests BOTH the appear AND the clear-on-disconnect
+paths. Logged as the go-to pattern for "the UI should react to another connection's realtime event."
+
+**Coverage note:** voice presence now has WS-unit + route-auth + browser-visual (appear+clear) + AI-vision.
+Well-covered. Next: dedicated kind='voice' channels (slice 3) reuse this presence query under each channel.
+
+**Cadence:** shipped a feature; slice 3 queued → ACTIVE (1800s).
