@@ -3448,3 +3448,31 @@ hardening rotation since 4 feature epics shipped in a row (group DMs, blocking e
 
 **Cadence:** shipped a feature; colored roles complete, no unchecked P0/P1 left in the active epic →
 this is effectively a clean SHIP. Still ACTIVE (1800s) — a queued parity backlog remains (threads, etc.).
+
+## 2026-06-17 (tick 165) — security hardening rotation (Rule 15) on the new v0.6/v0.7 surfaces
+
+After 5 feature ticks (group DMs ×2, colored roles ×3), did a deliberate adversarial pass instead of
+starting another feature — the "security → hostile-input-proof" component was furthest from its bar
+(brand-new input surfaces). Attacked group DMs (`/dms/group`) + colored roles (`/custom-roles`,
+assign/unassign) on a LIVE server: authz bypass, cross-server IDOR, member-cap bypass, oversized/
+malformed/injection/CSS-injection input, XSS role name, non-member read/post. **All repelled — no vuln.**
+The surfaces are hostile-input-proof BY DESIGN (identity from the JWT not the payload; IDOR closed by
+WHERE-scoped queries `WHERE id=$role AND server_id=$path`; hex/length-validated input; 4–64 KiB-bounded
+bodies; React-escaped output). Encoded the probes as permanent route-level tests
+(`TestCustomRolesAuthorizationIntegration` + `TestGroupDMAuthorizationIntegration`) — the HTTP-layer
+coverage these endpoints lacked. Component advanced: **security**.
+
+**Highest-value loop improvement (process rule, now codified):**
+The real gap wasn't a vuln — it was that new endpoints shipped with STORE-level tests but no ROUTE-level
+(HTTP auth/IDOR) tests, so the security boundary was only verified by ad-hoc curling at ship time, not a
+permanent regression. **New rule: when a slice adds an HTTP endpoint, add its route-level `wantStatus`
+auth/IDOR test (401/403/404 boundaries) in the SAME tick — don't defer the HTTP-layer security coverage.**
+Had I followed this during slices 1/2a, this tick's gap wouldn't have existed. Also reinforced tick-162's
+E2E lesson: two probe "failures" this tick were curl-harness artifacts (multipart reads `channelId` as a
+FORM field not `?channel=`; `-F @/etc/hostname` doesn't exist on macOS → 000), not product bugs — always
+confirm an unexpected status is a real reject (did the side effect happen?) before calling it a finding.
+
+**Coverage note:** the new surfaces now have store + route + live-adversarial coverage. Least-tested area
+next: WS frame fuzzing (oversized/garbage/wrong-type frames) beyond the existing checks, or start threads.
+
+**Cadence:** shipped real coverage (no runtime change → no deploy, Rule 10). Backlog remains → ACTIVE 1800s.
