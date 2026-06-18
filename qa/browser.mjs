@@ -821,6 +821,32 @@ async function main() {
   check(namedStyle.includes('color'), `member name is tinted by the assigned role (style="${namedStyle}")`)
   await shot('07d-roles-colored-name.png')
 
+  // 7d-roles-msg (slice 2b) — message-author coloring: close the panel, re-open the server
+  // channel (a fresh history fetch now carries the author's role color), and assert a message
+  // author name renders in the role color.
+  step('server-channel message authors render in the assigned role color')
+  await page.locator('.search-results-head').getByRole('button', { name: /close/ }).click()
+  // Hop via #general first so re-selecting srvChan is a real channel CHANGE (a no-op
+  // re-select wouldn't reconnect the WS → wouldn't refetch history with the new color).
+  await page.getByRole('button', { name: /general/ }).first().click()
+  await page.getByPlaceholder(/Message #general/).waitFor({ timeout: 8000 })
+  await page.getByRole('button', { name: new RegExp(srvChan) }).click()
+  await page.getByPlaceholder(new RegExp('Message #' + srvChan)).waitFor({ timeout: 8000 })
+  const coloredAuthor = page.locator('.message-head .author[style*="color"]').first()
+  await coloredAuthor.waitFor({ timeout: 8000 })
+  check(
+    await coloredAuthor.isVisible(),
+    'a server-channel message author is rendered in the role color',
+  )
+  await shot('07d-roles-message.png')
+  // Re-open the members panel — the following invites/emoji steps expect it open (we closed
+  // it above to navigate channels).
+  await page
+    .locator('.server-group', { hasText: 'qa server' })
+    .getByRole('button', { name: 'members' })
+    .click()
+  await page.locator('.invites-head').waitFor({ timeout: 8000 })
+
   // 7d3 — Invites management (admin): the section lists the active code, a freshly
   // created invite appears (unlimited + a max-uses one), and revoking one removes it. The
   // QA bot is the owner (admin), so the admin-only Invites section renders. The "+ New

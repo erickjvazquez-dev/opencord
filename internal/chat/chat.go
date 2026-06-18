@@ -159,6 +159,9 @@ type Message struct {
 	Deleted   bool              `json:"deleted,omitempty"`
 	Pinned    bool              `json:"pinned,omitempty"`
 	Reactions []ReactionSummary `json:"reactions,omitempty"`
+	// AuthorColor (v0.7) is the author's top custom-role color in the channel's server
+	// (#RGB/#RRGGBB), tinting their name. "" for DM/global channels or an uncolored author.
+	AuthorColor string `json:"authorColor,omitempty"`
 	// Reply reference (Discord-style). ReplyTo is the referenced message id; the
 	// author + body snippet are denormalized so history and live broadcasts render
 	// the quoted preview without an extra round-trip. All three are unset when the
@@ -258,7 +261,11 @@ func (s *Store) SaveReply(ctx context.Context, channelID, userID int64, username
 		   RETURNING id, created_at`,
 		channelID, userID, body, replyTo,
 	).Scan(&m.ID, &m.CreatedAt)
-	return m, err
+	if err != nil {
+		return Message{}, err
+	}
+	m.AuthorColor = s.authorColor(ctx, channelID, userID)
+	return m, nil
 }
 
 // rowQuerier is the subset of *pgxpool.Pool / pgx.Tx that resolveReply needs, so
@@ -356,8 +363,32 @@ func (s *Store) SaveWithAttachments(ctx context.Context, channelID, userID int64
 	if err := tx.Commit(ctx); err != nil {
 		return Message{}, err
 	}
+	m.AuthorColor = s.authorColor(ctx, channelID, userID)
 	return m, nil
 }
+
+// authorColor returns userID's top custom-role color (#RGB/#RRGGBB) in the server that owns
+// channelID, or "" when the channel has no server (DM/global) or the author has no colored
+// role. Best-effort (a lookup error yields "" — coloring is cosmetic, never a hard failure).
+func (s *Store) authorColor(ctx context.Context, channelID, userID int64) string {
+	var c string
+	_ = s.pool.QueryRow(ctx,
+		`SELECT COALESCE((SELECT sr.color FROM member_roles mr
+		          JOIN server_roles sr ON sr.id = mr.role_id
+		          JOIN channels ch ON ch.id = $1
+		         WHERE mr.user_id = $2 AND sr.server_id = ch.server_id
+		         ORDER BY sr.position DESC, sr.id DESC LIMIT 1), '')`, channelID, userID).Scan(&c)
+	return c
+}
+
+// authorColorSQL is the correlated-subquery column (aliased author_color) that read paths
+// add to their message SELECT to tint each author by their top role in the channel's server.
+// It assumes the message table is aliased `m` (columns m.channel_id, m.user_id).
+const authorColorSQL = `COALESCE((SELECT sr.color FROM member_roles mr
+	          JOIN server_roles sr ON sr.id = mr.role_id
+	          JOIN channels ch ON ch.id = m.channel_id
+	         WHERE mr.user_id = m.user_id AND sr.server_id = ch.server_id
+	         ORDER BY sr.position DESC, sr.id DESC LIMIT 1), '')`
 
 // AttachmentsForMessages returns attachments keyed by message id for the given ids
 // (oldest row first), so history can render each message's files.
@@ -702,7 +733,11 @@ func (s *Store) EditMessage(ctx context.Context, id, userID int64, body string) 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Message{}, ErrMessageNotFound
 	}
-	return m, err
+	if err != nil {
+		return Message{}, err
+	}
+	m.AuthorColor = s.authorColor(ctx, m.ChannelID, userID)
+	return m, nil
 }
 
 // ErrInvalidEmoji is returned when a reaction emoji is empty or too long.
@@ -2409,7 +2444,7 @@ func (s *Store) RevokeInvite(ctx context.Context, serverID int64, code string) e
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at, m.pinned,
-		        m.reply_to, ru.username, r.body, r.deleted_at
+		        m.reply_to, ru.username, r.body, r.deleted_at, `+authorColorSQL+`
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		   LEFT JOIN messages r ON r.id = m.reply_to
 		   LEFT JOIN users ru ON ru.id = r.user_id
@@ -2428,7 +2463,7 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 		var replyAuthor, replyBody *string
 		var replyDeleted *time.Time
 		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &deletedAt, &editedAt, &m.Pinned,
-			&replyTo, &replyAuthor, &replyBody, &replyDeleted); err != nil {
+			&replyTo, &replyAuthor, &replyBody, &replyDeleted, &m.AuthorColor); err != nil {
 			return nil, err
 		}
 		m.EditedAt = editedAt
@@ -2480,7 +2515,7 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 // Access is gated by the caller (HandlePins) before this runs.
 func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
+		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at, `+authorColorSQL+`
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		  WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted_at IS NULL
 		  ORDER BY m.id`, channelID)
@@ -2491,7 +2526,7 @@ func (s *Store) PinnedMessages(ctx context.Context, channelID int64) ([]Message,
 	out := make([]Message, 0)
 	for rows.Next() {
 		var m Message
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &m.EditedAt, &m.AuthorColor); err != nil {
 			return nil, err
 		}
 		m.Pinned = true
@@ -2598,7 +2633,7 @@ func (s *Store) SearchMessages(ctx context.Context, channelID int64, query strin
 	if f.after != nil {
 		conds = append(conds, "m.created_at >= "+add(*f.after))
 	}
-	sql := `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at
+	sql := `SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.edited_at, ` + authorColorSQL + `
 		   FROM messages m JOIN users u ON u.id = m.user_id
 		  WHERE ` + strings.Join(conds, " AND ") + `
 		  ORDER BY m.id DESC LIMIT ` + add(limit)
@@ -2611,7 +2646,7 @@ func (s *Store) SearchMessages(ctx context.Context, channelID int64, query strin
 	for rows.Next() {
 		var m Message
 		var editedAt *time.Time
-		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &editedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelID, &m.UserID, &m.Username, &m.Body, &m.CreatedAt, &editedAt, &m.AuthorColor); err != nil {
 			return nil, err
 		}
 		m.EditedAt = editedAt

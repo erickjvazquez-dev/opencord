@@ -2849,7 +2849,9 @@ export function Chat({
                   <Avatar token={token} userId={m.userId} username={m.username} />
                   <div className="message-content">
                     <div className="message-head">
-                      <span className="author">{m.username}</span>
+                      <span className="author" style={m.authorColor ? { color: m.authorColor } : undefined}>
+                        {m.username}
+                      </span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
                     <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}</div>
@@ -2879,7 +2881,9 @@ export function Chat({
                   <Avatar token={token} userId={m.userId} username={m.username} />
                   <div className="message-content">
                     <div className="message-head">
-                      <span className="author">{m.username}</span>
+                      <span className="author" style={m.authorColor ? { color: m.authorColor } : undefined}>
+                        {m.username}
+                      </span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
                     <div className="body">
@@ -2963,6 +2967,7 @@ export function Chat({
                       <button
                         type="button"
                         className="author author-link"
+                        style={m.authorColor ? { color: m.authorColor } : undefined}
                         onClick={() => void openUserProfile(m.userId)}
                       >
                         {m.username}

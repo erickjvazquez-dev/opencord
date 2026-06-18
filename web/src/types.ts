@@ -148,6 +148,9 @@ export interface Message {
   deleted?: boolean
   pinned?: boolean
   reactions?: Reaction[]
+  // The author's top custom-role color (#RGB/#RRGGBB) in the channel's server (v0.7),
+  // tinting their name. Absent for DM/global channels or an uncolored author.
+  authorColor?: string
   // Reply reference: the id of the message this one replies to, plus a denormalized
   // author + body snippet for the quoted preview (all unset when not a reply).
   replyTo?: number

@@ -2256,3 +2256,21 @@ history + WS payload — a backend change); role reordering (drag); per-role per
 opens Manage Roles → creates a colored role → opens a member's profile → assigns it → the member's name
 in the list renders in the role color; AI-vision the manager + colored name. Ship + `railway up` +
 rollout-verify the live bundle.
+
+## Custom colored roles — message-author coloring (v0.7, slice 2b)
+
+**Why:** slice 2a colored names in the member list/profile but NOT on chat messages. Slice 2b completes
+the feature: a message author's name renders in their top role color.
+
+- **Backend:** `Message` gains `authorColor` — the author's top custom-role color in the channel's server
+  (correlated subquery `authorColorSQL`, or the `authorColor()` helper for the live `Save*`/`EditMessage`
+  paths). "" for DM/global channels or uncolored authors. Added to `Recent`, `PinnedMessages`,
+  `SearchMessages` (read), and `SaveReply`/`SaveWithAttachments`/`EditMessage` (live broadcast). Reflects
+  CURRENT role assignment (computed at query time, not persisted).
+- **Client:** `Message.authorColor`; message author render sites (main head button + search + pins) apply
+  `style={{ color: m.authorColor }}`.
+
+**Verify:** `TestMessageAuthorColorIntegration` (server-channel message carries the role color via both
+Save and Recent; DM message carries none); full QA green incl. a new flow that re-enters a server channel
+after a role assignment and asserts the message author name is tinted; AI-vision verified the colored
+message author. Ship + `railway up` + rollout-verify. **Colored roles now fully complete.**

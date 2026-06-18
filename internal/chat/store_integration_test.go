@@ -1296,6 +1296,69 @@ func TestServerCustomRolesIntegration(t *testing.T) {
 	}
 }
 
+// TestMessageAuthorColorIntegration proves v0.7 message-author coloring: a message in a
+// server channel carries the author's top-role color (both the live Save path and Recent),
+// reflecting CURRENT role assignment; a message in a non-server (DM) channel carries none.
+func TestMessageAuthorColorIntegration(t *testing.T) {
+	store, pool, owner := setup(t)
+	ctx := context.Background()
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Color Msg Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	role, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "Mod", "#e67e22")
+	if err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+
+	// Before assignment: a posted message has no author color.
+	m1, err := store.Save(ctx, ch.ID, owner.ID, owner.Username, "hi uncolored")
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if m1.AuthorColor != "" {
+		t.Fatalf("uncolored author should have no color, got %q", m1.AuthorColor)
+	}
+
+	// After assignment: the live Save path AND Recent both carry the role color.
+	if err := store.AssignServerRole(ctx, srv.ID, owner.ID, owner.ID, role.ID); err != nil {
+		t.Fatalf("assign role: %v", err)
+	}
+	m2, err := store.Save(ctx, ch.ID, owner.ID, owner.Username, "hi colored")
+	if err != nil {
+		t.Fatalf("save 2: %v", err)
+	}
+	if m2.AuthorColor != role.Color {
+		t.Fatalf("live Save author color = %q, want %q", m2.AuthorColor, role.Color)
+	}
+	recent, err := store.Recent(ctx, ch.ID, owner.ID, 50)
+	if err != nil || len(recent) == 0 {
+		t.Fatalf("recent: %v (n=%d)", err, len(recent))
+	}
+	if last := recent[len(recent)-1]; last.AuthorColor != role.Color {
+		t.Fatalf("Recent latest author color = %q, want %q", last.AuthorColor, role.Color)
+	}
+
+	// A DM (non-server) channel message carries no author color.
+	bob := regUser(t, pool)
+	dm, err := store.CreateOrGetDM(ctx, owner.ID, bob.ID)
+	if err != nil {
+		t.Fatalf("dm: %v", err)
+	}
+	dmMsg, err := store.Save(ctx, dm.ID, owner.ID, owner.Username, "dm hi")
+	if err != nil {
+		t.Fatalf("dm save: %v", err)
+	}
+	if dmMsg.AuthorColor != "" {
+		t.Fatalf("DM message should have no author color, got %q", dmMsg.AuthorColor)
+	}
+}
+
 func TestServerRolesIntegration(t *testing.T) {
 	store, pool, owner := setup(t)
 	ctx := context.Background()
