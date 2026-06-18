@@ -2384,3 +2384,28 @@ existing member-list QA stays green and the feature only activates when an admin
 (`hoist` round-trips through create/update + list). Full QA green incl. a new flow: hoist a role → the
 assigned member appears under a role-named section in the member list; AI-vision the hoisted section.
 Ship + `railway up` + rollout-verify.
+
+## Voice presence (v0.9, slice 1)
+
+**Why:** the audio component is furthest from its north star and has stagnated. Voice presence — knowing
+WHO is in a voice call — is the foundation for joinable/discoverable calls and (later) dedicated voice
+channels. First visible win: a live "🔊 N in voice" indicator on the active channel header.
+
+**Design (hub-owned, lock-free).** The hub already relays `voice-join`/`voice-leave` through its single
+goroutine (with the sender's `From` + the channel). Track presence there:
+- **`Hub.voiceMembers map[int64]map[int64]bool`** (channelID → set of userIDs), mutated ONLY on the hub
+  goroutine. On a `voice-join`/`voice-leave` event (in the `h.events` case) add/remove the user; on
+  `unregister`/`evict` (disconnect) drop the user from their channel's voice set. Each change emits a new
+  `voice-presence` event to the channel; on register, if a call is already in progress, the new client
+  gets the current set.
+- **`Event.VoiceMembers []int64`** + `Type:"voice-presence"` carries the channel's current voice user ids.
+- No new HTTP endpoint this slice — the WS event powers the active-channel indicator (cross-channel
+  sidebar presence is slice 2, via a `Hub.VoiceMembers(channelID)` query mirroring `OnlineUserIDs`).
+
+- **Client:** consume `voice-presence` → track the active channel's voice user ids; render a live
+  **"🔊 N in voice"** chip in the channel header when N>0 (you're included once you join).
+
+**Verify (Rule 14):** `go build/vet/test` green incl. extending `TestServeWSVoiceSignalingIntegration`
+(A joins → B receives a `voice-presence` listing A; A leaves/disconnects → it drops). Full QA green incl.
+a browser assertion that a second client joining voice surfaces "in voice" for the first; AI-vision the
+header chip. Ship + `railway up` + rollout-verify.

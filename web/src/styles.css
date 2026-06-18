@@ -2032,6 +2032,16 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* Live "N in voice" indicator — a tinted pill showing an active call on this channel. */
+.voice-presence {
+  color: var(--online-text);
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(54, 196, 110, 0.14);
+  padding: 2px 9px;
+  border-radius: 10px;
+}
+
 .voice-bar {
   display: flex;
   align-items: center;

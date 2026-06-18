@@ -217,6 +217,9 @@ export function Chat({
   // A jump target awaiting the message list to be on-screen (e.g. after closing a panel).
   const pendingJump = useRef<number | null>(null)
   const [online, setOnline] = useState(0)
+  // Voice presence (v0.9): the user ids currently in the voice call on the ACTIVE channel,
+  // driven live by the WS "voice-presence" event. Reset whenever the channel's history loads.
+  const [voicePresence, setVoicePresence] = useState<number[]>([])
   const [connected, setConnected] = useState(false)
   const [draft, setDraft] = useState('')
   // Attachments staged in the composer (sent over HTTP multipart, not the WS).
@@ -433,6 +436,7 @@ export function Chat({
       if (data.type === 'history' && data.history) {
         const hist = data.history
         setMessages(hist)
+        setVoicePresence([]) // fresh channel — a voice-presence event follows iff a call is live
         // Seed "mine" from the server's per-viewer flags (history is viewer-scoped).
         const mine = new Set<string>()
         for (const m of hist) for (const r of m.reactions ?? []) if (r.mine) mine.add(rkey(m.id, r.emoji))
@@ -498,6 +502,8 @@ export function Chat({
       ) {
         // Mesh-voice signaling (incl. screen-share start/stop) → the active call.
         void voiceRef.current?.handle(data)
+        } else if (data.type === 'voice-presence') {
+          setVoicePresence(data.voiceMembers ?? [])
         } else if (data.type === 'presence') setOnline(data.online ?? 0)
         else if (data.type === 'server-removed' && data.serverId) {
           // We were kicked: drop the server from the sidebar; if we're viewing one of
@@ -2246,6 +2252,16 @@ export function Chat({
               title={connected ? 'Start a voice call in this channel' : 'Connecting…'}
             >
               🎙 Join voice
+            </button>
+          )}
+          {channelId != null && voicePresence.length > 0 && (
+            <button
+              className="link voice-presence"
+              onClick={() => !inCall && void joinVoice()}
+              title={inCall ? `${voicePresence.length} in this voice call` : 'Join this voice call'}
+              data-count={voicePresence.length}
+            >
+              🔊 {voicePresence.length} in voice
             </button>
           )}
           <form className="search-form" onSubmit={runSearch}>

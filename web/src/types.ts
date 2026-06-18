@@ -186,6 +186,8 @@ export interface ServerEvent {
     | 'voice-leave'
     | 'voice-signal'
     | 'voice-screen'
+    // The channel's voice-call roster changed (voiceMembers = user ids in voice now).
+    | 'voice-presence'
     // Per-user push: you were removed from a server (serverId).
     | 'server-removed'
     // Per-member push: a server you're in was renamed (serverId + name).
@@ -204,6 +206,8 @@ export interface ServerEvent {
   // MediaStream id, so its tracks are told apart from the mic); absent/false = stopped.
   on?: boolean
   streamId?: string
+  // voice-presence: the user ids currently in the channel's voice call.
+  voiceMembers?: number[]
   // server-removed: which server the user was removed from.
   // server-renamed: which server (serverId) and its new name.
   serverId?: number

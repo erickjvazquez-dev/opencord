@@ -5,6 +5,7 @@ package ws
 
 import (
 	"encoding/json"
+	"sort"
 
 	"github.com/erickjvazquez-dev/opencord/internal/chat"
 )
@@ -32,6 +33,9 @@ type Event struct {
 	// Kind tags a voice-screen video stream as the screen ("screen", the default/
 	// omitted) or the camera ("camera"), so receivers can label/mirror it correctly.
 	Kind string `json:"kind,omitempty"`
+	// VoiceMembers (v0.9, type "voice-presence") is the set of user ids currently in the
+	// voice call on this channel, sorted; emitted whenever someone joins/leaves voice.
+	VoiceMembers []int64 `json:"voiceMembers,omitempty"`
 	// ServerID scopes a user-targeted event to a server (e.g. "server-removed",
 	// "server-renamed"). Name carries a server's new name on "server-renamed".
 	ServerID int64  `json:"serverId,omitempty"`
@@ -77,19 +81,23 @@ type Hub struct {
 	evict      chan evictReq
 	online     chan onlineReq
 	toUser     chan userMessage
+	// voiceMembers tracks who is in the voice call per channel (channelID → {userID}).
+	// Mutated ONLY on the Run goroutine (like clients), so it needs no lock.
+	voiceMembers map[int64]map[int64]bool
 }
 
 func NewHub(store *chat.Store) *Hub {
 	return &Hub{
-		store:      store,
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan chat.Message, 64),
-		events:     make(chan targetedEvent, 64),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		evict:      make(chan evictReq),
-		online:     make(chan onlineReq),
-		toUser:     make(chan userMessage),
+		store:        store,
+		clients:      make(map[*Client]bool),
+		broadcast:    make(chan chat.Message, 64),
+		events:       make(chan targetedEvent, 64),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		evict:        make(chan evictReq),
+		online:       make(chan onlineReq),
+		toUser:       make(chan userMessage),
+		voiceMembers: make(map[int64]map[int64]bool),
 	}
 }
 
@@ -149,17 +157,29 @@ func (h *Hub) Run() {
 		case c := <-h.register:
 			h.clients[c] = true
 			h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
+			// Tell the new client about any call already in progress on this channel.
+			if len(h.voiceMembers[c.channelID]) > 0 {
+				h.emitVoicePresence(c.channelID)
+			}
 		case c := <-h.unregister:
 			if _, ok := h.clients[c]; ok {
 				delete(h.clients, c)
 				close(c.done)
 				h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
+				h.setVoiceMember(c.channelID, c.user.ID, false) // a disconnect leaves voice
 			}
 		case m := <-h.broadcast:
 			msg := m
 			h.emitToChannel(msg.ChannelID, Event{Type: "message", Message: &msg})
 		case te := <-h.events:
 			h.emitToChannel(te.channelID, te.event)
+			// Voice-join/leave additionally update the channel's voice-presence set.
+			switch te.event.Type {
+			case "voice-join":
+				h.setVoiceMember(te.channelID, te.event.From, true)
+			case "voice-leave":
+				h.setVoiceMember(te.channelID, te.event.From, false)
+			}
 		case ev := <-h.evict:
 			// Collect first (don't mutate the map while detecting matches), then drop
 			// each — mirrors the unregister/emitToChannel drop: delete + close(done),
@@ -176,6 +196,7 @@ func (h *Hub) Run() {
 					delete(h.clients, c)
 					close(c.done)
 					h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
+					h.setVoiceMember(c.channelID, c.user.ID, false) // eviction leaves voice
 				}
 			}
 		case req := <-h.online:
@@ -199,6 +220,42 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// setVoiceMember adds/removes userID to channelID's voice set and broadcasts the new
+// voice-presence when it actually changed. MUST run on the hub goroutine (mutates the map).
+func (h *Hub) setVoiceMember(channelID, userID int64, joined bool) {
+	set := h.voiceMembers[channelID]
+	if joined {
+		if set == nil {
+			set = make(map[int64]bool)
+			h.voiceMembers[channelID] = set
+		}
+		if set[userID] {
+			return // already in voice — no change
+		}
+		set[userID] = true
+	} else {
+		if set == nil || !set[userID] {
+			return // wasn't in voice — no change
+		}
+		delete(set, userID)
+		if len(set) == 0 {
+			delete(h.voiceMembers, channelID)
+		}
+	}
+	h.emitVoicePresence(channelID)
+}
+
+// emitVoicePresence broadcasts the current voice-call roster of channelID to that channel.
+func (h *Hub) emitVoicePresence(channelID int64) {
+	set := h.voiceMembers[channelID]
+	ids := make([]int64, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	h.emitToChannel(channelID, Event{Type: "voice-presence", VoiceMembers: ids})
 }
 
 // countInChannel returns how many connected clients are subscribed to channelID.

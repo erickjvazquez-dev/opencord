@@ -286,13 +286,14 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 	defer connB.Close()
 
 	type frame struct {
-		Type     string          `json:"type"`
-		From     int64           `json:"from"`
-		Target   int64           `json:"target"`
-		Signal   json.RawMessage `json:"signal"`
-		On       bool            `json:"on"`
-		StreamID string          `json:"streamId"`
-		Kind     string          `json:"kind"`
+		Type         string          `json:"type"`
+		From         int64           `json:"from"`
+		Target       int64           `json:"target"`
+		Signal       json.RawMessage `json:"signal"`
+		On           bool            `json:"on"`
+		StreamID     string          `json:"streamId"`
+		Kind         string          `json:"kind"`
+		VoiceMembers []int64         `json:"voiceMembers"`
 	}
 	// readUntil reads frames on conn (with a deadline) until one of typ arrives.
 	readUntil := func(conn *gws.Conn, typ string) frame {
@@ -310,12 +311,31 @@ func TestServeWSVoiceSignalingIntegration(t *testing.T) {
 		}
 	}
 
-	// A joins voice → B sees voice-join stamped with A's id.
+	contains := func(ids []int64, want int64) bool {
+		for _, id := range ids {
+			if id == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	// A joins voice → B sees voice-join stamped with A's id, AND a voice-presence listing A.
 	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-join"}`)); err != nil {
 		t.Fatalf("A voice-join: %v", err)
 	}
 	if join := readUntil(connB, "voice-join"); join.From != a.ID {
 		t.Fatalf("voice-join from = %d, want A (%d)", join.From, a.ID)
+	}
+	if vp := readUntil(connB, "voice-presence"); !contains(vp.VoiceMembers, a.ID) {
+		t.Fatalf("voice-presence after A joins = %v, want to include A (%d)", vp.VoiceMembers, a.ID)
+	}
+	// A leaves voice → voice-presence drops A.
+	if err := connA.WriteMessage(gws.TextMessage, []byte(`{"type":"voice-leave"}`)); err != nil {
+		t.Fatalf("A voice-leave: %v", err)
+	}
+	if vp := readUntil(connB, "voice-presence"); contains(vp.VoiceMembers, a.ID) {
+		t.Fatalf("voice-presence after A leaves = %v, must NOT include A (%d)", vp.VoiceMembers, a.ID)
 	}
 
 	// A sends a directed offer to B → B sees voice-signal from A, target B, signal intact.
