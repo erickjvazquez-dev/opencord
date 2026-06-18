@@ -3291,3 +3291,28 @@ consolidate the feature burst.
 is humming — 3 multi-slice epics (custom emoji, blocking) + 2 features (notifications) shipped cleanly
 with the one P1 (emoji-load) caught and fixed by tightening the QA (naturalWidth). Verification depth is
 the throughline.
+
+## 2026-06-17 (tick 159) — consolidation + polish pass (GREEN: product is cohesive, no churn)
+
+After ~5 rapid feature ticks (custom emoji, desktop notifications, user blocking), did a deliberate
+consolidation/design-vision pass to serve the owner's "UI/UX Discord parity POLISH" north star: full QA
+green (browser=0 realtime=0 voice=0 search=0), then AI-vision-reviewed the surfaces most prone to
+post-burst rough edges — the DENSEST settings tab (Voice & Video: input/output device + input/output
+volume + mic test + DSP + camera, all cleanly sectioned), the now-4-tab Settings rail
+(Account/Voice/Notifications/Privacy — cohesive), and the mobile drawer. All clean + consistent (dark
+Discord theme, uppercase section labels, consistent buttons/sliders/tabs). The recent features were each
+AI-visioned clean as they shipped. **No P0/P1; deliberately NO commit (Rule 10 — don't manufacture
+churn).** A green polish-confirmation tick after a feature burst is valid + disciplined.
+
+**Cadence note:** kept ACTIVE (not widened) — there IS a queued parity backlog (this was a chosen
+review tick, not genuine idleness), and I ship a feature next tick.
+
+**Highest-value NEXT (decided plan, ROI-ordered for open-DM Opencord):**
+1. **Group DMs** — clean extension of the existing 2-member DM model to N members (create-group flow,
+   member add, naming); medium. Good ROI/scope.
+2. **Custom colored roles** — every Discord server uses them; currently roles are fixed
+   owner/admin/member. High value, big epic (role CRUD + assignment + color in member list/authors).
+3. **Threads** — high parity value (heavily used), big/complex.
+4. **Friends/requests** — a social surface, but lower functional ROI here (DMs are already open, so it
+   gates nothing; blocking already provides privacy).
+Lean GROUP DMS next (best ROI/scope), or colored roles if favouring a bigger visible win.
