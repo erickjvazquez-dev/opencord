@@ -15,6 +15,7 @@ import {
   editMessage,
   fetchChannels,
   fetchDMs,
+  leaveGroupDM,
   fetchServerChannels,
   listServerEmoji,
   uploadServerEmoji,
@@ -532,6 +533,9 @@ export function Chat({
           // The server was renamed by its owner/admin — relabel it live in the sidebar.
           const { serverId: renamedId, name: newName } = data
           setServers((cur) => cur.map((s) => (s.id === renamedId ? { ...s, name: newName } : s)))
+        } else if (data.type === 'dm-membership') {
+          // A group DM's roster changed (someone left) — refetch so its member list updates live.
+          fetchDMs(token).then(setDms).catch(() => {})
         } else if (data.type === 'error' && data.error) window.alert(data.error)
       }
     }
@@ -2047,6 +2051,23 @@ export function Chat({
     setActiveThread(null) // leaving a thread for a normal channel
   }
 
+  // Leave a group DM: confirm, call the API, drop it from the sidebar, and fall back to
+  // #general if it was the open channel. The remaining members refresh via a WS event.
+  const leaveGroup = async (dm: DMChannel) => {
+    if (!dmIsGroup(dm)) return
+    if (!window.confirm(`Leave the group "${dmTitle(dm)}"? You won't see new messages.`)) return
+    try {
+      await leaveGroupDM(token, dm.id)
+      setDms((cur) => cur.filter((d) => d.id !== dm.id))
+      if (channelId === dm.id) {
+        const general = channels.find((c) => c.name === 'general') ?? channels[0]
+        if (general) setChannelId(general.id)
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not leave the group DM')
+    }
+  }
+
   const runSearch = async (e: FormEvent) => {
     e.preventDefault()
     const q = searchQuery.trim()
@@ -2355,6 +2376,15 @@ export function Chat({
               data-muted={mutedChannels.has(channelId)}
             >
               {mutedChannels.has(channelId) ? '🔕 muted' : '🔔 mute'}
+            </button>
+          )}
+          {activeDM && dmIsGroup(activeDM) && (
+            <button
+              className="link leave-group"
+              onClick={() => void leaveGroup(activeDM)}
+              title="Leave this group DM"
+            >
+              🚪 leave group
             </button>
           )}
           {/* In a voice channel the main view carries its own Join/roster, so the header's

@@ -33,6 +33,9 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 	// ErrCannotDMSelf is returned when a user tries to open a DM with themselves.
 	ErrCannotDMSelf = errors.New("cannot DM yourself")
+	// ErrNotGroupDM is returned when leaving a channel that isn't a group DM (a 1:1 DM
+	// or a non-DM channel can't be "left").
+	ErrNotGroupDM = errors.New("can only leave a group DM")
 	// ErrForbidden is returned when a user acts on a channel they can't access
 	// (e.g. reacting to a message in a DM they're not a member of).
 	ErrForbidden = errors.New("forbidden")
@@ -1221,6 +1224,38 @@ func (s *Store) CreateGroupDM(ctx context.Context, creator int64, otherIDs []int
 	dm.Users = members
 	dm.User = members[0]
 	return dm, nil
+}
+
+// LeaveGroupDM removes userID from a GROUP DM (kind='dm' with ≥3 members). A 1:1 DM
+// can't be "left" (that's a future "close DM") → ErrNotGroupDM; a non-DM channel →
+// ErrNotGroupDM; a non-member → ErrUserNotFound (no existence leak, Rule B); an unknown
+// channel → ErrChannelNotFound. Messages are preserved (history intact, like a server
+// leave) and the group stays a group for the rest even if it drops to 2 members.
+func (s *Store) LeaveGroupDM(ctx context.Context, channelID, userID int64) error {
+	var kind string
+	var memberCount int
+	var isMember bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT c.kind,
+		       (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id),
+		       EXISTS(SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = $2)
+		  FROM channels c WHERE c.id = $1`,
+		channelID, userID).Scan(&kind, &memberCount, &isMember)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrChannelNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !isMember {
+		return ErrUserNotFound // not in this channel (checked first so a non-member never leaks its kind/size)
+	}
+	if kind != "dm" || memberCount < 3 {
+		return ErrNotGroupDM // a 1:1 DM, or a non-DM channel — only groups can be left
+	}
+	_, err = s.pool.Exec(ctx,
+		`DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2`, channelID, userID)
+	return err
 }
 
 // LookupUserByID resolves a user id to id+username, ErrUserNotFound if absent.

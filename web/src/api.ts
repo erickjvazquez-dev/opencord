@@ -111,6 +111,18 @@ export async function leaveServer(token: string, serverId: number): Promise<void
   }
 }
 
+// Leave a group DM (≥3 members). 204 on success; throws with the server's message otherwise.
+export async function leaveGroupDM(token: string, dmId: number): Promise<void> {
+  const res = await fetch(`/api/dms/${dmId}/leave`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not leave the group DM')
+  }
+}
+
 // Mint an invite. maxUses (optional, 1–1000) caps how many members the code admits;
 // omit it for an unlimited code (the default).
 export async function createInvite(

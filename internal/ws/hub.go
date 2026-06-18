@@ -40,6 +40,9 @@ type Event struct {
 	// "server-renamed"). Name carries a server's new name on "server-renamed".
 	ServerID int64  `json:"serverId,omitempty"`
 	Name     string `json:"name,omitempty"`
+	// ChannelID scopes a channel event (e.g. "dm-membership" when a group DM's roster
+	// changes, so its members refetch their DM list).
+	ChannelID int64 `json:"channelId,omitempty"`
 }
 
 // targetedEvent is an Event addressed to a specific channel — used for events

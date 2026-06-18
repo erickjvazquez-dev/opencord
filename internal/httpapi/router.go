@@ -386,6 +386,30 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 			r.Get("/dms", chat.HandleListDMs(store))
 			r.Post("/dms", chat.HandleCreateDM(store))
 			r.Post("/dms/group", chat.HandleCreateGroupDM(store))
+			// Leave a group DM (≥3 members). Notifies the remaining members so their DM
+			// list refreshes live, then evicts the leaver's own socket from the channel.
+			r.Post("/dms/{id}/leave", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				switch err := store.LeaveGroupDM(r.Context(), id, me.ID); {
+				case errors.Is(err, chat.ErrNotGroupDM):
+					http.Error(w, `{"error":"you can only leave a group DM"}`, http.StatusBadRequest)
+				case errors.Is(err, chat.ErrChannelNotFound), errors.Is(err, chat.ErrUserNotFound):
+					http.Error(w, `{"error":"not a member of this group DM"}`, http.StatusNotFound)
+				case err != nil:
+					http.Error(w, `{"error":"could not leave the group DM"}`, http.StatusInternalServerError)
+				default:
+					// Remaining members refetch their DM list (updated roster) live.
+					hub.BroadcastToChannel(id, ws.Event{Type: "dm-membership", ChannelID: id})
+					// Drop the leaver's now-invalid socket on this channel.
+					hub.EvictUserFromChannels(me.ID, []int64{id})
+					w.WriteHeader(http.StatusNoContent)
+				}
+			})
 			mountServerRoutes(r, store, hub)
 			r.Get("/messages", chat.HandleRecent(store))
 			// Create a message carrying file/image attachments (multipart). Plain

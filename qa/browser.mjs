@@ -1907,6 +1907,24 @@ async function main() {
   )
   await shot('07k-group-row.png')
 
+  // Leave the group DM: open it → the header shows a "leave group" action (only for groups)
+  // → clicking it (confirm auto-accepted) removes the group from the sidebar.
+  step('leave a group DM → the header action removes it from the DM list')
+  await groupRow.click()
+  const leaveBtn = page.locator('.chat-header .leave-group')
+  await leaveBtn.waitFor({ timeout: 6000 })
+  check(await leaveBtn.isVisible(), 'a group DM header shows the "leave group" action')
+  await page.locator('.chat-header').screenshot({ path: join(SHOTS, '07l-group-header.png') })
+  await leaveBtn.click()
+  await page
+    .locator('.dm-list .channel-item', { hasText: grpA })
+    .first()
+    .waitFor({ state: 'detached', timeout: 8000 })
+  check(
+    (await page.locator('.dm-list .channel-item', { hasText: grpA }).count()) === 0,
+    'leaving a group DM removes it from the sidebar',
+  )
+
   // 8 — Mobile: at a phone viewport the sidebar collapses into a drawer behind a
   // menu toggle, and selecting a channel closes it.
   step('shrink to a phone viewport → sidebar becomes a drawer')

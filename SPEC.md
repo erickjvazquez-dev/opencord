@@ -2530,3 +2530,28 @@ applied the fix, re-attacked (`Save`/`SaveWithAttachments`/`CreateThread` → `E
 `ErrNotThreadable`, test GREEN), proved legit use intact (text channels still post + thread).
 `TestVoiceChannelRejectsMessages` encodes the exploit; go build/vet/test green. Ship + `railway up` +
 live re-attack on the deploy (raw WS `message` frame to a voice channel → not persisted).
+
+## Group DM — leave group (v0.2 DM sub-slice)
+
+**Why:** group DMs (kind='dm', ≥3 members) can be created + rendered (tick-160/161) but a member can't
+LEAVE one — a Discord parity + usability gap (a group DM you can't leave is a trap).
+
+- **Store `LeaveGroupDM(ctx, channelID, userID)`:** verify the channel is a DM (`kind='dm'`), the user is
+  a member, and it's a GROUP (≥3 members — a 1:1 DM can't be "left", that's a future "close DM"); then
+  `DELETE` the membership row. Errors: `ErrNotGroupDM` (not a DM / a 1:1), `ErrChannelNotFound`,
+  `ErrUserNotFound` (not a member — no existence leak, Rule B). Messages are preserved (history intact,
+  like a server leave); the group stays a group for the rest even if it drops to 2 members.
+- **Route `POST /api/dms/{id}/leave`:** auth from JWT (Rule C), call the store, then notify realtime —
+  `BroadcastToChannel(id, {type:"dm-membership", channelId})` so the REMAINING members refetch their DM
+  list (updated member roster) live, and `EvictUserFromChannels(me, [id])` to drop the leaver's now-invalid
+  socket. 204. Maps `ErrNotGroupDM`→400, `ErrChannelNotFound`/`ErrUserNotFound`→404.
+- **WS `Event`:** add a `ChannelID` field (parallel to `ServerID`) for channel-scoped user events.
+- **Client:** `leaveGroupDM(token, id)`; a **"Leave Group"** button in the group DM header (only when
+  `dmIsGroup`); on 204 remove the DM from the sidebar + fall back to #general if it was active; a
+  `dm-membership` WS handler refetches DMs so remaining members see the leaver gone live.
+
+**Verify (Rule 14/15):** `TestLeaveGroupDMIntegration` (group leave removes the row + ListDMs drops it
+for the leaver but keeps it for others; adversarial: a 1:1 DM can't be left → 400-class, a non-member →
+404-class, a non-existent channel → 404); route test (member leaves → 204, non-member → 404, 1:1 → 400);
+go build/vet/test green; browser QA asserts the Leave-Group flow; AI-vision the button + post-leave
+sidebar. Ship + `railway up` + rollout-verify.

@@ -192,6 +192,8 @@ export interface ServerEvent {
     | 'server-removed'
     // Per-member push: a server you're in was renamed (serverId + name).
     | 'server-renamed'
+    // A group DM's roster changed (someone left) — refetch the DM list (channelId).
+    | 'dm-membership'
   message?: Message
   history?: Message[]
   username?: string
@@ -212,4 +214,6 @@ export interface ServerEvent {
   // server-renamed: which server (serverId) and its new name.
   serverId?: number
   name?: string
+  // dm-membership: which group DM's roster changed.
+  channelId?: number
 }

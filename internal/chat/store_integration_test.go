@@ -2699,3 +2699,72 @@ func TestVoiceChannelRejectsMessages(t *testing.T) {
 		t.Fatalf("CreateThread on a text channel should work: %v", err)
 	}
 }
+
+// TestLeaveGroupDMIntegration verifies a member can leave a GROUP DM (≥3 members) — the
+// row is removed, ListDMs drops it for the leaver but keeps it for the others — while a
+// 1:1 DM can't be left, a non-member can't leave, and an unknown channel 404s (Rule B).
+func TestLeaveGroupDMIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+	dave := regUser(t, pool)
+
+	// A group DM among alice, bob, carol (creator + 2 others = 3 members).
+	grp, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, carol.ID})
+	if err != nil {
+		t.Fatalf("create group DM: %v", err)
+	}
+
+	// Adversarial (before leaving): a non-member can't leave (no existence leak).
+	if err := store.LeaveGroupDM(ctx, grp.ID, dave.ID); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("non-member leave = %v, want ErrUserNotFound", err)
+	}
+	// A 1:1 DM can't be left.
+	oneToOne, err := store.CreateOrGetDM(ctx, alice.ID, dave.ID)
+	if err != nil {
+		t.Fatalf("create 1:1 DM: %v", err)
+	}
+	if err := store.LeaveGroupDM(ctx, oneToOne.ID, alice.ID); !errors.Is(err, chat.ErrNotGroupDM) {
+		t.Fatalf("leave 1:1 DM = %v, want ErrNotGroupDM", err)
+	}
+	// An unknown channel 404s.
+	if err := store.LeaveGroupDM(ctx, 1<<40, alice.ID); !errors.Is(err, chat.ErrChannelNotFound) {
+		t.Fatalf("leave unknown channel = %v, want ErrChannelNotFound", err)
+	}
+
+	// Bob leaves the group.
+	if err := store.LeaveGroupDM(ctx, grp.ID, bob.ID); err != nil {
+		t.Fatalf("bob leave group: %v", err)
+	}
+	// The group no longer appears in bob's DM list...
+	bobDMs, _ := store.ListDMs(ctx, bob.ID)
+	for _, d := range bobDMs {
+		if d.ID == grp.ID {
+			t.Fatalf("left group still in bob's DM list: %+v", bobDMs)
+		}
+	}
+	// ...but it stays for alice + carol (the remaining members).
+	aliceHasGroup := false
+	for _, d := range mustListDMs(t, store, alice.ID) {
+		if d.ID == grp.ID {
+			aliceHasGroup = true
+		}
+	}
+	if !aliceHasGroup {
+		t.Fatalf("group vanished for alice after bob left")
+	}
+	// Bob can't leave again (no longer a member).
+	if err := store.LeaveGroupDM(ctx, grp.ID, bob.ID); !errors.Is(err, chat.ErrUserNotFound) {
+		t.Fatalf("re-leave = %v, want ErrUserNotFound", err)
+	}
+}
+
+func mustListDMs(t *testing.T, store *chat.Store, userID int64) []chat.DMChannel {
+	t.Helper()
+	dms, err := store.ListDMs(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("ListDMs: %v", err)
+	}
+	return dms
+}
