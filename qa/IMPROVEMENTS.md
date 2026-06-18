@@ -3420,3 +3420,31 @@ explicitly deferred to slice 2b and logged in GOAL.md so it isn't silently dropp
 color), which has no code yet.
 
 **Cadence:** shipped a feature with slice 2b queued → ACTIVE (1800s).
+
+## 2026-06-17 (tick 164) — colored roles slice 2b (message-author coloring) — FEATURE COMPLETE
+
+Closed the honest gap from tick 163: message authors now render in their top-role color (member list +
+profile already did). `Message.authorColor` joined into the read paths via a shared `authorColorSQL`
+subquery + an `authorColor()` helper on the live Save/Edit paths; the client tints the author at the head/
+search/pins sites. Colored roles is now FULLY complete. Component advanced: **UI/parity**.
+
+**Highest-value loop improvement this tick (a real QA bug I found + fixed, twice):**
+The new browser-QA step failed TWICE before passing — and each failure taught a reusable rule about
+**testing realtime-fetched UI**:
+1. **Re-selecting the SAME channel is a no-op** → no WS reconnect → no history refetch, so a value that
+   only changes server-side (the author color, computed at fetch time) won't update. Fix: force a real
+   channel CHANGE (hop via #general) to trigger the refetch. **Rule: to verify a server-computed field
+   updated, navigate AWAY and BACK, never re-click the current channel.**
+2. **My step closed the members panel mid-flow and broke the NEXT panel-dependent steps.** Fix: restore
+   the panel before yielding. **Rule: a QA step must leave the app in the state the next step assumes —
+   if you change context (close a panel, switch channels), restore it (or the step belongs at the end).**
+These are exactly the kind of bug the real-UI gate exists to catch — a unit test would never have surfaced
+either. The backend was correct first try (integration test green); the cost was entirely in faithfully
+exercising the *rendered, realtime* UI.
+
+**Coverage note:** colored roles is now fully covered (backend integration + live-E2E + browser create/
+assign/colored-name/colored-message + AI-vision). Next epic (per ROI): threads (big), or a polish/
+hardening rotation since 4 feature epics shipped in a row (group DMs, blocking earlier, colored roles).
+
+**Cadence:** shipped a feature; colored roles complete, no unchecked P0/P1 left in the active epic →
+this is effectively a clean SHIP. Still ACTIVE (1800s) — a queued parity backlog remains (threads, etc.).

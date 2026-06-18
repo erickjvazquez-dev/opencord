@@ -84,10 +84,17 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   `roleIds`; **full QA green (browser=0 realtime=0 voice=0 search=0** — new flow creates a role → assigns
   via the profile → asserts the member name is color-tinted); AI-vision verified the manager, the colored
   name (member panel + admins sidebar + profile header), and the assigned chip; shipped + `railway up` +
-  rollout-verified (live bundle carries "Create colored roles"). **Core colored roles complete (create +
-  assign + colored names).** **Slice 2b NEXT (lower priority):** message-author coloring (needs the
-  author's role color in the message history + WS payload — a backend change); role reordering (drag
-  position); per-role permissions (beyond cosmetic).
+  rollout-verified (live bundle carries "Create colored roles"). **Slice 2b DONE (iter 164):
+  message-author coloring** — `Message.authorColor` (the author's top role color in the channel's server)
+  joined into the read paths (`Recent`/`PinnedMessages`/`SearchMessages` via a shared `authorColorSQL`
+  subquery) + set on the live paths (`SaveReply`/`SaveWithAttachments`/`EditMessage` via an `authorColor()`
+  helper); "" for DM/global channels; reflects current role assignment. Client renders the message author
+  (head + search + pins) in `m.authorColor`. `TestMessageAuthorColorIntegration` (server message colored
+  via Save + Recent; DM none); full QA green incl. a new flow that re-enters a server channel after a role
+  assignment (forced history refetch via a channel hop) and asserts the message author is tinted;
+  AI-vision verified. Shipped + `railway up` + rollout-verified. **✅ Custom colored roles FULLY COMPLETE
+  (create + assign + colored names in member list, profile, AND chat messages).** Later (optional): role
+  reordering (drag position), per-role permissions (beyond cosmetic).
 - [x] **Login / register page redesign** DONE (iter 128) — `Auth.tsx` + `styles.css`: branded
   "OPENCORD" wordmark, mode-aware heading/subtitle ("Welcome back!" / "Create an account"),
   uppercase field labels, **password show/hide toggle**, inline min-length hint, loading
