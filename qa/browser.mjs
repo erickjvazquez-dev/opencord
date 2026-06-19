@@ -1907,6 +1907,14 @@ async function main() {
     `group row is titled by both members (got "${groupTitle}")`,
   )
   await shot('07k-group-row.png')
+  // The group's WELCOME intro icon stacks the members' avatars too (matches the sidebar,
+  // not a generic 👥 glyph).
+  await page.locator('.channel-intro-icon .channel-intro-stack').waitFor({ timeout: 6000 })
+  check(
+    (await page.locator('.channel-intro-icon .channel-intro-stack .intro-stack-avatar').count()) === 2,
+    'the group DM welcome intro shows a 2-member stacked avatar',
+  )
+  await page.locator('.channel-intro').screenshot({ path: join(SHOTS, '07k-group-intro.png') })
 
   // Leave the group DM: open it → the header shows a "leave group" action (only for groups)
   // → clicking it (confirm auto-accepted) removes the group from the sidebar.

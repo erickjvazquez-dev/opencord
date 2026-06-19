@@ -708,6 +708,37 @@ button:disabled {
   color: var(--text);
   margin-bottom: 8px;
 }
+/* Group DM welcome: stack the first two members' avatars inside the 68px intro circle
+   (the big-icon counterpart of the sidebar .dm-group-stack), ringed in the icon bg. */
+.channel-intro-stack {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+.intro-stack-avatar {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  user-select: none;
+  box-sizing: border-box;
+  border: 3px solid var(--bg-elevated, #2b2d31);
+}
+.intro-stack-0 {
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+.intro-stack-1 {
+  bottom: 0;
+  right: 0;
+  z-index: 2;
+}
 .channel-intro-title {
   margin: 0 0 4px;
   font-size: 28px;

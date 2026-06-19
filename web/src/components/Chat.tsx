@@ -3223,7 +3223,29 @@ export function Chat({
             !activeChannelIsVoice && (
             <div className="channel-intro">
               <div className="channel-intro-icon" aria-hidden>
-                {inThread ? '🧵' : activeDM ? (dmIsGroup(activeDM) ? '👥' : '@') : '#'}
+                {inThread ? (
+                  '🧵'
+                ) : activeDM && dmIsGroup(activeDM) ? (
+                  // Match the sidebar: the group's welcome icon stacks its first two members'
+                  // avatars instead of a generic 👥 glyph.
+                  <span className="channel-intro-stack">
+                    {dmOthers(activeDM)
+                      .slice(0, 2)
+                      .map((u, i) => (
+                        <Avatar
+                          key={u.id}
+                          token={token}
+                          userId={u.id}
+                          username={u.username}
+                          className={`intro-stack-avatar intro-stack-${i}`}
+                        />
+                      ))}
+                  </span>
+                ) : activeDM ? (
+                  '@'
+                ) : (
+                  '#'
+                )}
               </div>
               <h2 className="channel-intro-title">
                 {inThread
