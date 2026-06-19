@@ -154,6 +154,13 @@ async function main() {
   step('WS auto-reconnect: A drops offline → comes back → still receives live messages')
   await a.context().setOffline(true)
   await a.locator('.dot.online').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
+  // A "Reconnecting…" banner appears once the drop persists past the grace window (iter 202).
+  const bannerShown = await a
+    .locator('.reconnect-banner')
+    .waitFor({ timeout: 8000 })
+    .then(() => true)
+    .catch(() => false)
+  check(bannerShown, 'a "Reconnecting…" banner appears while the socket stays down')
   await a.context().setOffline(false)
   const reconnected = await a
     .locator('.dot.online')
@@ -161,6 +168,13 @@ async function main() {
     .then(() => true)
     .catch(() => false)
   check(reconnected, 'A’s connection re-establishes after going back online')
+  // …and the banner clears once the socket is back.
+  const bannerGone = await a
+    .locator('.reconnect-banner')
+    .waitFor({ state: 'detached', timeout: 10000 })
+    .then(() => true)
+    .catch(() => false)
+  check(bannerGone, 'the reconnecting banner clears after the socket recovers')
   const afterReconnect = 'after-reconnect ' + sfx
   await b.getByPlaceholder(/Message #/).fill(afterReconnect)
   await b.getByRole('button', { name: 'Send' }).click()

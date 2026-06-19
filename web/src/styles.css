@@ -2284,6 +2284,17 @@ button:disabled {
   color: var(--text);
 }
 
+/* "Reconnecting…" banner — a thin amber bar under the header while the socket is down past the
+   grace window (Discord-style). Amber + dark text reads as a transient warning, not an error. */
+.reconnect-banner {
+  background: #f0b232;
+  color: #1e1f22;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+}
+
 .voice-bar {
   display: flex;
   align-items: center;

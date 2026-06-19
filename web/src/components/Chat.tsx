@@ -230,6 +230,9 @@ export function Chat({
   const [serverVoice, setServerVoice] = useState<Record<number, number[]>>({})
   const reloadVoiceRef = useRef<() => void>(() => {})
   const [connected, setConnected] = useState(false)
+  // Debounced "reconnecting" flag: a brief drop (e.g. a channel switch reopens the socket) must
+  // NOT flash a banner; only a disconnect that persists past the grace window surfaces one.
+  const [reconnecting, setReconnecting] = useState(false)
   const [draft, setDraft] = useState('')
   // Attachments staged in the composer (sent over HTTP multipart, not the WS).
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
@@ -587,6 +590,27 @@ export function Chat({
       }
     }
   }, [token, channelId, user.username])
+
+  // Surface a "Reconnecting…" banner only when the socket stays down past a short grace window —
+  // so a normal channel-switch reconnect (sub-second) never flashes it, but a real drop (laptop
+  // sleep, wifi blip) does. Clears the instant the socket is back.
+  useEffect(() => {
+    if (connected) {
+      setReconnecting(false)
+      return
+    }
+    const t = setTimeout(() => setReconnecting(true), 1500)
+    return () => clearTimeout(t)
+  }, [connected])
+
+  // Going offline rarely delivers a WS close frame, so the socket can sit "open" until the ping
+  // timeout (~60s). Proactively drop it on the browser's `offline` event so the reconnect backoff
+  // (and the banner) start immediately instead of waiting for the dead socket to be noticed.
+  useEffect(() => {
+    const onOffline = () => wsRef.current?.close()
+    window.addEventListener('offline', onOffline)
+    return () => window.removeEventListener('offline', onOffline)
+  }, [])
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     bottomRef.current?.scrollIntoView({ behavior })
@@ -2641,6 +2665,12 @@ export function Chat({
             </button>
           </div>
         </header>
+
+        {reconnecting && (
+          <div className="reconnect-banner" role="status">
+            Reconnecting…
+          </div>
+        )}
 
         {inCall && (
           <div className="voice-bar" role="region" aria-label="voice call">
