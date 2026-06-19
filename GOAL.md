@@ -327,6 +327,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   ArrowUp otherwise moves the caret, and the @mention dropdown still owns ArrowUp while open.
   Browser-QA `4b` (send → ArrowUp → edit input pre-filled → Escape) + AI-vision verified; shipped +
   rollout-verified.
+- [x] Reconnecting banner + faster offline detection DONE (iter 202) — a debounced "Reconnecting…"
+  amber bar (under the header, Discord-style) shows only when the socket stays down past a 1.5s grace
+  window (a channel-switch reconnect never flashes it); clears on recovery. Plus: the browser `offline`
+  event proactively closes the dead socket so the reconnect backoff + banner start immediately instead
+  of waiting ~60s for the ping timeout (a silent drop rarely sends a close frame). realtime §1e asserts
+  the banner appears offline + clears on recovery; AI-vision verified; shipped + rollout-verified.
 - [x] Esc-closes-panel DONE (iter 201) — pressing Esc closes the open right-side panel (pins → search
   → members) or exits a thread to its parent (Discord standard). Global keydown handler, skipped while
   typing and deferred whenever a modal/picker owns Esc (settings/new-DM/roles/profile/emoji/reaction/

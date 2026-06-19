@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 202) — Error-state axis: a "Reconnecting…" banner; the failing test pointed at a real PRODUCT gap, not just a test gap
+
+Continued sweeping fresh axes (now error-states): added a debounced "Reconnecting…" banner for a dropped
+socket. The interesting part was the QA.
+
+**The first banner test FAILED — and that failure was a real finding, not a flaky test.** Playwright's
+`setOffline(true)` fires the browser `offline` event but does NOT close an open WebSocket, so `connected`
+stayed true and the banner never showed. My first instinct was "the test can't simulate this." But the
+SAME limitation is a real-world gap: a silent network drop (no close frame) leaves the app's socket
+sitting "open" until the ~60s ping timeout — so the reconnect backoff AND the banner wouldn't start for
+up to a minute on a real silent drop either. The fix served both: listen for the browser `offline` event
+and proactively `ws.close()` the dead socket → backoff + banner start immediately → AND the test now
+passes (setOffline fires `offline`). One change closed a test gap and a product gap together.
+
+**Lesson — when a test can't trigger a state, ask WHY before declaring it untestable; the trigger gap
+is often a real product gap.** "I can't make the socket close in the test" was the same fact as "the app
+won't notice a silent drop for 60s." Treating the test difficulty as a signal (not an obstacle to route
+around) surfaced the better fix. Also: a "banner clears after recovery" assertion is VACUOUS if the
+banner never appeared — only meaningful once the "banner appears" assertion is a real pass first.
+
 ## 2026-06-19 (iter 201) — "Exhausted small-win surface" was premature: a high-frequency keyboard gap (Esc-closes-panel) was still open
 
 After two green ticks I'd concluded the small-win surface was exhausted. Looking once more from a
