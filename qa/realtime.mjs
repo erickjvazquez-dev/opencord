@@ -765,6 +765,31 @@ async function main() {
   await dav.screenshot({ path: join(SHOTS, 'rt-15-add-live.png') })
   await davCtx.close()
 
+  // 16 — Group DM RENAME (realtime): A renames the shared group → B, still viewing it, sees the
+  // header relabel to the custom name LIVE via the dm-membership refetch (the same path leave/add
+  // use), no reload. Reuses the §15 group (A + B both on its WS). Proves the "realtime relabel"
+  // claim of naming slice 2 (iter 185) — previously an inherited assumption, now a guarded fact.
+  step('group DM rename: A names the group → B sees the header relabel to the custom name live')
+  const grpRtName = 'RT Trip ' + sfx
+  const bRenameBefore = (await b.locator('.brand .channel').textContent()) || ''
+  check(
+    bRenameBefore.includes(userE) && !bRenameBefore.includes(grpRtName),
+    `B's group header is member-titled before the rename (got "${bRenameBefore}")`,
+  )
+  ans.a = grpRtName // answer A's rename prompt with the custom name
+  await a.locator('.chat-header .rename-group').click()
+  let bRenameAfter = bRenameBefore
+  for (let i = 0; i < 60; i++) {
+    bRenameAfter = (await b.locator('.brand .channel').textContent()) || ''
+    if (bRenameAfter.includes(grpRtName)) break
+    await b.waitForTimeout(200)
+  }
+  check(
+    bRenameAfter.includes(grpRtName) && !bRenameAfter.includes(userE),
+    `B sees the group relabel to the custom name live (got "${bRenameAfter}")`,
+  )
+  await b.screenshot({ path: join(SHOTS, 'rt-16-rename-live.png') })
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +
