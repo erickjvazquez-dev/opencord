@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 191) — Smart auto-scroll + jump-to-present; INSTRUMENT-don't-guess turned a 6-rebuild rabbit hole decisive
+
+Shipped a real UX-bug fix (the list stopped yanking a reader to the bottom on every new message while
+they read history) + a Discord "↓ jump to present" pill. The build was easy; getting the QA green took
+six rebuilds, and the lesson is in HOW it got unstuck.
+
+**Two real gotchas, found by instrumenting — not guessing:**
+1. **React 18's delegated `onScroll` never fired** for this scroll container. I burned two rebuilds
+   swapping suppression logic and wheel-vs-programmatic scrolling on a hunch. What actually resolved it:
+   adding `window.__ocAttach`/`__ocScroll` flags and reading them from the test. That printed
+   `attach=messages scrollFires=0` — proving the listener was on the right element but NO scroll event
+   reached it. Switched to a NATIVE `addEventListener('scroll')` via a CALLBACK ref (attaches exactly on
+   mount, dodging the conditionally-rendered-container race a []-effect had).
+2. **The failing assertion was the TEST, not the feature.** `scrollFires=0` with `scrollTop=0` meant the
+   list was already at the TOP after the viewport shrink (the few messages didn't overflow at full
+   height, so it was never auto-scrolled to the bottom) — so "wheel up" did nothing. Fix: wheel DOWN to
+   pin first, then UP to reveal the pill. I'd assumed "shrink → at bottom"; the instrumentation proved
+   otherwise.
+
+**Lesson — when a UI test fails in a way that "should be impossible", STOP changing the code and add
+two-line `window.__flag` instrumentation read from the test.** One decisive data point (`attach=messages
+scrollFires=0`) replaced four speculative fixes. Guessing at React event quirks is a rabbit hole;
+measuring the exact break point (ref attached? event firing? state set? element scrolled?) collapses it.
+Also banked: a **programmatic `el.scrollTop=` does NOT fire a scroll event a listener sees** — drive
+scroll tests with real `mouse.wheel` gestures.
+
 ## 2026-06-19 (iter 190) — Blast-radius check ABORTED a risky redesign mid-plan → pivoted to a clean additive win (PWA)
 
 Came in planning to icon-ify the DM header (the iter-188 P2). Ran the blast-radius grep BEFORE editing

@@ -305,6 +305,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   panel first when needed). Frontend-only; reply-jump (inline) + search-jump (close-panel
   path) E2E + AI-vision verified. (No-op when the target is older than the loaded window —
   fetch-older-on-jump is a follow-up.)
+- [x] Smart auto-scroll + jump-to-present DONE (iter 191) — the message list no longer yanks a
+  reader who has scrolled up into history to the bottom on every new message: it auto-follows
+  only when already pinned to the bottom (80px slack) or the new message is the reader's own
+  send; a channel switch still lands instantly at the newest. A Discord-style "↓ Jump to present"
+  pill appears while scrolled up and returns to the latest on click. Native scroll listener via a
+  callback ref (React 18's delegated onScroll didn't fire here); browser-QA `3f1` (wheel down→pin,
+  up→pill, click→bottom) + AI-vision verified; realtime QA stays green; shipped + rollout-verified.
 - [x] Sidebar long-name truncation DONE — server/channel/DM names ellipsis-truncate
   (`.item-name`/`.server-name-text` get `min-width:0` + `overflow:hidden` + `text-overflow:
   ellipsis`; badge/avatar/#id/unread stay `flex-shrink:0`) with the full name in a `title`
