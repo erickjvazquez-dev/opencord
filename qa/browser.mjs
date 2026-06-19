@@ -1956,6 +1956,34 @@ async function main() {
     'the sidebar DM row shows the custom group name',
   )
   await page.locator('.chat-header').screenshot({ path: join(SHOTS, '07k2-group-renamed.png') })
+
+  // Rule 15 — a HOSTILE group name must render as INERT literal text, never execute. The name
+  // is user-controlled text rendered in the header/sidebar/welcome/composer (slice 2, iter 185).
+  // React escapes it today; encode that as a regression so a future dangerouslySetInnerHTML on
+  // the title can't silently reintroduce stored XSS. The payload's onerror would set a window
+  // flag IF the <img> were ever parsed as HTML (it 404s) — so this check genuinely discriminates.
+  const xssName = '<img src=x onerror="window.__ocGrpXss=1">'
+  await page.evaluate(() => {
+    delete window.__ocGrpXss
+  })
+  promptAnswer = xssName
+  await renameBtn.click()
+  await page.locator('.brand .channel').filter({ hasText: '<img' }).waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.brand .channel').textContent())?.includes('<img src=x'),
+    'a hostile group name renders as literal text in the header (escaped, not parsed)',
+  )
+  check(
+    (await page.locator('.chat-header img[src="x"]').count()) === 0 &&
+      (await page.locator('.dm-list img[src="x"]').count()) === 0,
+    'no <img> element is injected by a hostile group name (rendered inert)',
+  )
+  check(
+    (await page.evaluate(() => window.__ocGrpXss)) === undefined,
+    "the hostile name's onerror did not execute (window.__ocGrpXss unset)",
+  )
+  await page.locator('.chat-header').screenshot({ path: join(SHOTS, '07k3-group-name-xss-inert.png') })
+
   // Clear the name → falls back to the member-list title (so the leave step's grpA locator holds).
   promptAnswer = ''
   await renameBtn.click()
