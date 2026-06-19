@@ -2639,10 +2639,11 @@ sites across `qa/browser.mjs`, `qa/voice.mjs`, `qa/sfu.mjs` (`Join voice`, `make
 icon-only would break all of those at once. Doing it on a long session risks a multi-file regression.
 
 **Staged plan (a dedicated, fresh-context tick):**
-1. **Migrate QA selectors to CLASSES first, no UI change.** Every header button already has a stable
-   class (`.readonly-toggle`, `.slowmode-edit`, `.topic-edit`, `.pins-open`, `.threads-open`,
-   `.voice-join`, …). Change the ~10 `getByRole('button',{name:'…'})` sites to `.locator('.<class>')`
-   and re-run the full QA green. This decouples the tests from the label text. Ship this slice alone.
+1. **Migrate QA selectors to CLASSES first, no UI change. — DONE (iter 196).** All 10 text-based
+   header selectors migrated to scoped `.chat-header .<class>` locators (voice-join ×5 across
+   browser/sfu/voice, readonly-toggle + its state read via textContent, topic-edit, slowmode-edit,
+   pins-open); the message-hover `.msg-actions` pin stayed text-based (not a header button). Full QA
+   green, no header-button name-selectors remain — the tests are decoupled from the label text.
 2. **Icon-ify the buttons.** Replace each text label with a clear glyph (keep Opencord's emoji idiom:
    📌 pins · 🔔/🔕 mute · 🧵 threads · 🔒/🔓 read-only · 🐌 slowmode · 📝 edit-topic · 🎙 Join voice ·
    ➕ add · ✏️ rename · 🚪 leave), each with `aria-label` + `title` (the hover tooltip carries the words).

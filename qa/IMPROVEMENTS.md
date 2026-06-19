@@ -3,6 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 196) — Executed header-redesign SLICE 1 (decouple QA from button text); the spec paid off immediately
+
+Ran the first slice of the iter-195 header spec: migrated all 10 text-based header-button selectors
+(`getByRole('button',{name:'Join voice'/'pins'/…})`) to scoped `.chat-header .<class>` locators across
+browser/sfu/voice QA. No UI change; full QA green. Now the upcoming icon-ify (slice 2) can rename/replace
+the visible labels without breaking a single test.
+
+**Why this validated the iter-195 defer-and-spec call.** Splitting "migrate selectors" into its own
+shippable slice meant this tick was tiny, mechanical, and zero-risk — the exact opposite of the
+multi-file regression a one-shot icon-ify on a long session would have been. Two refinements the actual
+work surfaced that the spec didn't fully anticipate:
+- **A toggle's STATE lived only in its text** (`make read-only` ↔ `allow everyone`). A pure class
+  selector can't assert which state it's in, so I read the state via the class element's `textContent`
+  (`.readonly-toggle` textContent includes 'allow everyone') — class-anchored for *finding*, text for the
+  *state value*. Slice 2 will move the state to the icon/aria-label; for now this keeps the assertion
+  meaningful without a text-name selector. **Lesson: "decouple from text" isn't uniform — a click/find
+  selector decouples cleanly, but a state-readout that text encodes needs the text until the state has
+  another home (icon/aria/data-attr).**
+- **Scope class selectors to a container** (`.chat-header .voice-join`, not bare `.voice-join`): the old
+  `getByRole(name)` was page-wide but unique-by-accident; a bare class could match a same-class button in
+  the voice-channel view. Scoping to the header keeps it unambiguous.
+
 ## 2026-06-19 (iter 195) — Vision-audit tick → SPEC the deferred header redesign rather than start it on a long session
 
 A Track-0 AI-vision audit of the rendered surfaces (mobile drawer, server-channel + member list, etc.).
