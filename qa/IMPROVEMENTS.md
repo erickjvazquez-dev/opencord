@@ -3,6 +3,23 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-18 (iter 185) — Group DM naming slice 2 (client); the QA "set then CLEAR" pattern kept the later locators valid
+
+Shipped the client side of group-DM naming (✏️ rename header action; `dmTitle` shows the custom name;
+`dmMembersLabel` for tooltip/subtitle). The browser QA addition renames the group AND THEN clears the
+name back to the member title before the existing leave step runs — because that leave step locates the
+row by member text (`grpA`), and a lingering custom name would have made its locator find 0 rows (a
+false-pass on `waitFor(detached)`). **Lesson — when a new QA step MUTATES a value that a later step
+matches on (a title, a name, a count), restore it at the step's end, or the later locator silently
+matches the wrong thing.** Same family as the iter-130 "a detour must restore context" rule, but for
+DATA not navigation: the cleanup made the new step also exercise the clear-name path (free extra
+coverage) instead of leaving a landmine for the leave assertion.
+
+**Next-tick QA gap (logged):** the rename QA only verifies the ACTOR's own view. Add a two-client
+realtime assertion (like realtime.mjs §15 for add-member): client A renames a shared group → client B,
+viewing it, sees the title relabel LIVE via the dm-membership refetch, no reload. That would harden the
+"realtime relabel already works" claim into a guarded fact rather than an inherited assumption.
+
 ## 2026-06-17 (iter 141) — Profile card from messages + Rule-15 XSS proof; the iter-130 "detour must restore context" lesson bit, the iter-139 grep saved a step
 
 Shipped the **message-author profile card** (a public `GET /users/{id}/profile`) and, importantly,

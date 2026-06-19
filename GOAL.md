@@ -77,8 +77,17 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   clears → member-list title), `DMChannel.Name` + `ListDMs` returns it, `PATCH /api/dms/{id} {name}` +
   dm-membership relabel broadcast. `TestRenameGroupDMIntegration` (incl. two-groups-same-name) + **live
   E2E** (rename→204, all members see the name, clear→"", non-member→403); shipped + rollout-verified
-  (migration applied on boot). **Slice 2 NEXT (client):** a rename header action + `dmTitle` uses the
-  name (falls back to members when empty); the realtime relabel already works (dm-membership refetch).
+  (migration applied on boot). **Group naming slice 2 client DONE (iter 185):** a "✏️ rename" header
+  action (groups only) prompts (pre-filled with the current name) → `renameGroupDM` PATCHes it; empty
+  clears. `DMChannel.name` on the client; `dmTitle` shows a named group's custom name (group-only —
+  a 1:1 ignores any stray name) and falls back to the comma-joined members when blank; new
+  `dmMembersLabel` always lists members, used for the named-group sidebar tooltip + the welcome
+  subtitle so "who's in here" stays visible. The realtime relabel works via the existing
+  dm-membership refetch (set/clear propagates to all members live). dm.test.ts +4 (named title,
+  blank fallback, 1:1-ignores-name, members label); browser QA rename→clear flow + 07k2 screenshot;
+  tsc clean, vitest 81/81, full QA green (browser=0 realtime=0 voice=0 search=0), AI-vision verified
+  the renamed header; shipped + `railway up` + rollout-verified (live bundle carries the rename prompt).
+  **✅ Group DM naming COMPLETE (backend + client + realtime).**
   **add-member DONE (iter 181):** a "➕ add" header action (groups only) adds a member via
   `POST /api/dms/{id}/members {identifier}` (store `AddGroupDMMember`: actor-member-first, group-only,
   10-cap, already-member/blocked guards, Rule B/15); the new member's client gets a `SendToUser`
