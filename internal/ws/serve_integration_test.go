@@ -616,6 +616,72 @@ func TestServeWSHostileFrameHandling(t *testing.T) {
 	t.Log("hostile-frame guard: connection survived the battery; no hostile content persisted; bad replyTo dropped")
 }
 
+// TestServeWSFrameSizeLimitIntegration proves the TRANSPORT-level read limit: a single inbound
+// frame larger than maxFrameSize (16384) is rejected by SetReadLimit, which makes the server stop
+// reading and CLOSE the connection (gorilla sends a 1009 "message too big" close). This is a
+// DISTINCT defense from the app-level maxMessageSize (4096) body check exercised above: a 5 KiB
+// BODY is silently dropped while the connection survives, but a >16 KiB FRAME must kill the
+// connection — so a hostile client cannot stream an unbounded frame to exhaust server memory
+// (Rule B / Rule 15: bound every inbound payload, reject early).
+func TestServeWSFrameSizeLimitIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	ctx := context.Background()
+	owner, ownerTok := h.user(t)
+	srv, err := h.store.CreateServer(ctx, owner.ID, "Frame Guild")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	ch, err := h.store.CreateServerChannel(ctx, srv.ID, "general")
+	if err != nil {
+		t.Fatalf("channel: %v", err)
+	}
+
+	conn, status := h.dial(t, fmt.Sprintf("?channel=%d&token=%s", ch.ID, ownerTok))
+	if conn == nil {
+		t.Fatalf("dial failed (status %d)", status)
+	}
+	defer conn.Close()
+
+	// One frame well over maxFrameSize (16384). The write may succeed (it's buffered to the
+	// socket) even though the server reads only up to the limit before closing.
+	huge := strings.Repeat("A", 20000)
+	if err := conn.WriteMessage(gws.TextMessage, []byte(`{"type":"message","body":"`+huge+`"}`)); err != nil {
+		t.Logf("oversized frame surfaced the close on write (also a valid rejection): %v", err)
+	}
+
+	// The server must close the connection in response: read until we get an error (the 1009
+	// close, or EOF). Initial history/presence frames read cleanly first; the close follows.
+	// Crucially, distinguish a real CLOSE (server enforced the limit) from a read TIMEOUT (the
+	// connection stayed OPEN and our own deadline fired) — only the close proves the guard. A
+	// timeout = FAIL, otherwise this test would falsely pass if SetReadLimit were removed.
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var readErr error
+	for i := 0; i < 200; i++ {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			readErr = err
+			break
+		}
+	}
+	if readErr == nil {
+		t.Fatal("connection never errored after a >maxFrameSize frame — read limit not enforced")
+	}
+	if ne, ok := readErr.(net.Error); ok && ne.Timeout() {
+		t.Fatalf("connection stayed OPEN after a >maxFrameSize frame (read timed out, no close) — SetReadLimit not enforced; a hostile client could stream an unbounded frame: %v", readErr)
+	}
+
+	// And the oversized content was never persisted (it was never a complete, parseable message).
+	msgs, err := h.store.Recent(ctx, ch.ID, owner.ID, 50)
+	if err != nil {
+		t.Fatalf("recent: %v", err)
+	}
+	for _, m := range msgs {
+		if m.Body == huge {
+			t.Fatal("oversized-frame content was persisted — frame size bound bypassed")
+		}
+	}
+	t.Log("frame-size guard: a >16 KiB frame closed the connection; nothing persisted")
+}
+
 // wsWaitForBody reads frames from conn until it sees a message with the given body
 // or `within` elapses. Returns false on any read error (closed/timeout) — useful
 // both to assert receipt and (negatively) non-receipt.
