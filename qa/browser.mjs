@@ -1934,6 +1934,37 @@ async function main() {
     'the group title includes the newly added member',
   )
 
+  // Rename the group DM (✏️ rename header action, groups only): set a custom name → the
+  // header + sidebar relabel to it; clearing it (blank) reverts to the member-list title.
+  // (Slice 2 client — backend PATCH /api/dms/{id} shipped iter 184.)
+  step('rename a group DM → header + sidebar show the custom name; clearing reverts to members')
+  const grpName = 'QA Trip ' + String(Date.now()).slice(-5)
+  const renameBtn = page.locator('.chat-header .rename-group')
+  await renameBtn.waitFor({ timeout: 6000 })
+  check(await renameBtn.isVisible(), 'a group DM header shows the "rename" action')
+  promptAnswer = grpName // answer the rename prompt with the new name
+  await renameBtn.click()
+  await page.locator('.brand .channel').filter({ hasText: grpName }).waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.brand .channel').textContent())?.includes(grpName),
+    `the group header relabels to the custom name "${grpName}"`,
+  )
+  const renamedRow = page.locator('.dm-list .channel-item', { hasText: grpName }).first()
+  await renamedRow.waitFor({ timeout: 6000 })
+  check(
+    ((await renamedRow.locator('.item-name').textContent()) || '').includes(grpName),
+    'the sidebar DM row shows the custom group name',
+  )
+  await page.locator('.chat-header').screenshot({ path: join(SHOTS, '07k2-group-renamed.png') })
+  // Clear the name → falls back to the member-list title (so the leave step's grpA locator holds).
+  promptAnswer = ''
+  await renameBtn.click()
+  await page.locator('.brand .channel').filter({ hasText: grpA }).waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.brand .channel').textContent())?.includes(grpA),
+    'clearing the name reverts the group title to its members',
+  )
+
   // Leave the group DM: open it → the header shows a "leave group" action (only for groups)
   // → clicking it (confirm auto-accepted) removes the group from the sidebar.
   step('leave a group DM → the header action removes it from the DM list')

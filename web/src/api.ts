@@ -140,6 +140,20 @@ export async function addGroupDMMember(
   }
 }
 
+// Rename a group DM (any member may rename). Pass an empty string to clear the name and
+// fall back to the member-list title. 204 on success; throws with the server's message.
+export async function renameGroupDM(token: string, dmId: number, name: string): Promise<void> {
+  const res = await fetch(`/api/dms/${dmId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not rename the group')
+  }
+}
+
 // Mint an invite. maxUses (optional, 1–1000) caps how many members the code admits;
 // omit it for an unlimited code (the default).
 export async function createInvite(

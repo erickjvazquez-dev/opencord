@@ -17,6 +17,7 @@ import {
   fetchDMs,
   leaveGroupDM,
   addGroupDMMember,
+  renameGroupDM,
   fetchServerChannels,
   listServerEmoji,
   uploadServerEmoji,
@@ -88,7 +89,7 @@ import { Settings } from './Settings'
 import { ProfileCard } from './ProfileCard'
 import { NewGroupModal } from './NewGroupModal'
 import { RolesManagerModal } from './RolesManagerModal'
-import { dmTitle, dmIsGroup, dmOthers } from '../dm'
+import { dmTitle, dmIsGroup, dmOthers, dmMembersLabel } from '../dm'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -2066,6 +2067,23 @@ export function Chat({
     }
   }
 
+  // Rename a group DM: prompt (pre-filled with the current name), call the API, then refetch
+  // the DM list so the new title shows immediately. An empty entry clears the name (back to
+  // the member-list title). Everyone else relabels live via the dm-membership WS event.
+  const renameGroup = async (dm: DMChannel) => {
+    if (!dmIsGroup(dm)) return
+    const next = window.prompt('Name this group (leave blank to use member names):', dm.name ?? '')
+    if (next == null) return // cancelled
+    const name = next.trim()
+    if (name === (dm.name ?? '')) return // unchanged
+    try {
+      await renameGroupDM(token, dm.id, name)
+      fetchDMs(token).then(setDms).catch(() => {})
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not rename the group')
+    }
+  }
+
   // Leave a group DM: confirm, call the API, drop it from the sidebar, and fall back to
   // #general if it was the open channel. The remaining members refresh via a WS event.
   const leaveGroup = async (dm: DMChannel) => {
@@ -2192,6 +2210,9 @@ export function Chat({
           {dms.map((d) => {
             const group = dmIsGroup(d)
             const title = dmTitle(d)
+            // For a named group, the visible title is the custom name; hovering reveals
+            // who's actually in it (the member list). Unnamed groups already show members.
+            const hover = group && d.name?.trim() ? dmMembersLabel(d) : title
             const lead = dmOthers(d)[0]
             return (
               <button
@@ -2202,7 +2223,7 @@ export function Chat({
                 {group ? (
                   // Discord-style: a stack of the first two members' avatars (overlapping)
                   // instead of a single glyph, so a group reads as "several people" at a glance.
-                  <span className="dm-group-stack" aria-hidden title={title}>
+                  <span className="dm-group-stack" aria-hidden title={hover}>
                     {dmOthers(d)
                       .slice(0, 2)
                       .map((u, i) => (
@@ -2218,7 +2239,7 @@ export function Chat({
                 ) : (
                   <Avatar token={token} userId={lead.id} username={lead.username} className="dm-avatar" />
                 )}
-                <span className="item-name" title={title}>
+                <span className="item-name" title={hover}>
                   {title}
                 </span>
                 {unreadIndicator(d.id)}
@@ -2410,6 +2431,15 @@ export function Chat({
               title="Add someone to this group DM"
             >
               ➕ add
+            </button>
+          )}
+          {activeDM && dmIsGroup(activeDM) && (
+            <button
+              className="link rename-group"
+              onClick={() => void renameGroup(activeDM)}
+              title="Name this group DM"
+            >
+              ✏️ rename
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
@@ -3283,7 +3313,7 @@ export function Chat({
                   ? `This is the start of the “${activeChannelName ?? ''}” thread.`
                   : activeDM
                     ? dmIsGroup(activeDM)
-                      ? `This is the beginning of your group conversation with ${dmTitle(activeDM)}.`
+                      ? `This is the beginning of your group conversation with ${dmMembersLabel(activeDM)}.`
                       : `This is the beginning of your direct message history with @${dmTitle(activeDM)}.`
                     : `This is the start of the #${activeChannelName ?? ''} channel.`}
               </p>

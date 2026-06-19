@@ -18,12 +18,22 @@ export function dmIsGroup(dm: DMChannel): boolean {
   return dmOthers(dm).length > 1
 }
 
-// The sidebar/header title for a DM: the single other's username for a 1:1, else every
-// other member's username comma-joined — Discord's default for an *unnamed* group DM.
-export function dmTitle(dm: DMChannel): string {
+// The comma-joined usernames of a DM's other members — Discord's default title for an
+// *unnamed* group DM, and the "who's in here" subtitle/tooltip even once it's named.
+export function dmMembersLabel(dm: DMChannel): string {
   return dmOthers(dm)
     .map((u) => u.username)
     .join(', ')
+}
+
+// The sidebar/header title for a DM: a named GROUP DM shows its custom name; otherwise
+// the single other's username for a 1:1, or every other member comma-joined for an
+// unnamed group (Discord's behaviour). Only groups can be named (server-enforced), so the
+// name is honoured only for groups — a 1:1 always titles by the other's username.
+export function dmTitle(dm: DMChannel): string {
+  const name = dm.name?.trim()
+  if (name && dmIsGroup(dm)) return name
+  return dmMembersLabel(dm)
 }
 
 // Parse the group-create input into a clean identifier list: split a typed/pasted string on

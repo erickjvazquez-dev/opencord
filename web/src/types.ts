@@ -39,6 +39,9 @@ export interface DMChannel {
   createdAt: string
   user: { id: number; username: string }
   users?: { id: number; username: string }[]
+  // A group DM's custom name (Discord-style); "" / absent when unnamed (titled by
+  // its members then) or for a 1:1 DM. Only groups can be named (server-enforced).
+  name?: string
 }
 
 // A server (guild) groups channels under a shared membership. Its channels are
