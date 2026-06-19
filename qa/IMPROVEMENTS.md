@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-18 (iter 186) — Closed the rename realtime gap; DM-membership realtime coverage is now COMPLETE → rotate component
+
+Added realtime.mjs §16: A renames a shared group → B (viewing it, never reloading) sees the header,
+sidebar row, welcome title, AND composer all relabel to the custom name LIVE, while the welcome
+subtitle still lists the members (`dmMembersLabel`). AI-vision confirmed all four surfaces on B's
+screen. This closed the exact gap I logged last tick — the "realtime relabel works" line is now a
+two-client guarded fact, not an inherited assumption.
+
+**The DM-membership realtime trio is now saturated:** add (§15, SendToUser push), leave (§14, channel
+broadcast), rename (§16) are all two-client verified via the same `dm-membership` refetch path. The
+marginal value of more group-DM tests is now LOW.
+
+**Process lesson — reuse a prior section's fixture instead of re-scaffolding.** §16 reused §15's group
+(A + B already on its WS) rather than registering+creating a fresh group, so the whole realtime relabel
+proof was ~20 lines and added almost no wall-clock. When two flows share a precondition (a group both
+clients are watching), chain them; don't rebuild it.
+
+**Next tick: ROTATE off group DMs** (the standing GOAL.md rotation note + owner's UI-parity priority).
+Group-DM membership + naming is feature-complete and fully realtime-tested. Prefer the component
+furthest from its north star — strong candidates: **UI/appearance polish** (e.g. the user Settings
+surface, still a bare card) or a **Rule-15 adversarial pass** on a less-hardened input surface. Do NOT
+spend another tick on group-DM sub-slices unless the owner flags one.
+
 ## 2026-06-18 (iter 185) — Group DM naming slice 2 (client); the QA "set then CLEAR" pattern kept the later locators valid
 
 Shipped the client side of group-DM naming (✏️ rename header action; `dmTitle` shows the custom name;
