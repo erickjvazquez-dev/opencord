@@ -72,7 +72,9 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   first two members' avatars (`.dm-group-stack`, two 15px Avatars offset + ringed in the sidebar bg)
   instead of a generic glyph; browser QA asserts the 2-avatar stack + AI-vision verified; shipped +
   rollout-verified. Later sub-slices (lower priority): group naming (needs a non-UNIQUE name column),
-  add/remove member; the welcome-intro big icon still uses the 👥 emoji (optional consistency follow-up).
+  add/remove member. **Intro-icon consistency DONE (iter 180):** the 68px group-DM welcome icon now
+  stacks the same two member avatars as the sidebar (was a 👥 emoji) — browser QA asserts it + AI-vision;
+  shipped + rollout-verified. Group-DM rendering is now consistent (sidebar + welcome).
 - [~] **Custom colored roles (Discord parity, tick-159 ROI #2)** — **slice 1 backend DONE (iter 162):**
   Discord-style COSMETIC colored roles, additive to and separate from the owner/admin/member PERMISSION
   tier (untouched — low blast radius). New `server_roles` (id, server_id, name, color, position) +

@@ -3868,3 +3868,29 @@ icon), audit the OTHER places that entity renders (header, welcome, member panel
 coverage). Unbuilt: group naming, add/remove member; the intro-icon consistency follow-up.
 
 **Cadence:** shipped a UI feature → ACTIVE (1800s).
+
+## 2026-06-18 (tick 180) — group-DM welcome-intro stacked avatars (consistency follow-up) shipped
+
+Closed the consistency P1 that LAST tick's AI-vision pass surfaced: the sidebar group row stacked the
+first two members' avatars, but the 68px welcome-intro icon still showed a generic 👥 emoji. Now the
+intro icon stacks the same two avatars (`.channel-intro-stack` / `.intro-stack-avatar`, the big-icon
+counterpart of `.dm-group-stack`), so a group reads consistently across the sidebar and the welcome.
+Browser QA asserts the intro shows exactly 2 `.intro-stack-avatar`; AI-vision confirmed; rollout-verified.
+
+This directly executed the rule I logged last tick ("when you upgrade one representation of an entity,
+audit its other render sites for the same upgrade") — vision found the gap → this tick closed it →
+encoded a regression assertion. The find→fix→guard loop on a UI-consistency issue, in two ticks.
+
+**Highest-value loop improvement (logged):** the remaining group-DM work is FUNCTIONAL, not cosmetic —
+**add/remove member** (add someone to an existing group; remove/leave) and **group naming** (needs a
+non-UNIQUE name column + a rename UI + a realtime relabel). Both are meatier backend+frontend+realtime
+slices (the leave-group pattern is the template: store mutation → route → WS broadcast → client + a
+two-client realtime test). These are best started on a FRESH context (this session is 9 ticks deep), so
+next tick should either take ONE of them deliberately or rotate to another component's north star
+(e.g. an audio/SFU reliability slice). Flagging the scope so the next tick picks intentionally.
+
+**Coverage note:** group DMs are now create + render (sidebar + intro stacked) + leave (store + live-API
++ single & two-client browser + vision) — well-covered + visually consistent. Unbuilt: add/remove member,
+naming.
+
+**Cadence:** shipped a UI consistency fix → ACTIVE (1800s).
