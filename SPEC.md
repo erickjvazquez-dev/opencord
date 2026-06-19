@@ -2644,11 +2644,12 @@ icon-only would break all of those at once. Doing it on a long session risks a m
    browser/sfu/voice, readonly-toggle + its state read via textContent, topic-edit, slowmode-edit,
    pins-open); the message-hover `.msg-actions` pin stayed text-based (not a header button). Full QA
    green, no header-button name-selectors remain — the tests are decoupled from the label text.
-2. **Icon-ify the buttons.** Replace each text label with a clear glyph (keep Opencord's emoji idiom:
-   📌 pins · 🔔/🔕 mute · 🧵 threads · 🔒/🔓 read-only · 🐌 slowmode · 📝 edit-topic · 🎙 Join voice ·
-   ➕ add · ✏️ rename · 🚪 leave), each with `aria-label` + `title` (the hover tooltip carries the words).
-   Keep the classes. CSS: a tight icon-button (`~32px`, no text), `.chat-header` stays `flex-wrap` as a
-   safety net but should no longer need to wrap.
+2. **Icon-ify the buttons. — DONE (iter 197).** Each text label replaced with a glyph + `aria-label` +
+   `title` (📌 pins · 🔔/🔕 mute · 🧵 threads · 🔒/🔓 read-only · 🐌 slowmode · 📝 edit-topic · 🎙 Join
+   voice · 🔊 N presence · ➕/✏️/🚪 group add/rename/leave); `.chat-header .icon-btn` CSS (16px glyph,
+   hover pill). readonly STATE moved text→aria-label; voice-presence count asserted via data-count. Cut
+   the header from THREE rows → TWO (AI-vision verified); shipped + rollout-verified. Slice 3 (search)
+   completes single-row.
 3. **Collapsible search.** Replace the always-open ~240px search box with a 🔍 icon that expands the
    input on click (Esc/blur collapses) — reclaims the single biggest chunk of width. QA: click 🔍 →
    `.search-input` appears → type → results; collapse afterwards.

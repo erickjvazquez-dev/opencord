@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 197) — Header redesign SLICE 2 (icon-ify): slice 1's de-risking made the re-skin a clean, single-fix tick
+
+Re-skinned the header action bar from text labels to compact emoji icon buttons (aria-label + title).
+Cut the server-channel header from THREE rows → TWO (AI-vision verified), shipped + rollout-verified.
+
+**The payoff of staging:** because slice 1 (iter 196) had already moved every QA selector off button
+text, this re-skin — which dropped ALL the visible labels — broke only TWO assertions, both state
+read-outs that genuinely encoded state in text: the readonly toggle (text → aria-label) and the
+voice-presence count (text → data-count). One QA run found both; fixed in one pass. Contrast the
+iter-190 fear (an un-staged icon-ify breaking ~10 sites at once across 3 files). **Lesson: a re-skin's
+blast radius collapses to "just the state read-outs" once the find/click selectors are decoupled first —
+the staging investment (a whole prior tick) paid back as a near-zero-surprise change.**
+
+**A nuance worth keeping:** when you move a control's label into an icon, any test that read the control's
+STATE from its text must move to the same place the state now lives — aria-label (semantic, A11y-aligned)
+for an on/off toggle, a `data-*` attribute for a numeric/value read-out. Decide per control: aria-label
+when it's a human-readable state phrase, data-attr when it's a value the test compares.
+
 ## 2026-06-19 (iter 196) — Executed header-redesign SLICE 1 (decouple QA from button text); the spec paid off immediately
 
 Ran the first slice of the iter-195 header spec: migrated all 10 text-based header-button selectors

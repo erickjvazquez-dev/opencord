@@ -212,8 +212,10 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   icon set + aria-labels + the collapsible-search, migrate the QA selectors to classes first, then
   re-skin — so the redesign and the QA rework land together and nothing regresses. **SPEC WRITTEN (iter
   195): see SPEC.md "Chat header — compact action bar"** — 5-slice staged plan (migrate QA selectors to
-  classes → icon-ify → collapsible search → optional overflow → vision-verify single-row). Confirmed
-  iter-195 vision audit: the server-channel header (member list open) wraps to THREE rows today.
+  classes → icon-ify → collapsible search → optional overflow → vision-verify single-row). **Slice 1
+  DONE (iter 196):** QA selectors → classes. **Slice 2 DONE (iter 197):** action buttons icon-ified
+  (aria-label + title); header cut from THREE rows → TWO (AI-vision verified), shipped + rollout-verified.
+  **Slice 3 (collapsible search) remaining** to reach single-row.
 - [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
   video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
   publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go
