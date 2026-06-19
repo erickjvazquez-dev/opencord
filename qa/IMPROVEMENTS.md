@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 200) — Maintenance EQUILIBRIUM reached; the remaining value is in big features that need a fresh-context design tick
+
+Second consecutive verified-green tick (idle_streak → 2, cadence at the 3600s ceiling). Checked one more
+edge this tick — WS auto-reconnect — already covered (realtime.mjs §1e). Across iters 199–200 the
+small-win surface is exhausted: uploads, markdown XSS, self-chip truncation, header-redesign coverage,
+and reconnect are all handled and tested.
+
+**The honest read: this product's CURRENT scope is feature-complete + well-tested; the remaining value
+is in the big `[ ]` backlog** — built-in free secure tunneling (the #1 North-Star differentiator),
+real email accounts, roles hierarchy / granular permissions, federation. Each is a multi-tick effort
+that starts with a SPEC (Rule 6) and, for tunneling, real research into free self-hostable approaches
+(+ stack-guardian per Rule 16, + Rule A "degrade gracefully without a paid third-party"). That design
+work is exactly what a 16-tick-saturated context does POORLY — a half-baked spec for a complex feature
+misleads the implementer. **Lesson: when the small-win surface is exhausted AND the next work is
+big-design, the highest-leverage move is a context refresh, THEN spec-first on a big feature — not
+grinding marginal changes or rushing a spec while saturated.** Recommending /clear; the cloud 3h cron
+is the real idle floor now.
+
 ## 2026-06-19 (iter 199) — A VERIFIED-GREEN maintenance tick: the honest output when a mature product has no high-value work
 
 After the 3-slice header redesign (and 14 prior productive ticks this session), I went looking for the
