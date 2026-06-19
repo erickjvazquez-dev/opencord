@@ -3,6 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 190) — Blast-radius check ABORTED a risky redesign mid-plan → pivoted to a clean additive win (PWA)
+
+Came in planning to icon-ify the DM header (the iter-188 P2). Ran the blast-radius grep BEFORE editing
+and found the QA matches header buttons by TEXT (`getByRole('button',{name})`) in ~10 call sites across
+browser.mjs + voice.mjs + sfu.mjs, plus a header-line-count test. That's a multi-file QA rework, not a
+one-tick re-skin — so I STOPPED, logged the precise scope into the GOAL P2, and pivoted to a clean,
+zero-blast-radius, real-parity win instead: the **installable-PWA foundation** (branded SVG favicon,
+manifest.json, theme-color, OG tags). Shipped + deployed + prod-rollout-verified (favicon→image/svg+xml,
+manifest→application/json), browser-QA `0b` guards it, AI-vision verified the rendered icon.
+
+**Lesson — the blast-radius check is a PRE-EDIT gate, not just a post-edit guard.** Running the
+consumer grep before touching code turned a half-built risky redesign (which would've broken ~10 QA
+assertions and likely overrun the tick) into a 2-minute "this is bigger than it looks → defer + spec"
+decision. When a planned change's first grep lights up many text-coupled consumers, that's the signal
+to convert it into a spec'd dedicated tick and ship something else clean this tick — don't push a big
+change through on momentum.
+
+**Also (small, reusable):** to vision-check a static SVG asset, render it to PNG via the already-installed
+Playwright (`page.setContent(<svg>)` → `locator('svg').screenshot()`) and `Read` that — no new dep, and
+it catches a malformed/blank icon the JSON/serve checks can't.
+
 ## 2026-06-19 (iter 189) — Rule-15 ledger advanced to the RICHEST surface (markdown autolinker); deferred the header redesign as spec-worthy
 
 Continued the render-site XSS-guard ledger, but jumped to the **highest-leverage** entry instead of the

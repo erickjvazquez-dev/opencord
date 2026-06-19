@@ -205,6 +205,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   DM header's many TEXT-label controls still wrap** (pins/mute/add/rename/leave/voice + a wide search
   box exceed the row even with the title capped) — Discord keeps these single-row by using icon-only
   buttons / an overflow "⋯" menu. That's the real single-row fix; the title cap was the first half.
+  **Scope note (blast-radius check, iter 190):** this is NOT a one-tick job — the QA matches header
+  buttons by TEXT via `getByRole('button',{name})` in ~10 call sites across browser.mjs, voice.mjs,
+  AND sfu.mjs (Join voice, make read-only, edit topic, slowmode, pins) plus a header-line-count test.
+  An icon-only redesign must update all of those. Do it as a dedicated SPEC'd tick (Rule 6): spec the
+  icon set + aria-labels + the collapsible-search, migrate the QA selectors to classes first, then
+  re-skin — so the redesign and the QA rework land together and nothing regresses.
 - [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
   video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
   publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go
@@ -714,7 +720,13 @@ item from here as the structural milestones above land.
 - [~] **Accessibility** — WCAG-AA color contrast fixed (links/mentions/green labels/
   avatar initials) + axe-core WCAG scan in the browser QA (0 serious/critical, regression-
   guarded). Keyboard-nav · screen-reader · i18n · theme (dark/light) still TODO
-- [ ] Desktop + mobile clients (PWA first)
+- [~] Desktop + mobile clients (PWA first) — **slice 1 DONE (iter 190):** installable PWA
+  foundation — branded SVG favicon (accent squircle + chat bubble), `manifest.json`
+  (display:standalone, theme/bg #1e1f22, maskable icon), theme-color + description + text-only
+  Open Graph in the head. Served by the embedded Go binary (favicon→image/svg+xml,
+  manifest→application/json), browser-QA `0b` + rollout-verified on prod. **Next slice:** a
+  service worker for an offline app-shell (deferred — caching a realtime app needs care: never
+  cache `/api`/`/ws`, only the static shell) and PNG icons (192/512) for broader install support.
 
 ### QA / loop tooling
 - [x] `qa/search-smoke.sh` DONE — read-only post-deploy search smoke (register → bounded
