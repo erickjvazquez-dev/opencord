@@ -2621,3 +2621,40 @@ adversarial: non-member→ErrForbidden, 1:1→ErrNotGroupDM, >100→ErrInvalidGr
 ListDMs shows it, clear→"", non-member→403). go build/vet/test green. Slice 2 (client rename + dmTitle)
 next tick — the client ignores `name` until then, so this is dormant-but-ready (no UI change, no deploy
 needed unless I choose to ship the backend ahead).
+
+## Chat header — compact action bar (icon buttons + collapsible search + overflow) — DEFERRED, spec-only
+
+**Why (vision-found iter 187/195, logged GOAL P2):** in a server channel with the member-list panel
+open — the most common view — the chat header wraps its actions onto **two or three rows**
+(`make read-only / slowmode / edit topic / pins / threads`, then `mute / Join voice / Search…`, then
+`N online / username / log out`). iter-188 capped the TITLE so it can't be the cause, but the controls
+themselves are too wide: ~6–10 text-label buttons + a ~240px search box + the meta cluster overflow the
+narrowed column. Discord keeps this single-row with **icon-only buttons** (tooltip on hover) and a
+**search icon that expands**. This is the real single-row fix; the title cap was only half.
+
+**Why DEFERRED / spec-only (NOT a one-tick job — blast-radius check, iter 190):** the browser/realtime/
+voice/sfu QA matches these buttons by **visible text** via `getByRole('button',{name})` in ~10 call
+sites across `qa/browser.mjs`, `qa/voice.mjs`, `qa/sfu.mjs` (`Join voice`, `make read-only`,
+`allow everyone`, `edit topic`, `slowmode`, `pins`), PLUS a header-line-count assertion. Re-skinning to
+icon-only would break all of those at once. Doing it on a long session risks a multi-file regression.
+
+**Staged plan (a dedicated, fresh-context tick):**
+1. **Migrate QA selectors to CLASSES first, no UI change.** Every header button already has a stable
+   class (`.readonly-toggle`, `.slowmode-edit`, `.topic-edit`, `.pins-open`, `.threads-open`,
+   `.voice-join`, …). Change the ~10 `getByRole('button',{name:'…'})` sites to `.locator('.<class>')`
+   and re-run the full QA green. This decouples the tests from the label text. Ship this slice alone.
+2. **Icon-ify the buttons.** Replace each text label with a clear glyph (keep Opencord's emoji idiom:
+   📌 pins · 🔔/🔕 mute · 🧵 threads · 🔒/🔓 read-only · 🐌 slowmode · 📝 edit-topic · 🎙 Join voice ·
+   ➕ add · ✏️ rename · 🚪 leave), each with `aria-label` + `title` (the hover tooltip carries the words).
+   Keep the classes. CSS: a tight icon-button (`~32px`, no text), `.chat-header` stays `flex-wrap` as a
+   safety net but should no longer need to wrap.
+3. **Collapsible search.** Replace the always-open ~240px search box with a 🔍 icon that expands the
+   input on click (Esc/blur collapses) — reclaims the single biggest chunk of width. QA: click 🔍 →
+   `.search-input` appears → type → results; collapse afterwards.
+4. **(Optional) overflow "⋯" menu** for the least-used actions (edit-topic, slowmode) if still tight.
+5. **Verify (Rule 14):** full QA green at every slice; AI-vision confirm the header is **single-row** in
+   a server channel with the member list open (the exact failing view); deploy + rollout-verify.
+
+**Acceptance:** the server-channel header (member list open) is one row at ≥1100px; every action stays
+reachable with an accessible name; no QA regression. Until built, the iter-188 title cap stands and this
+stays a P2 in GOAL.md.

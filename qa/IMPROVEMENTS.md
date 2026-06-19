@@ -3,6 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 195) — Vision-audit tick → SPEC the deferred header redesign rather than start it on a long session
+
+A Track-0 AI-vision audit of the rendered surfaces (mobile drawer, server-channel + member list, etc.).
+Conclusion: the product is well-polished; the one real, recurring gap is the header P2 — confirmed by
+eye that in a server channel with the member list open (the COMMON view) the header wraps to THREE rows.
+
+**The discipline decision: on the 11th tick of a long session, I did NOT start the big multi-file header
+redesign.** Per the blast-radius finding (it touches ~10 text-coupled QA sites across 3 files) and Rule
+18 (a big change late in a long context is exactly when regressions slip in), the right move was to
+write the SPEC (SPEC.md "Chat header — compact action bar") with a 5-slice staged plan whose FIRST slice
+is "migrate the QA selectors from button-text to classes, no UI change" — so the next fresh-context tick
+can build it without the test rework and the re-skin colliding. Rule 6 (spec before big changes) is also
+the cheapest insurance: capturing the blast-radius + staging now means the next attempt doesn't
+re-discover them the hard way.
+
+**Also resisted a rabbit hole:** the member-list name truncates early ("alice72…") on long QA usernames;
+the CSS (`.member-id` flex vs `.author`) is murky and the symptom is data-specific (real usernames are
+shorter). Chasing it on a long session risked an iter-191-style spiral for a cosmetic, low-value issue —
+noted, not chased. **Lesson: a vision audit's value is also in what it tells you NOT to do right now —
+deferring-with-a-spec and explicitly-not-chasing are valid, honest tick outcomes, not a failure to ship.**
+
 ## 2026-06-19 (iter 194) — A small high-frequency feature (ArrowUp-edits-last) after a test run; deterministic-fixture QA + grep-by-hash rollout
 
 A clean feature tick after several test/guard ticks: the Discord "↑ in an empty composer edits your

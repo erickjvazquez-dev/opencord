@@ -210,7 +210,10 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   AND sfu.mjs (Join voice, make read-only, edit topic, slowmode, pins) plus a header-line-count test.
   An icon-only redesign must update all of those. Do it as a dedicated SPEC'd tick (Rule 6): spec the
   icon set + aria-labels + the collapsible-search, migrate the QA selectors to classes first, then
-  re-skin — so the redesign and the QA rework land together and nothing regresses.
+  re-skin — so the redesign and the QA rework land together and nothing regresses. **SPEC WRITTEN (iter
+  195): see SPEC.md "Chat header — compact action bar"** — 5-slice staged plan (migrate QA selectors to
+  classes → icon-ify → collapsible search → optional overflow → vision-verify single-row). Confirmed
+  iter-195 vision audit: the server-channel header (member list open) wraps to THREE rows today.
 - [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
   video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
   publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go
