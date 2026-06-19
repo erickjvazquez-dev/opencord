@@ -1897,8 +1897,9 @@ async function main() {
   const groupRow = page.locator('.dm-list .channel-item', { hasText: grpA }).first()
   await groupRow.waitFor({ timeout: 6000 })
   check(
-    (await groupRow.locator('.dm-group-avatar').count()) === 1,
-    'the group DM row shows the group-glyph avatar',
+    (await groupRow.locator('.dm-group-stack').count()) === 1 &&
+      (await groupRow.locator('.dm-group-stack .dm-stack-avatar').count()) === 2,
+    'the group DM row shows a 2-member stacked avatar (Discord-style)',
   )
   const groupTitle = (await groupRow.locator('.item-name').textContent()) || ''
   check(

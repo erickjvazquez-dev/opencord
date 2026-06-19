@@ -2555,3 +2555,18 @@ for the leaver but keeps it for others; adversarial: a 1:1 DM can't be left → 
 404-class, a non-existent channel → 404); route test (member leaves → 204, non-member → 404, 1:1 → 400);
 go build/vet/test green; browser QA asserts the Leave-Group flow; AI-vision the button + post-leave
 sidebar. Ship + `railway up` + rollout-verify.
+
+## Group DM stacked member avatars (v0.2 DM sub-slice — UI polish)
+
+**Why:** group DM rows showed a single generic people-glyph; Discord shows a STACK of the first two
+members' avatars so a group reads as "several people" at a glance.
+
+- **Client:** the DM-list group branch renders the first two `dmOthers(d)` via the `Avatar` component
+  inside a `.dm-group-stack` (two 15px avatars offset top-left / bottom-right, each ringed in the sidebar
+  bg so the front reads on top). 1:1 DMs unchanged (single avatar). Frontend-only, reuses `Avatar`
+  (img-or-initials, so each member is a distinct coloured circle).
+
+**Verify (Rule 14):** tsc clean, vitest 77/77, go build green; browser QA asserts the group row shows
+`.dm-group-stack` with exactly 2 `.dm-stack-avatar`; AI-vision confirmed the stacked avatars in the
+sidebar. (Follow-up: the welcome-intro big icon still uses the 👥 emoji — optionally stack it too.)
+Ship + `railway up` + rollout-verify.

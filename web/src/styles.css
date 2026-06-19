@@ -402,10 +402,39 @@ button:disabled {
   user-select: none;
 }
 
-/* Group DMs are unnamed, so the list shows a generic group glyph (accent-tinted) instead
-   of a single user's avatar; the row text is the comma-joined member list (see dmTitle). */
-.dm-group-avatar {
-  background: var(--accent);
+/* Group DMs show a STACK of the first two members' avatars (Discord-style) inside the
+   same 22px footprint — the back one top-left, the front one bottom-right, each ringed
+   in the sidebar colour so the front reads on top. The row text is the comma-joined
+   member list (see dmTitle). */
+.dm-group-stack {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.dm-stack-avatar {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 7px;
+  font-weight: 700;
+  user-select: none;
+  box-sizing: border-box;
+  border: 1.5px solid #1a1b1e; /* the sidebar bg, so the front avatar reads on top */
+}
+.dm-stack-0 {
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+.dm-stack-1 {
+  bottom: 0;
+  right: 0;
+  z-index: 2;
 }
 
 /* Servers — an accordion: each server names itself, then lists its channels. */
