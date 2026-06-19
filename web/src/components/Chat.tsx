@@ -354,6 +354,12 @@ export function Chat({
   const wsRef = useRef<WebSocket | null>(null)
   const voiceRef = useRef<VoiceTransport | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Smart auto-scroll: the message list (scroll container) + whether it's pinned to the bottom.
+  // A new message only auto-scrolls when the reader is already at the bottom (or it's their own
+  // send) — never yanking them down mid-history. `showJump` surfaces a "jump to present" button.
+  const atBottomRef = useRef(true)
+  const lastChannelRef = useRef<number | null>(null)
+  const [showJump, setShowJump] = useState(false)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
   // Whether the active channel is a DM — kept fresh for the WS message handler, whose
@@ -578,9 +584,44 @@ export function Chat({
     }
   }, [token, channelId, user.username])
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    bottomRef.current?.scrollIntoView({ behavior })
+    atBottomRef.current = true
+    setShowJump(false)
+  }, [])
+
+  // Pinned-to-bottom tracking: a message is only auto-followed when the reader is already at
+  // the bottom (so reading history isn't interrupted). Toggles the jump-to-present affordance.
+  // The 80px slack means a one-line new message that auto-scrolls while pinned never flips the
+  // pill on; only a genuine scroll-up into history does. A NATIVE scroll listener attached via a
+  // CALLBACK ref (fires exactly when the node mounts) — React 18's delegated onScroll + a []-deps
+  // effect both proved unreliable for the conditionally-rendered list.
+  const detachScrollRef = useRef<() => void>(() => {})
+  const messagesRef = useCallback((el: HTMLElement | null) => {
+    detachScrollRef.current()
+    if (!el) return
+    const handler = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      atBottomRef.current = atBottom
+      setShowJump(!atBottom)
+    }
+    el.addEventListener('scroll', handler, { passive: true })
+    detachScrollRef.current = () => el.removeEventListener('scroll', handler)
+  }, [])
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    // Switching channels always lands on the newest message (instant). Otherwise auto-scroll
+    // to a new message only when already at the bottom OR it's the reader's own send — never
+    // yank a reader who has scrolled up; surface the jump-to-present button instead.
+    const channelChanged = lastChannelRef.current !== channelId
+    lastChannelRef.current = channelId
+    const mine = messages.length > 0 && messages[messages.length - 1].userId === user.id
+    if (channelChanged || atBottomRef.current || mine) {
+      scrollToBottom(channelChanged ? 'auto' : 'smooth')
+    } else {
+      setShowJump(true)
+    }
+  }, [messages, channelId, user.id, scrollToBottom])
 
   // doJump scrolls the pending target message into view + briefly flashes it. No-op if the
   // message isn't in the rendered list yet (panel still open, or it's older than the loaded
@@ -2804,7 +2845,7 @@ export function Chat({
           </div>
         )}
 
-        <main className="messages">
+        <main className="messages" ref={messagesRef}>
           {membersOf !== null && (
             <div className="search-results">
               <div className="search-results-head">
@@ -3533,6 +3574,16 @@ export function Chat({
               </Fragment>
             )
           })}
+          {showJump && (
+            <button
+              type="button"
+              className="jump-to-present"
+              onClick={() => scrollToBottom('auto')}
+              title="Jump to the latest messages"
+            >
+              ↓ Jump to present
+            </button>
+          )}
           <div ref={bottomRef} />
         </main>
 

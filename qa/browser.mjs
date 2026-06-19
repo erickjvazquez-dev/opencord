@@ -330,6 +330,46 @@ async function main() {
   const everyoneMention = page.locator('.message .body .mention.mention-all', { hasText: '@everyone' }).last()
   check(await everyoneMention.isVisible(), '@everyone renders as a highlighted (mention-all) mention')
 
+  // 3f1 — Smart auto-scroll + jump-to-present (iter 191): when the reader has scrolled up, a
+  // "jump to present" pill appears and returns them to the newest message. Shrink the viewport
+  // so #general's existing history overflows (scrollable), then exercise the pill with REAL
+  // wheel gestures (a programmatic scrollTop= does not fire a scroll event React/the listener
+  // would see — only a user's wheel does).
+  step('jump-to-present: scrolling up reveals the pill; clicking it returns to the bottom')
+  await page.setViewportSize({ width: 1100, height: 340 })
+  await page.waitForTimeout(250)
+  const msgList = page.locator('.messages')
+  check(
+    await msgList.evaluate((el) => el.scrollHeight > el.clientHeight + 80),
+    'the message list overflows the viewport (scrollable)',
+  )
+  await msgList.hover()
+  // Pin to the bottom first (the shrink can leave the list mid-scroll) → no pill while pinned.
+  await page.mouse.wheel(0, 3000)
+  await page.waitForTimeout(400)
+  check((await page.locator('.jump-to-present').count()) === 0, 'no jump pill while pinned to the bottom')
+  // Now scroll UP into history → the pill appears.
+  await page.mouse.wheel(0, -3000)
+  const jumpPill = page.locator('.jump-to-present')
+  await jumpPill.waitFor({ timeout: 4000 })
+  check(await jumpPill.isVisible(), 'scrolling up reveals the "jump to present" pill')
+  await shot('03f1-jump-to-present.png')
+  // Click it → it returns to the bottom and the pill disappears.
+  await jumpPill.click()
+  let settled = false
+  for (let i = 0; i < 50; i++) {
+    const atBottom = await msgList.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 80)
+    const pillGone = (await page.locator('.jump-to-present').count()) === 0
+    if (atBottom && pillGone) {
+      settled = true
+      break
+    }
+    await page.waitForTimeout(100)
+  }
+  check(settled, 'clicking the pill returns the list to the bottom and hides the pill')
+  await page.setViewportSize({ width: 1100, height: 820 }) // restore the desktop viewport
+  await page.waitForTimeout(250)
+
   // 3f2 — Accessibility: a WCAG 2 A/AA scan of the populated chat (messages,
   // avatars, links, mentions) must have no serious/critical violations (UI north
   // star: accessible). This is content-rich, so it covers contrast etc.
