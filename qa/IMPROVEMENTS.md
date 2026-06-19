@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 188) — Header title truncation; AI-vision kept the fix HONEST (a green metric assertion ≠ the visual outcome)
+
+Fixed the iter-187 P1: the chat header title now ellipsis-truncates (`max-width:min(36ch,55vw)`, the
+`.channel-topic` pattern) with the full title on a hover `title` attr. Browser QA `07k4` sets an
+~82-char name and asserts the title element is clipped (scrollW 676 > clientW 373) — green.
+
+**The lesson is the vision pass, not the fix.** The `scrollWidth > clientWidth` assertion PASSED, which
+on its own reads as "header layout fixed." But `Read`-ing the screenshot showed the header STILL wraps —
+the title is now capped, yet the DM header's six text-label controls (pins/mute/add/rename/leave/voice)
++ a wide search box overflow the row independent of the title. Had I trusted the green metric, I'd have
+marked "header single-row — DONE" and shipped a false claim. Vision caught the divergence: I fixed the
+NAMED defect (title growth) and honestly logged the REMAINING half (control density → needs icon-only
+buttons / a "⋯" overflow menu, Discord's approach) as a P2 instead of overclaiming.
+
+**Rule (reinforces Step 4b-i): when the bug is a LAYOUT/visual symptom, a DOM-metric assertion proves
+the MECHANISM, never the OUTCOME — you must vision-grade the rendered result and scope your "done"
+claim to what the eye confirms, not what the metric passes.** A passing assertion that doesn't visibly
+resolve the reported symptom means the symptom had more than one cause; find the others before claiming
+the fix.
+
 ## 2026-06-18 (iter 187) — Rule-15 rotation: hardened the newest user-text render site (group name); vision caught a header-truncation P1
 
 Rotated off group-DM features to a **security/Rule-15 pass**, applied to the *newest unhardened input*:
