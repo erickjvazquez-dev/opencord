@@ -3953,3 +3953,36 @@ tick could take naming OR rotate to a different component's north star (e.g. an 
 slice, or a Rule-15 adversarial pass on a not-recently-probed surface).
 
 **Cadence:** real QA coverage added (no product change → no deploy) → ACTIVE (1800s).
+
+## 2026-06-18 (tick 183) — Rule-15 security audit of upload/serve/WS surfaces + inline-allowlist guard
+
+ROTATED to security (after a long UI/group-DM run) with a Rule-15 adversarial pass on the surfaces most
+likely to harbor a hostile-input hole. Finding: the product is genuinely well-hardened AND behaviourally
+tested across all of them — the prior security discipline paid off:
+- **Attachment upload/serve**: files stored under an OPAQUE random key (client filename never a path →
+  no traversal), `sanitizeFilename` for the display name, content-type SNIFFED (not trusted), size-bounded
+  (8 MiB/file, 40 MiB/req, 10 files), served with `nosniff` + `inline` ONLY for a raster allowlist (else
+  download), access-gated. Already tested: traversal-filename, HTML-not-inline, oversize, 403, 404.
+- **Avatar upload**: image-allowlist-only, ≤2 MiB, JWT-scoped (can't set another's), nosniff.
+- **WS frames**: `SetReadLimit(16 KiB)`, malformed-JSON dropped, body >4 KiB dropped, rate-limited.
+  Already tested (serve_integration_test.go §519): non-JSON garbage, type-confused field, oversized →
+  connection survives + a valid frame after still works.
+
+The ONE real gap closed: the `inlineImageTypes` allowlist (which gates inline-vs-download for
+attachments + avatars + emoji) had NO test on its membership — only behavioural payload tests. Added
+`TestInlineImageAllowlistIsRasterOnly` (internal unit test): the allowlist must contain ONLY
+png/jpeg/gif/webp; a scriptable type (image/svg+xml, text/html, *xml) fails it AT THE SOURCE. **Proved
+it by mutation** — injected `image/svg+xml` → test FAILED with the actionable message → reverted → PASS.
+This catches a future well-meaning "SVG is an image, add it to the allowlist" mistake that NO behavioural
+test would catch (SVG sniffs to text/xml, so behaviour is unchanged — only the constant betrays the risk).
+
+**Loop-process lesson (logged):** when a Rule-15 audit finds a surface already hardened + behaviourally
+tested, the highest-value move isn't a redundant payload test — it's a guard on the security-critical
+CONSTANT/invariant that the behavioural tests can't see (here: the allowlist membership). "Test the
+invariant, not just the payload" — added to the security-pass playbook.
+
+**Coverage note:** upload/serve/WS surfaces fully hardened + tested + now an allowlist-invariant guard.
+Least-probed-next: search operator injection (LIKE-escaping), JWT expiry/tamper across endpoints, and the
+voice signaling relay under a hostile peer — candidates for a future security tick.
+
+**Cadence:** security guard added (no product runtime change → no deploy) → ACTIVE (1800s).
