@@ -2431,34 +2431,60 @@ export function Chat({
           {/* Text-channel actions (post policy, slowmode, topic, pins, threads, search) don't
               apply to a voice channel — hide them so its header reads as a call, not a text room. */}
           {activeServerChannel && canModerate && !activeChannelIsVoice && (
-            <button className="link readonly-toggle" onClick={() => void toggleReadOnly()}>
-              {activeIsReadOnly ? 'allow everyone' : 'make read-only'}
+            <button
+              className="link icon-btn readonly-toggle"
+              onClick={() => void toggleReadOnly()}
+              aria-label={activeIsReadOnly ? 'Allow everyone to post' : 'Make channel read-only'}
+              title={activeIsReadOnly ? 'Allow everyone to post' : 'Make channel read-only'}
+            >
+              {activeIsReadOnly ? '🔓' : '🔒'}
             </button>
           )}
           {activeServerChannel && canModerate && !activeChannelIsVoice && (
-            <button className="link slowmode-edit" onClick={() => void editSlowmode()}>
-              slowmode
+            <button
+              className="link icon-btn slowmode-edit"
+              onClick={() => void editSlowmode()}
+              aria-label="Set slow mode"
+              title="Set slow mode"
+            >
+              🐌
             </button>
           )}
           {activeServerChannel && canModerate && !activeChannelIsVoice && (
-            <button className="link topic-edit" onClick={() => void editTopic()}>
-              edit topic
+            <button
+              className="link icon-btn topic-edit"
+              onClick={() => void editTopic()}
+              aria-label="Edit channel topic"
+              title="Edit channel topic"
+            >
+              📝
             </button>
           )}
           {channelId != null && !activeChannelIsVoice && (
-            <button className="link pins-open" onClick={() => void openPins()}>
-              pins
+            <button
+              className="link icon-btn pins-open"
+              onClick={() => void openPins()}
+              aria-label="Pinned messages"
+              title="Pinned messages"
+            >
+              📌
             </button>
           )}
           {channelId != null && !activeDM && !inThread && !activeChannelIsVoice && (
-            <button className="link threads-open" onClick={() => void openThreads()}>
-              🧵 threads
+            <button
+              className="link icon-btn threads-open"
+              onClick={() => void openThreads()}
+              aria-label="Threads"
+              title="Threads"
+            >
+              🧵
             </button>
           )}
           {channelId != null && (
             <button
-              className="link channel-mute-toggle"
+              className="link icon-btn channel-mute-toggle"
               onClick={() => void toggleChannelMute(channelId)}
+              aria-label={mutedChannels.has(channelId) ? 'Unmute this channel' : 'Mute this channel'}
               title={
                 mutedChannels.has(channelId)
                   ? 'Unmute this channel (show its notifications again)'
@@ -2466,56 +2492,61 @@ export function Chat({
               }
               data-muted={mutedChannels.has(channelId)}
             >
-              {mutedChannels.has(channelId) ? '🔕 muted' : '🔔 mute'}
+              {mutedChannels.has(channelId) ? '🔕' : '🔔'}
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
             <button
-              className="link add-to-group"
+              className="link icon-btn add-to-group"
               onClick={() => void addToGroup(activeDM)}
+              aria-label="Add someone to this group DM"
               title="Add someone to this group DM"
             >
-              ➕ add
+              ➕
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
             <button
-              className="link rename-group"
+              className="link icon-btn rename-group"
               onClick={() => void renameGroup(activeDM)}
+              aria-label="Name this group DM"
               title="Name this group DM"
             >
-              ✏️ rename
+              ✏️
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
             <button
-              className="link leave-group"
+              className="link icon-btn leave-group"
               onClick={() => void leaveGroup(activeDM)}
+              aria-label="Leave this group DM"
               title="Leave this group DM"
             >
-              🚪 leave group
+              🚪
             </button>
           )}
           {/* In a voice channel the main view carries its own Join/roster, so the header's
               voice buttons would duplicate it — show them only for non-voice channels. */}
           {channelId != null && !inCall && !activeChannelIsVoice && (
             <button
-              className="link voice-join"
+              className="link icon-btn voice-join"
               onClick={() => void joinVoice()}
               disabled={!connected}
+              aria-label="Start a voice call in this channel"
               title={connected ? 'Start a voice call in this channel' : 'Connecting…'}
             >
-              🎙 Join voice
+              🎙
             </button>
           )}
           {channelId != null && voicePresence.length > 0 && !activeChannelIsVoice && (
             <button
-              className="link voice-presence"
+              className="link icon-btn voice-presence"
               onClick={() => !inCall && void joinVoice()}
+              aria-label={`${voicePresence.length} in this voice call`}
               title={inCall ? `${voicePresence.length} in this voice call` : 'Join this voice call'}
               data-count={voicePresence.length}
             >
-              🔊 {voicePresence.length} in voice
+              🔊 {voicePresence.length}
             </button>
           )}
           {!activeChannelIsVoice && (

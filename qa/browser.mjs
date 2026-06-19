@@ -1710,8 +1710,10 @@ async function main() {
   await shot('07e-readonly.png')
   check(await page.locator('.readonly-badge').isVisible(), 'channel shows the read-only badge after toggle')
   check(
-    ((await page.locator('.chat-header .readonly-toggle').textContent()) ?? '').includes('allow everyone'),
-    'toggle flips to "allow everyone"',
+    ((await page.locator('.chat-header .readonly-toggle').getAttribute('aria-label')) ?? '').includes(
+      'Allow everyone',
+    ),
+    'toggle flips to the "allow everyone" state (aria-label)',
   )
 
   // 7f — Channel topic: the admin sets a topic via "edit topic"; it shows in the header.

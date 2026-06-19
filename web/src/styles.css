@@ -670,6 +670,26 @@ button:disabled {
   vertical-align: middle;
 }
 
+/* Compact icon buttons in the chat header (header redesign slice 2): an emoji glyph with the
+   action name on hover (title) + for screen readers (aria-label), so the action bar stays narrow
+   and no longer needs to wrap onto extra rows. Subtle hover pill, no text-link underline. */
+.chat-header .icon-btn {
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 7px;
+  text-decoration: none;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.chat-header .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  text-decoration: none;
+}
+.chat-header .icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .meta {
   display: flex;
   align-items: center;

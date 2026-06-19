@@ -108,12 +108,13 @@ async function main() {
   step('A joins voice')
   await joinCall(a, 'A')
   // Voice presence (v0.9): B is viewing #general but NOT yet in voice — it sees a live
-  // "🔊 1 in voice" indicator in the header (driven by the hub voice-presence broadcast).
+  // "🔊 1" indicator in the header (driven by the hub voice-presence broadcast). The count
+  // lives in data-count (decoupled from the display text after the slice-2 icon-ify).
   step('B (not in the call) sees a live "in voice" indicator after A joins')
   await b.locator('.voice-presence').waitFor({ timeout: 8000 })
   check(
-    ((await b.locator('.voice-presence').textContent()) || '').includes('1 in voice'),
-    'B sees "1 in voice" in the header after A joins the call',
+    (await b.locator('.voice-presence').getAttribute('data-count')) === '1',
+    'B sees the "1 in voice" presence indicator (data-count) in the header after A joins',
   )
   await b.screenshot({ path: join(SHOTS, 'voice-12-presence.png') })
   step('B joins voice (A↔B)')
