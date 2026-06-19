@@ -3,6 +3,25 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 194) — A small high-frequency feature (ArrowUp-edits-last) after a test run; deterministic-fixture QA + grep-by-hash rollout
+
+A clean feature tick after several test/guard ticks: the Discord "↑ in an empty composer edits your
+last message" shortcut (was missing — ArrowUp was only wired to @mention nav). ~10 lines reusing the
+existing inline-edit UI; guarded so it only fires on an empty composer. Shipped + deployed +
+rollout-verified.
+
+Two small reusable QA techniques banked:
+1. **Deterministic fixture over inferred state.** My first instinct was "ArrowUp edits the last own
+   message — assert it shows the last message's body". But which message is newest depends on every
+   prior QA step. Instead, SEND a fresh known message (`'arrow-up edit me'`) immediately before, so the
+   target is deterministic and the assertion is `inputValue() === 'arrow-up edit me'`, not a fuzzy
+   "includes". When a test needs "the latest X", create X in the test rather than reasoning about state.
+2. **Rollout-verify by bundle HASH when there's no feature string.** Past features had a user-visible
+   string to grep in the live JS ("Jump to present"). This one reuses startEdit — no new string. So I
+   verified the rollout by asserting the live `assets/index-*.js` hash equals the local `npm run build`
+   output: content-hashed bundles mean identical hash ⇒ identical bytes ⇒ the new code is serving. A
+   clean rollout proof for stringless changes.
+
 ## 2026-06-19 (iter 193) — Backend Rule-15 gap: the WS transport frame cap was untested; "a close test can falsely pass on its own deadline"
 
 Rotated to backend after a run of frontend ticks. Found a real coverage gap: the WS hostile-frame

@@ -312,6 +312,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   pill appears while scrolled up and returns to the latest on click. Native scroll listener via a
   callback ref (React 18's delegated onScroll didn't fire here); browser-QA `3f1` (wheel down→pin,
   up→pill, click→bottom) + AI-vision verified; realtime QA stays green; shipped + rollout-verified.
+- [x] ArrowUp-edits-last-message DONE (iter 194) — pressing ↑ in an EMPTY composer opens the
+  reader's most recent (non-deleted) message in this channel for inline editing (Discord shortcut),
+  reusing the existing startEdit/edit-row UI. Guarded on `draft === '' && editingId === null` so
+  ArrowUp otherwise moves the caret, and the @mention dropdown still owns ArrowUp while open.
+  Browser-QA `4b` (send → ArrowUp → edit input pre-filled → Escape) + AI-vision verified; shipped +
+  rollout-verified.
 - [x] Sidebar long-name truncation DONE — server/channel/DM names ellipsis-truncate
   (`.item-name`/`.server-name-text` get `min-width:0` + `overflow:hidden` + `text-overflow:
   ellipsis`; badge/avatar/#id/unread stay `flex-shrink:0`) with the full name in a `title`
