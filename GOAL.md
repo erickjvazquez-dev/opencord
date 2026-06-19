@@ -71,7 +71,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   **Stacked member avatars DONE (iter 179):** the DM-list group row shows a Discord-style STACK of the
   first two members' avatars (`.dm-group-stack`, two 15px Avatars offset + ringed in the sidebar bg)
   instead of a generic glyph; browser QA asserts the 2-avatar stack + AI-vision verified; shipped +
-  rollout-verified. Later sub-slices (lower priority): group naming (needs a non-UNIQUE name column),
+  rollout-verified. **Group naming backend DONE (iter 184, slice 1):** a group DM can be named (Discord
+  parity) — schema recreates the global channel-name index to exclude `kind='dm'` (group names NOT
+  unique, the thread precedent), store `RenameGroupDM` (actor-member-first, group-only, ≤100, empty
+  clears → member-list title), `DMChannel.Name` + `ListDMs` returns it, `PATCH /api/dms/{id} {name}` +
+  dm-membership relabel broadcast. `TestRenameGroupDMIntegration` (incl. two-groups-same-name) + **live
+  E2E** (rename→204, all members see the name, clear→"", non-member→403); shipped + rollout-verified
+  (migration applied on boot). **Slice 2 NEXT (client):** a rename header action + `dmTitle` uses the
+  name (falls back to members when empty); the realtime relabel already works (dm-membership refetch).
   **add-member DONE (iter 181):** a "➕ add" header action (groups only) adds a member via
   `POST /api/dms/{id}/members {identifier}` (store `AddGroupDMMember`: actor-member-first, group-only,
   10-cap, already-member/blocked guards, Rule B/15); the new member's client gets a `SendToUser`

@@ -3986,3 +3986,34 @@ Least-probed-next: search operator injection (LIKE-escaping), JWT expiry/tamper 
 voice signaling relay under a hostile peer — candidates for a future security tick.
 
 **Cadence:** security guard added (no product runtime change → no deploy) → ACTIVE (1800s).
+
+## 2026-06-18 (tick 184) — group DM naming, backend slice 1 (schema + rename route) shipped
+
+After a security audit that found search ALSO hardened + tested (parameterized everywhere; the `%`-literal
+wildcard-escaping is already a regression test), I advanced the owner's priority feature instead of
+hunting non-existent gaps: group-DM naming. Took it BACKEND-FIRST (slice 1) — the proven cadence for a
+schema-touching feature on a deep session — keeping it contained (~5 files, no frontend, no QA-selector
+risk since unnamed groups render exactly as today). De-risked the schema change first: it's the EXACT
+thread precedent (recreate the global name partial-unique index to also exclude kind='dm'), idempotent +
+self-applied; verified it applies cleanly (the db package re-ran green) AND on prod (live rename
+succeeded with no unique-constraint error, two groups can share a name). Full vertical-but-backend slice:
+schema + store RenameGroupDM (full adversarial matrix) + DMChannel.Name + ListDMs + PATCH route +
+dm-membership relabel + live E2E (rename→204, all members see it, clear→"", non-member→403).
+
+**Loop-process note (logged):** when the highest unchecked priority item touches the SCHEMA, splitting it
+backend-first (slice 1) lets you ship + verify the migration on prod BEFORE the frontend depends on it —
+the migration is the riskiest part, so isolating + proving it live de-risks the whole feature. Same
+cadence as voice channels 3a. Added to the playbook: "schema-touching feature → backend slice first,
+verify the migration live, then the client."
+
+**Highest-value next step (slice 2, logged):** the client — a "rename" group-DM header action (member-only,
+prompt for the name, PATCH) + `dmTitle` uses `dm.name` when set (falls back to the member list when
+empty). The realtime relabel already works (the dm-membership refetch covers it), and a two-client
+realtime test would mirror §14/§15 (A renames → B sees the new title live). Slice 2 is pure frontend +
+QA, no backend — a clean fresh-context tick.
+
+**Coverage note:** group-DM naming backend has store-adversarial + live-API E2E. The client + its
+two-client realtime relabel are slice 2. Group DMs after slice 2: create, render, leave, add, name — fully
+complete.
+
+**Cadence:** shipped a backend slice + migration → ACTIVE (1800s).
