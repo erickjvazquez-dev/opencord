@@ -648,6 +648,57 @@ async function main() {
   )
   await b.screenshot({ path: join(SHOTS, 'rt-13-leave.png') })
 
+  // 14 — Group DM leave (realtime): A makes a GROUP with B + a third member C, B opens it,
+  // then A leaves. B — connected to the group's WS — must see A drop out of the member list
+  // LIVE (the dm-membership broadcast → DM-list refetch), without reloading. This proves the
+  // remaining-members live-refresh edge of leave-group that the single-client browser.mjs can't.
+  // Runs LAST so its DM/unread state never perturbs the earlier tab-badge/mute assertions.
+  step('group DM leave: A leaves a group → B sees A removed from the member list live')
+  const userC = 'carol' + sfx
+  const cReg = await a.evaluate(async (name) => {
+    const r = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: name, password: 'hunter2' }),
+    })
+    return r.ok ? 'ok' : 'register C failed ' + r.status
+  }, userC)
+  check(cReg === 'ok', `registered a third member C=${userC} (${cReg})`)
+
+  // A creates the group (B + C).
+  await a.locator('.channel-list .channel-item', { hasText: 'general' }).first().click() // reset A to a known view
+  await a.getByRole('button', { name: '+ New DM' }).click()
+  await a.locator('.group-modal').waitFor({ timeout: 4000 })
+  const gChip = a.locator('.group-chip-input')
+  await gChip.fill(userB)
+  await gChip.press('Enter')
+  await gChip.fill(userC)
+  await gChip.press('Enter')
+  await a.locator('.group-modal').getByRole('button', { name: /Create Group/ }).click()
+  await a.locator('.group-modal').waitFor({ state: 'detached', timeout: 8000 })
+
+  // B reloads to pick up the new group (no "added to a group" push yet), opens it (→ now
+  // connected to its WS), and sees A among the members.
+  await b.reload({ waitUntil: 'domcontentloaded' })
+  await b.locator('.channel-item', { hasText: userC }).first().click()
+  await b.locator('.brand .channel').waitFor({ timeout: 8000 })
+  const bTitleBefore = (await b.locator('.brand .channel').textContent()) || ''
+  check(bTitleBefore.includes(userA), `B sees A in the group title before A leaves (got "${bTitleBefore}")`)
+
+  // A leaves the group → B, still viewing it, sees A drop from the title LIVE (no reload).
+  await a.locator('.chat-header .leave-group').click()
+  let bTitleAfter = bTitleBefore
+  for (let i = 0; i < 60; i++) {
+    bTitleAfter = (await b.locator('.brand .channel').textContent()) || ''
+    if (!bTitleAfter.includes(userA)) break
+    await b.waitForTimeout(200)
+  }
+  check(
+    !bTitleAfter.includes(userA) && bTitleAfter.includes(userC),
+    `B sees A removed from the group live, C remains (got "${bTitleAfter}")`,
+  )
+  await b.screenshot({ path: join(SHOTS, 'rt-14-group-leave.png') })
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

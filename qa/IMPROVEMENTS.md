@@ -3819,3 +3819,29 @@ remaining-members live refresh (two-client). Other group-DM sub-slices (naming, 
 stacked avatars) remain unbuilt.
 
 **Cadence:** shipped a feature → ACTIVE (1800s).
+
+## 2026-06-18 (tick 178) — two-client realtime test for leave-group live refresh
+
+Closed the coverage gap I logged last tick: the "remaining members see the leaver gone LIVE" edge of
+leave-group was only covered by the store test + the WS-broadcast logic, never asserted through two real
+browsers. Added section 14 to `qa/realtime.mjs` — A creates a group (B + a third member C registered via
+API), B opens it (→ connected to its WS), A clicks "leave group", and B (without reloading) sees A drop
+from the group title LIVE via the `dm-membership` refetch (title goes "alice, carol" → "@carol", and the
+"leave group" button correctly disappears since it's now a 2-member 1:1). AI-vision confirmed B's view.
+
+**QA-hygiene lesson (process improvement, the real win this tick):** my first attempt put the new section
+in the MIDDLE of realtime.mjs (right after the 1:1-DM test) and it broke two LATER, order-dependent
+assertions ("reading everything clears B's tab badge" / "a muted channel does not badge the tab title")
+— my new group DM left B with an unread/extra-channel state those tab-title checks didn't expect.
+Diagnosed via the captured log (my own checks passed; the failures were downstream). FIX + rule: a new
+multi-step realtime test that creates channels/DMs/unreads must run **LAST** in the two-client suite (or
+fully reset state), so it can't perturb earlier order-dependent assertions. Moved the section to the end
+→ full suite green (browser=0 realtime=0 voice=0 search=0). This is a reusable rule for extending any
+stateful two-client QA file: append, don't insert.
+
+**Coverage note:** leave-group is now covered at store + live-API + single-client browser + **two-client
+realtime** + AI-vision levels — fully verified across every edge including the live remaining-members
+refresh. Next group-DM work is feature (add/remove member, naming, stacked avatars), not coverage.
+
+**Cadence:** real QA coverage added (no product change → no deploy) → ACTIVE (1800s); more group-DM
+sub-slices queued.

@@ -66,8 +66,10 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   broadcast, the leaver's socket is evicted. `TestLeaveGroupDMIntegration` + browser create→leave→gone
   flow + AI-vision; blast-radius guard caught+fixed 2 pre-gate breaks (tsc event union + README
   docs-sync); shipped + rollout-verified (live: leave→204, leaver's list drops it / others keep it,
-  re-leave→404). Later sub-slices (lower priority): group naming (needs a non-UNIQUE name column),
-  add/remove member, stacked member avatars.
+  re-leave→404), AND a two-client realtime test (iter 178: A leaves a group → B, viewing it, sees A drop
+  from the member list LIVE via `dm-membership`, no reload — proving the remaining-members refresh edge).
+  Later sub-slices (lower priority): group naming (needs a non-UNIQUE name column), add/remove member,
+  stacked member avatars.
 - [~] **Custom colored roles (Discord parity, tick-159 ROI #2)** — **slice 1 backend DONE (iter 162):**
   Discord-style COSMETIC colored roles, additive to and separate from the owner/admin/member PERMISSION
   tier (untouched — low blast radius). New `server_roles` (id, server_id, name, color, position) +
