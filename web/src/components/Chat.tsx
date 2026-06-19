@@ -254,6 +254,9 @@ export function Chat({
   // In-channel search: `results` non-null means the message list shows matches instead.
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Message[] | null>(null)
+  // Collapsible search (header slice 3): the header shows a 🔍 icon that expands the input on
+  // click, so the search box no longer occupies the bar full-time. Collapses on Esc / empty blur.
+  const [searchOpen, setSearchOpen] = useState(false)
   // Pins panel: non-null shows the channel's pinned messages.
   const [pins, setPins] = useState<Message[] | null>(null)
   // Threads (v0.8): `threads` non-null shows the channel's thread panel; `activeThread` is the
@@ -415,6 +418,7 @@ export function Chat({
     setEmojiPickerOpen(false)
     setSearchResults(null)
     setSearchQuery('')
+    setSearchOpen(false)
     setMembersOf(null)
     setMentionMatches([])
     setPendingFiles([])
@@ -2168,6 +2172,7 @@ export function Chat({
   const clearSearch = () => {
     setSearchResults(null)
     setSearchQuery('')
+    setSearchOpen(false) // collapse back to the 🔍 icon
   }
 
   // Admin toggle: flip the active server channel between open and read-only ('admins').
@@ -2549,17 +2554,35 @@ export function Chat({
               🔊 {voicePresence.length}
             </button>
           )}
-          {!activeChannelIsVoice && (
-            <form className="search-form" onSubmit={runSearch}>
-              <input
-                className="search-input"
-                placeholder="Search… (try from:user has:link before:2024-01-31)"
-                title="Filters: from:<user>, has:link, has:image, has:file, before:<YYYY-MM-DD>, after:<YYYY-MM-DD>"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </form>
-          )}
+          {!activeChannelIsVoice &&
+            (searchOpen ? (
+              <form className="search-form" onSubmit={runSearch}>
+                <input
+                  className="search-input"
+                  autoFocus
+                  placeholder="Search… (try from:user has:link before:2024-01-31)"
+                  title="Filters: from:<user>, has:link, has:image, has:file, before:<YYYY-MM-DD>, after:<YYYY-MM-DD>"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') clearSearch()
+                  }}
+                  onBlur={() => {
+                    // Collapse when the user clicks away from an empty box with no results showing.
+                    if (!searchQuery && searchResults === null) setSearchOpen(false)
+                  }}
+                />
+              </form>
+            ) : (
+              <button
+                className="link icon-btn search-toggle"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Search messages"
+                title="Search messages"
+              >
+                🔍
+              </button>
+            ))}
           <div className="meta">
             <span className={connected ? 'dot online' : 'dot offline'} />
             {online} online

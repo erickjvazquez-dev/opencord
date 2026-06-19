@@ -685,7 +685,7 @@ async function main() {
     '.topic-edit',
     '.pins-open',
     '.threads-open',
-    '.search-form',
+    '.search-toggle',
   ]) {
     check(
       (await page.locator(`.chat-header ${sel}`).count()) === 0,
@@ -869,6 +869,13 @@ async function main() {
   // 7c — Search the current channel and confirm the matching message shows.
   step('search the channel → matching message appears, clear returns to live')
   const searchBox = page.locator('.search-input')
+  // Collapsible search (slice 3): the input lives behind a 🔍 toggle — expand it first.
+  const openSearch = async () => {
+    const toggle = page.locator('.chat-header .search-toggle')
+    if (await toggle.count()) await toggle.click()
+    await searchBox.waitFor({ timeout: 4000 })
+  }
+  await openSearch()
   await searchBox.fill('server')
   await searchBox.press('Enter')
   await page.locator('.search-results').waitFor({ timeout: 8000 })
@@ -883,6 +890,7 @@ async function main() {
   // 7c-jump — a search result is clickable: clicking it closes the panel and jumps to +
   // flashes the message in the channel (jump-to-message via the close-a-panel path).
   step('click a search result → panel closes + the message flashes')
+  await openSearch()
   await searchBox.fill('server')
   await searchBox.press('Enter')
   const sResult = page.locator('.search-results .message.jumpable', { hasText: srvBody }).first()
@@ -899,6 +907,7 @@ async function main() {
 
   // 7c2 — Search operators: from:<author> finds the message; from:<nobody> finds none.
   step('search operator from: filters by author')
+  await openSearch()
   await searchBox.fill('from:' + user)
   await searchBox.press('Enter')
   await page.locator('.search-results').waitFor({ timeout: 8000 })
@@ -907,6 +916,7 @@ async function main() {
     'from:<self> finds my message in the channel',
   )
   await page.getByRole('button', { name: 'clear' }).click()
+  await openSearch()
   await searchBox.fill('from:nobody_' + user)
   await searchBox.press('Enter')
   await page.locator('.search-results').waitFor({ timeout: 8000 })
@@ -920,6 +930,7 @@ async function main() {
   // a far-future after: matches nothing (day-exclusive bounds). Fixed dates keep
   // the assertion deterministic regardless of when QA runs.
   step('search operators before:/after: filter by date')
+  await openSearch()
   await searchBox.fill('before:2099-01-01')
   await searchBox.press('Enter')
   await page.locator('.search-results').waitFor({ timeout: 8000 })
@@ -928,6 +939,7 @@ async function main() {
     'before:<far-future> finds my recent message',
   )
   await page.getByRole('button', { name: 'clear' }).click()
+  await openSearch()
   await searchBox.fill('after:2099-01-01')
   await searchBox.press('Enter')
   await page.locator('.search-results').waitFor({ timeout: 8000 })
