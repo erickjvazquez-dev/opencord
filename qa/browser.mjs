@@ -98,6 +98,36 @@ async function main() {
   await shot('01-auth.png')
   check(await page.getByPlaceholder('username').isVisible(), 'auth screen renders')
 
+  // 0b — PWA / branding metadata (iter 190): a branded favicon, a theme-color, and an
+  // installable web-app manifest. Assert the head links exist AND the referenced files
+  // actually serve (favicon as image/svg+xml; manifest as fetchable, valid, named JSON).
+  step('PWA: favicon + theme-color + installable manifest are present and served')
+  const head = await page.evaluate(() => ({
+    icon: document.querySelector('link[rel="icon"]')?.getAttribute('href') || '',
+    manifest: document.querySelector('link[rel="manifest"]')?.getAttribute('href') || '',
+    theme: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') || '',
+  }))
+  check(head.icon.endsWith('favicon.svg'), `favicon link present (${head.icon})`)
+  check(head.manifest.endsWith('manifest.json'), `manifest link present (${head.manifest})`)
+  check(/^#[0-9a-fA-F]{6}$/.test(head.theme), `theme-color meta present (${head.theme})`)
+  const favRes = await page.request.get(`${BASE}/favicon.svg`)
+  check(
+    favRes.ok() && (favRes.headers()['content-type'] || '').includes('image/svg+xml'),
+    `favicon.svg served as image/svg+xml (${favRes.status()} ${favRes.headers()['content-type']})`,
+  )
+  const manRes = await page.request.get(`${BASE}/manifest.json`)
+  let man = {}
+  try {
+    man = JSON.parse(await manRes.text())
+  } catch {
+    /* leaves man = {} → checks below fail loudly */
+  }
+  check(manRes.ok(), `manifest.json served (${manRes.status()})`)
+  check(
+    man.name === 'Opencord' && man.display === 'standalone' && (man.icons?.length ?? 0) > 0,
+    `manifest is a valid installable app manifest (name=${man.name} display=${man.display} icons=${man.icons?.length})`,
+  )
+
   const user = 'qabot' + String(Date.now()).slice(-7)
   step('switch to Register, fill credentials, submit')
   await page.getByRole('button', { name: 'No account? Register' }).click()

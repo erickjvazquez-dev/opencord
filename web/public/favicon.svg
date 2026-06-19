@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Opencord">
+  <rect width="512" height="512" rx="116" fill="#5865f2"/>
+  <rect x="116" y="150" width="280" height="196" rx="40" fill="#ffffff"/>
+  <path d="M188 332 L168 410 L260 332 Z" fill="#ffffff"/>
+  <circle cx="196" cy="248" r="22" fill="#5865f2"/>
+  <circle cx="256" cy="248" r="22" fill="#5865f2"/>
+  <circle cx="316" cy="248" r="22" fill="#5865f2"/>
+</svg>
