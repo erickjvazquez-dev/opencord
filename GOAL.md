@@ -327,6 +327,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   ArrowUp otherwise moves the caret, and the @mention dropdown still owns ArrowUp while open.
   Browser-QA `4b` (send → ArrowUp → edit input pre-filled → Escape) + AI-vision verified; shipped +
   rollout-verified.
+- [x] Esc-closes-panel DONE (iter 201) — pressing Esc closes the open right-side panel (pins → search
+  → members) or exits a thread to its parent (Discord standard). Global keydown handler, skipped while
+  typing and deferred whenever a modal/picker owns Esc (settings/new-DM/roles/profile/emoji/reaction/
+  PTT-rebind) so one Esc closes the topmost thing and the next the panel beneath. Browser-QA closes the
+  pins panel via Esc; the existing settings/profile Esc tests still pass (no conflict); shipped +
+  rollout-verified.
 - [x] Sidebar long-name truncation DONE — server/channel/DM names ellipsis-truncate
   (`.item-name`/`.server-name-text` get `min-width:0` + `overflow:hidden` + `text-overflow:
   ellipsis`; badge/avatar/#id/unread stay `flex-shrink:0`) with the full name in a `title`

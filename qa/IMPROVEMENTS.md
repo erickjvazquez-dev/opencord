@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 201) — "Exhausted small-win surface" was premature: a high-frequency keyboard gap (Esc-closes-panel) was still open
+
+After two green ticks I'd concluded the small-win surface was exhausted. Looking once more from a
+DIFFERENT angle — keyboard parity rather than security/coverage/layout — surfaced a real, high-frequency
+gap: Esc didn't close the open pins/search/members panel or exit a thread (a reflexive Discord habit).
+Shipped it: a global keydown handler gated to skip while typing and to DEFER to any open modal/picker.
+
+**Lesson — "no more small wins" is an angle-dependent claim, not an absolute.** My iters-199/200 sweep
+checked security, test-coverage, and layout and found everything handled; I generalized that to "nothing
+left." But I hadn't swept INTERACTION/keyboard parity. The honest version of "the surface is exhausted"
+is "exhausted along the axes I checked" — before declaring equilibrium, enumerate the axes (security,
+coverage, layout, **interaction/keyboard**, a11y, perf, error-states) and confirm each, rather than
+extrapolating from three.
+
+**The modal-deferral pattern, banked for reuse:** a new GLOBAL key handler must list every existing
+overlay that owns the same key and bail when one is open (here: settings/new-DM/roles/profile/emoji/
+reaction/PTT-rebind for Esc). The regression proof is cheap and strong: the pre-existing "Esc closes the
+settings modal / profile card" tests must STILL pass alongside the new "Esc closes the panel" — if the
+global handler fought them, one would flip. Green on both = the precedence is correct.
+
 ## 2026-06-19 (iter 200) — Maintenance EQUILIBRIUM reached; the remaining value is in big features that need a fresh-context design tick
 
 Second consecutive verified-green tick (idle_streak → 2, cadence at the 3600s ceiling). Checked one more
