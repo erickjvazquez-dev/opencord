@@ -3845,3 +3845,26 @@ refresh. Next group-DM work is feature (add/remove member, naming, stacked avata
 
 **Cadence:** real QA coverage added (no product change → no deploy) → ACTIVE (1800s); more group-DM
 sub-slices queued.
+
+## 2026-06-18 (tick 179) — group DM stacked member avatars (v0.2 UI polish) shipped
+
+A contained, visible Discord-parity slice (deliberately low-risk given a long session): the DM-list group
+row now shows a STACK of the first two members' avatars (`.dm-group-stack`, two 15px Avatars offset
+top-left/bottom-right, ringed in the sidebar bg) instead of a single generic people-glyph, so a group
+reads as "several people" at a glance. Frontend-only, reuses the existing Avatar component (img-or-
+initials → each member a distinct coloured circle). Updated the browser-QA assertion that previously
+checked the removed `.dm-group-avatar` glyph to assert `.dm-group-stack` + exactly 2 `.dm-stack-avatar`.
+tsc/vitest/go green; browser QA green; AI-vision confirmed the stack in the sidebar; rollout-verified.
+
+**Highest-value loop improvement (a consistency gap the vision pass surfaced, logged):** AI-vision caught
+that while the SIDEBAR row now stacks avatars, the WELCOME-INTRO big icon (the 68px circle at the top of
+an empty group conversation) still shows the generic 👥 emoji — a visible inconsistency now that the
+sidebar is richer. It's a separate element (channel-intro-icon), so out of this slice's scope, but logged
+as the next polish: render the same stacked avatars (or the members' avatars) in the intro icon for a
+group DM. General rule reinforced: when you upgrade one representation of an entity (the sidebar group
+icon), audit the OTHER places that entity renders (header, welcome, member panel) for the same upgrade.
+
+**Coverage note:** group DMs now have create + render (now stacked avatars) + leave (full multi-level
+coverage). Unbuilt: group naming, add/remove member; the intro-icon consistency follow-up.
+
+**Cadence:** shipped a UI feature → ACTIVE (1800s).
