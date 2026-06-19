@@ -410,6 +410,54 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					w.WriteHeader(http.StatusNoContent)
 				}
 			})
+			// Add a member to a group DM (any member can add, Discord-style). Notifies the
+			// existing members AND the new member so both see the updated roster / new group live.
+			r.Post("/dms/{id}/members", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				var in struct {
+					Identifier string `json:"identifier"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				target, err := store.LookupUserByIdentifier(r.Context(), in.Identifier)
+				if errors.Is(err, chat.ErrUserNotFound) {
+					http.Error(w, `{"error":"no user found for that username or id"}`, http.StatusNotFound)
+					return
+				}
+				if err != nil {
+					http.Error(w, `{"error":"could not look up user"}`, http.StatusInternalServerError)
+					return
+				}
+				switch err := store.AddGroupDMMember(r.Context(), id, me.ID, target.ID); {
+				case errors.Is(err, chat.ErrForbidden):
+					http.Error(w, `{"error":"only a member can add to this group"}`, http.StatusForbidden)
+				case errors.Is(err, chat.ErrNotGroupDM):
+					http.Error(w, `{"error":"you can only add to a group DM"}`, http.StatusBadRequest)
+				case errors.Is(err, chat.ErrGroupTooLarge):
+					http.Error(w, `{"error":"group DM exceeds the 10-member limit"}`, http.StatusBadRequest)
+				case errors.Is(err, chat.ErrAlreadyMember):
+					http.Error(w, `{"error":"that user is already in this group"}`, http.StatusConflict)
+				case errors.Is(err, chat.ErrBlocked):
+					http.Error(w, `{"error":"cannot add this user"}`, http.StatusForbidden)
+				case errors.Is(err, chat.ErrChannelNotFound):
+					http.Error(w, `{"error":"group DM not found"}`, http.StatusNotFound)
+				case err != nil:
+					http.Error(w, `{"error":"could not add to the group"}`, http.StatusInternalServerError)
+				default:
+					// Existing members + the actor refetch their DM list (new roster) live...
+					hub.BroadcastToChannel(id, ws.Event{Type: "dm-membership", ChannelID: id})
+					// ...and the NEW member's client refetches so the group appears in their sidebar.
+					hub.SendToUser(target.ID, ws.Event{Type: "dm-membership", ChannelID: id})
+					w.WriteHeader(http.StatusNoContent)
+				}
+			})
 			mountServerRoutes(r, store, hub)
 			r.Get("/messages", chat.HandleRecent(store))
 			// Create a message carrying file/image attachments (multipart). Plain

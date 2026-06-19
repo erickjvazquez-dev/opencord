@@ -33,9 +33,11 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 	// ErrCannotDMSelf is returned when a user tries to open a DM with themselves.
 	ErrCannotDMSelf = errors.New("cannot DM yourself")
-	// ErrNotGroupDM is returned when leaving a channel that isn't a group DM (a 1:1 DM
-	// or a non-DM channel can't be "left").
+	// ErrNotGroupDM is returned when leaving/adding to a channel that isn't a group DM (a
+	// 1:1 DM or a non-DM channel can't be "left"/added to).
 	ErrNotGroupDM = errors.New("can only leave a group DM")
+	// ErrAlreadyMember is returned when adding a user who is already in the group DM.
+	ErrAlreadyMember = errors.New("user is already in this group DM")
 	// ErrForbidden is returned when a user acts on a channel they can't access
 	// (e.g. reacting to a message in a DM they're not a member of).
 	ErrForbidden = errors.New("forbidden")
@@ -1255,6 +1257,51 @@ func (s *Store) LeaveGroupDM(ctx context.Context, channelID, userID int64) error
 	}
 	_, err = s.pool.Exec(ctx,
 		`DELETE FROM channel_members WHERE channel_id = $1 AND user_id = $2`, channelID, userID)
+	return err
+}
+
+// AddGroupDMMember adds targetID to a GROUP DM (kind='dm', ≥3 members). The actor must be a
+// member (checked FIRST, so a non-member never leaks the channel's kind/size — Rule B); a 1:1
+// DM or non-DM channel → ErrNotGroupDM (start a NEW group instead of adding to a 1:1); the
+// 10-member cap → ErrGroupTooLarge; an existing member → ErrAlreadyMember; a block either way
+// (symmetric) → ErrBlocked. The caller resolves the target identifier to targetID first. On
+// success the target gains access immediately (a channel_members row); messages are untouched.
+func (s *Store) AddGroupDMMember(ctx context.Context, channelID, actorID, targetID int64) error {
+	var kind string
+	var memberCount int
+	var actorIsMember, targetIsMember bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT c.kind,
+		       (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id),
+		       EXISTS(SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = $2),
+		       EXISTS(SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = $3)
+		  FROM channels c WHERE c.id = $1`,
+		channelID, actorID, targetID).Scan(&kind, &memberCount, &actorIsMember, &targetIsMember)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrChannelNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !actorIsMember {
+		return ErrForbidden // only a member can add to the group (checked first, no leak)
+	}
+	if kind != "dm" || memberCount < 3 {
+		return ErrNotGroupDM // a 1:1 or non-DM channel — can't add (start a new group instead)
+	}
+	if memberCount >= 10 {
+		return ErrGroupTooLarge
+	}
+	if targetIsMember {
+		return ErrAlreadyMember
+	}
+	if blocked, err := s.IsBlocked(ctx, actorID, targetID); err != nil {
+		return err
+	} else if blocked {
+		return ErrBlocked
+	}
+	_, err = s.pool.Exec(ctx,
+		`INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)`, channelID, targetID)
 	return err
 }
 

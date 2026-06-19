@@ -16,6 +16,7 @@ import {
   fetchChannels,
   fetchDMs,
   leaveGroupDM,
+  addGroupDMMember,
   fetchServerChannels,
   listServerEmoji,
   uploadServerEmoji,
@@ -2051,6 +2052,20 @@ export function Chat({
     setActiveThread(null) // leaving a thread for a normal channel
   }
 
+  // Add a member to a group DM: prompt for a username/id, call the API, then refetch the DM
+  // list so the new member shows immediately (everyone else refreshes via the WS event).
+  const addToGroup = async (dm: DMChannel) => {
+    if (!dmIsGroup(dm)) return
+    const ident = window.prompt('Add to the group — username or user ID:')?.trim()
+    if (!ident) return
+    try {
+      await addGroupDMMember(token, dm.id, ident)
+      fetchDMs(token).then(setDms).catch(() => {})
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'could not add to the group')
+    }
+  }
+
   // Leave a group DM: confirm, call the API, drop it from the sidebar, and fall back to
   // #general if it was the open channel. The remaining members refresh via a WS event.
   const leaveGroup = async (dm: DMChannel) => {
@@ -2386,6 +2401,15 @@ export function Chat({
               data-muted={mutedChannels.has(channelId)}
             >
               {mutedChannels.has(channelId) ? '🔕 muted' : '🔔 mute'}
+            </button>
+          )}
+          {activeDM && dmIsGroup(activeDM) && (
+            <button
+              className="link add-to-group"
+              onClick={() => void addToGroup(activeDM)}
+              title="Add someone to this group DM"
+            >
+              ➕ add
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (

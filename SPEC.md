@@ -2570,3 +2570,30 @@ members' avatars so a group reads as "several people" at a glance.
 `.dm-group-stack` with exactly 2 `.dm-stack-avatar`; AI-vision confirmed the stacked avatars in the
 sidebar. (Follow-up: the welcome-intro big icon still uses the 👥 emoji — optionally stack it too.)
 Ship + `railway up` + rollout-verify.
+
+## Group DM — add member (v0.2 DM sub-slice)
+
+**Why:** mirrors leave-group to complete group-DM membership management. In Discord you ADD people to a
+group (and only ever leave yourself — there's no "remove other"), so add+leave is the full set.
+
+- **Store `AddGroupDMMember(ctx, channelID, actorID, targetID)`:** verify the actor is a member (checked
+  FIRST, no existence leak — Rule B), the channel is a GROUP DM (`kind='dm'`, ≥3 members; a 1:1 can't be
+  added to — start a new group instead → `ErrNotGroupDM`), the group is under the 10-member cap
+  (`ErrGroupTooLarge`), the target isn't already in it (`ErrAlreadyMember`), and there's no block either
+  way (`ErrBlocked`, symmetric). Then INSERT the membership row. The route resolves the
+  username/id identifier via `LookupUserByIdentifier` (→ `ErrUserNotFound`/404) before calling.
+- **Route `POST /api/dms/{id}/members {identifier}`:** auth (Rule C), resolve identifier, add, then
+  notify realtime — `BroadcastToChannel(id, dm-membership)` (existing members + the actor refetch their
+  DM list → updated roster) AND `SendToUser(targetID, dm-membership)` (the NEW member's client refetches
+  → the group appears in their sidebar live, even though they weren't connected to the channel). 204;
+  maps `ErrNotGroupDM`→400, `ErrForbidden`→403, `ErrAlreadyMember`→409, `ErrBlocked`→403,
+  `ErrGroupTooLarge`→400, not-found→404.
+- **Client:** `addGroupDMMember(token, id, identifier)`; an **"➕ add"** header button (only when
+  `dmIsGroup`) → prompts for a username → on success refetches DMs (immediate roster/stack update).
+
+**Verify (Rule 14/15):** `TestAddGroupDMMemberIntegration` (add → the new member's ListDMs includes the
+group, roster grows; adversarial: non-member actor→ErrForbidden, 1:1→ErrNotGroupDM, already-member→
+ErrAlreadyMember, blocked→ErrBlocked, cap→ErrGroupTooLarge); browser flow adds a member + asserts the
+group title/stack updates; live E2E (add→204, the new member's /api/dms now lists the group). Ship +
+`railway up` + rollout-verify. (Two-client realtime "added member sees the group appear LIVE" → next
+tick, mirroring the leave-group coverage cadence.)

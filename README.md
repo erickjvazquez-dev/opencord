@@ -121,6 +121,7 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `POST`   | `/api/dms`                     | bearer | Open/get a DM with `{username}`                |
 | `POST`   | `/api/dms/group`               | bearer | Start a group DM with `{identifiers:[…]}`       |
 | `POST`   | `/api/dms/{id}/leave`          | bearer | Leave a group DM (≥3 members)                  |
+| `POST`   | `/api/dms/{id}/members`        | bearer | Add a member to a group DM (`{identifier}`)    |
 | `GET`    | `/api/servers`                 | bearer | List servers you belong to                     |
 | `POST`   | `/api/servers`                 | bearer | Create a server `{name}` (you auto-join as owner) |
 | `PATCH`  | `/api/servers/{id}`            | bearer | Rename a server `{name}` (admin)               |

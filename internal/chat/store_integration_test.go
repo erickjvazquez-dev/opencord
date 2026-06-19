@@ -2768,3 +2768,74 @@ func mustListDMs(t *testing.T, store *chat.Store, userID int64) []chat.DMChannel
 	}
 	return dms
 }
+
+// TestAddGroupDMMemberIntegration verifies adding a member to a GROUP DM: the new member's
+// ListDMs includes the group and the roster grows; with the full adversarial matrix (non-member
+// actor, 1:1, already-member, block, 10-member cap).
+func TestAddGroupDMMemberIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+	dave := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	grp, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, carol.ID})
+	if err != nil {
+		t.Fatalf("create group DM: %v", err)
+	}
+
+	// Adversarial: a non-member can't add (checked first → ErrForbidden, no leak).
+	if err := store.AddGroupDMMember(ctx, grp.ID, stranger.ID, dave.ID); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-member add = %v, want ErrForbidden", err)
+	}
+	// A 1:1 DM can't be added to (start a new group instead).
+	oneToOne, _ := store.CreateOrGetDM(ctx, alice.ID, stranger.ID)
+	if err := store.AddGroupDMMember(ctx, oneToOne.ID, alice.ID, dave.ID); !errors.Is(err, chat.ErrNotGroupDM) {
+		t.Fatalf("add to 1:1 = %v, want ErrNotGroupDM", err)
+	}
+	// Already a member → ErrAlreadyMember.
+	if err := store.AddGroupDMMember(ctx, grp.ID, alice.ID, bob.ID); !errors.Is(err, chat.ErrAlreadyMember) {
+		t.Fatalf("add existing = %v, want ErrAlreadyMember", err)
+	}
+
+	// A member (alice) adds dave → dave's ListDMs now includes the group.
+	if err := store.AddGroupDMMember(ctx, grp.ID, alice.ID, dave.ID); err != nil {
+		t.Fatalf("add dave: %v", err)
+	}
+	daveHasGroup := false
+	for _, d := range mustListDMs(t, store, dave.ID) {
+		if d.ID == grp.ID {
+			daveHasGroup = true
+			// dave sees alice, bob, carol as the others (roster grew to 4 total).
+			if len(d.Users) != 3 {
+				t.Fatalf("dave's group others = %d, want 3", len(d.Users))
+			}
+		}
+	}
+	if !daveHasGroup {
+		t.Fatalf("added member dave doesn't see the group: %+v", mustListDMs(t, store, dave.ID))
+	}
+
+	// Block: alice blocks carol... actually carol blocks a new user; verify a blocked add is refused.
+	blockee := regUser(t, pool)
+	if err := store.BlockUser(ctx, alice.ID, blockee.ID); err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	if err := store.AddGroupDMMember(ctx, grp.ID, alice.ID, blockee.ID); !errors.Is(err, chat.ErrBlocked) {
+		t.Fatalf("add blocked = %v, want ErrBlocked", err)
+	}
+
+	// Cap: fill to 10 members, then the 11th add is ErrGroupTooLarge. The group has 4
+	// (alice,bob,carol,dave); add 6 more to reach 10.
+	for i := 0; i < 6; i++ {
+		u := regUser(t, pool)
+		if err := store.AddGroupDMMember(ctx, grp.ID, alice.ID, u.ID); err != nil {
+			t.Fatalf("fill add %d: %v", i, err)
+		}
+	}
+	over := regUser(t, pool)
+	if err := store.AddGroupDMMember(ctx, grp.ID, alice.ID, over.ID); !errors.Is(err, chat.ErrGroupTooLarge) {
+		t.Fatalf("add over cap = %v, want ErrGroupTooLarge", err)
+	}
+}

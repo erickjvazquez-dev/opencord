@@ -123,6 +123,23 @@ export async function leaveGroupDM(token: string, dmId: number): Promise<void> {
   }
 }
 
+// Add a member (by username or user id) to a group DM. 204 on success.
+export async function addGroupDMMember(
+  token: string,
+  dmId: number,
+  identifier: string,
+): Promise<void> {
+  const res = await fetch(`/api/dms/${dmId}/members`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ identifier }),
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as { error?: string }).error || 'could not add to the group')
+  }
+}
+
 // Mint an invite. maxUses (optional, 1–1000) caps how many members the code admits;
 // omit it for an unlimited code (the default).
 export async function createInvite(

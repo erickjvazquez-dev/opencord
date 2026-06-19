@@ -1916,6 +1916,24 @@ async function main() {
   )
   await page.locator('.channel-intro').screenshot({ path: join(SHOTS, '07k-group-intro.png') })
 
+  // Add a member to the group (➕ add header action) → the title grows to include them.
+  step('add a member to the group → the title includes the new member')
+  const grpD = 'qagrpd' + String(Date.now()).slice(-6)
+  await page.evaluate(async (name) => {
+    await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: name, password: 'hunter2' }),
+    })
+  }, grpD)
+  promptAnswer = grpD // answer the addToGroup username prompt
+  await page.locator('.chat-header .add-to-group').click()
+  await page.locator('.brand .channel').filter({ hasText: grpD }).waitFor({ timeout: 8000 })
+  check(
+    (await page.locator('.brand .channel').textContent())?.includes(grpD),
+    'the group title includes the newly added member',
+  )
+
   // Leave the group DM: open it → the header shows a "leave group" action (only for groups)
   // → clicking it (confirm auto-accepted) removes the group from the sidebar.
   step('leave a group DM → the header action removes it from the DM list')
