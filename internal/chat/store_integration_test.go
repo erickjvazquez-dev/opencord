@@ -54,7 +54,15 @@ func regUser(t *testing.T, pool *pgxpool.Pool) auth.User {
 	return u
 }
 
-func uniqueChannel() string { return fmt.Sprintf("itest-%d", time.Now().UnixNano()) }
+var chanCounter int64
+
+// uniqueChannel must be collision-proof: tests share one DB and each setup() re-runs the migration
+// that re-creates the global channel-name UNIQUE index, so two same-named global channels (two
+// UnixNano() calls colliding within a fast run) make a later test's migrate fail with 23505. The
+// atomic counter guarantees uniqueness regardless of clock resolution (mirrors userCounter).
+func uniqueChannel() string {
+	return fmt.Sprintf("itest-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&chanCounter, 1))
+}
 
 func TestChannelStoreIntegration(t *testing.T) {
 	store, _, _ := setup(t)
@@ -2903,5 +2911,67 @@ func TestRenameGroupDMIntegration(t *testing.T) {
 	}
 	if err := store.RenameGroupDM(ctx, grp2.ID, alice.ID, "Shared Name"); err != nil {
 		t.Fatalf("two groups should be allowed the same name, got: %v", err)
+	}
+}
+
+// TestRecentBeforePaginationIntegration covers the scroll-up history cursor (iter 203):
+// RecentBefore(beforeID>0) returns only messages OLDER than that id (oldest-first), beforeID==0
+// is the newest page, limit is respected, and there's nothing older than the first message. The
+// Recent wrapper must keep its old behavior (== before=0).
+func TestRecentBeforePaginationIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	ch, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	ids := make([]int64, 0, 5)
+	for i := 1; i <= 5; i++ {
+		m, err := store.Save(ctx, ch.ID, u.ID, u.Username, fmt.Sprintf("msg %d", i))
+		if err != nil {
+			t.Fatalf("save msg %d: %v", i, err)
+		}
+		ids = append(ids, m.ID)
+	}
+
+	// Newest page (before=0) returns all 5, oldest-first.
+	all, err := store.RecentBefore(ctx, ch.ID, u.ID, 0, 50)
+	if err != nil {
+		t.Fatalf("recent newest page: %v", err)
+	}
+	if len(all) != 5 || all[0].Body != "msg 1" || all[4].Body != "msg 5" {
+		t.Fatalf("newest page wrong: %d msgs (first=%q last=%q)", len(all), all[0].Body, all[len(all)-1].Body)
+	}
+
+	// before=<id of msg 3> returns only the OLDER ones (msg 1, msg 2), oldest-first.
+	page, err := store.RecentBefore(ctx, ch.ID, u.ID, ids[2], 50)
+	if err != nil {
+		t.Fatalf("recentBefore msg3: %v", err)
+	}
+	if len(page) != 2 || page[0].Body != "msg 1" || page[1].Body != "msg 2" {
+		t.Fatalf("before-cursor page wrong: %d msgs %v", len(page), page)
+	}
+
+	// limit is respected: before=0 limit 2 → the newest 2 (msg 4, msg 5).
+	last2, err := store.RecentBefore(ctx, ch.ID, u.ID, 0, 2)
+	if err != nil {
+		t.Fatalf("recentBefore limit: %v", err)
+	}
+	if len(last2) != 2 || last2[0].Body != "msg 4" || last2[1].Body != "msg 5" {
+		t.Fatalf("limited newest page wrong: %d msgs", len(last2))
+	}
+
+	// Nothing is older than the very first message.
+	empty, err := store.RecentBefore(ctx, ch.ID, u.ID, ids[0], 50)
+	if err != nil {
+		t.Fatalf("recentBefore oldest: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("expected no messages older than the first, got %d", len(empty))
+	}
+
+	// The Recent wrapper is unchanged (== before=0).
+	if rec, err := store.Recent(ctx, ch.ID, u.ID, 50); err != nil || len(rec) != 5 {
+		t.Fatalf("Recent wrapper changed behavior: len=%d err=%v", len(rec), err)
 	}
 }

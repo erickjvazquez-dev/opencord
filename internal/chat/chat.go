@@ -2706,6 +2706,13 @@ func (s *Store) RevokeInvite(ctx context.Context, serverID int64, code string) e
 // Recent returns up to limit messages from the given channel in chronological
 // (oldest-first) order.
 func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int) ([]Message, error) {
+	return s.RecentBefore(ctx, channelID, viewerID, 0, limit)
+}
+
+// RecentBefore is Recent with a pagination cursor for scroll-up history loading: beforeID > 0
+// returns the page of up to `limit` messages strictly OLDER than that message id; beforeID == 0
+// is the newest page (identical to Recent). The page is still oldest-first within itself.
+func (s *Store) RecentBefore(ctx context.Context, channelID, viewerID, beforeID int64, limit int) ([]Message, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT m.id, m.channel_id, m.user_id, u.username, m.body, m.created_at, m.deleted_at, m.edited_at, m.pinned,
 		        m.reply_to, ru.username, r.body, r.deleted_at, `+authorColorSQL+`, t.id, COALESCE(t.name, '')
@@ -2713,8 +2720,8 @@ func (s *Store) Recent(ctx context.Context, channelID, viewerID int64, limit int
 		   LEFT JOIN messages r ON r.id = m.reply_to
 		   LEFT JOIN users ru ON ru.id = r.user_id
 		   LEFT JOIN channels t ON t.source_message_id = m.id AND t.kind = 'thread'
-		  WHERE m.channel_id = $1
-		  ORDER BY m.id DESC LIMIT $2`, channelID, limit)
+		  WHERE m.channel_id = $1 AND ($3 = 0 OR m.id < $3)
+		  ORDER BY m.id DESC LIMIT $2`, channelID, limit, beforeID)
 	if err != nil {
 		return nil, err
 	}
@@ -2970,7 +2977,12 @@ func HandleRecent(store *Store) http.HandlerFunc {
 			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 			return
 		}
-		msgs, err := store.Recent(r.Context(), channelID, viewer.ID, 50)
+		// ?before=<id> pages OLDER history (scroll-up loading); absent/0/invalid = the newest page.
+		var before int64
+		if b := r.URL.Query().Get("before"); b != "" {
+			before, _ = strconv.ParseInt(b, 10, 64)
+		}
+		msgs, err := store.RecentBefore(r.Context(), channelID, viewer.ID, before, 50)
 		if err != nil {
 			http.Error(w, `{"error":"could not load messages"}`, http.StatusInternalServerError)
 			return
