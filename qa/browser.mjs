@@ -500,6 +500,28 @@ async function main() {
   const edited = page.locator('.message', { hasText: 'edited by the qa bot' }).first()
   check(await edited.locator('.reaction.mine').isVisible(), 'reaction survives the edit')
 
+  // 4b — Up-arrow in an EMPTY composer opens your most recent message for editing (Discord
+  // shortcut, iter 194). Send a known message first so the target is deterministic.
+  step('empty composer + ArrowUp → edits your last message inline')
+  const composer4 = page.getByPlaceholder(/Message #/)
+  await page.waitForTimeout(1500) // let the WS send bucket refill before this send
+  await composer4.click()
+  await composer4.fill('arrow-up edit me')
+  await composer4.press('Enter')
+  await page.getByText('arrow-up edit me').waitFor({ timeout: 8000 })
+  // Composer is empty again; ArrowUp should open that message inline.
+  await composer4.click()
+  await composer4.press('ArrowUp')
+  const upEdit = page.locator('.edit-row input')
+  await upEdit.waitFor({ timeout: 4000 })
+  check(
+    (await upEdit.inputValue()) === 'arrow-up edit me',
+    'ArrowUp on an empty composer opens the last own message for editing',
+  )
+  await shot('04b-arrowup-edit.png')
+  await upEdit.press('Escape') // cancel — leave the message unchanged
+  await page.locator('.edit-row').waitFor({ state: 'detached', timeout: 4000 }).catch(() => {})
+
   // 5 — Create a channel and see it in the sidebar.
   step('create a channel via "+ New channel"')
   await page.getByRole('button', { name: '+ New channel' }).click()

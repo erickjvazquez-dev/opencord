@@ -3760,6 +3760,16 @@ export function Chat({
                   return
                 }
               }
+              // Empty composer + ArrowUp → edit your most recent message (Discord shortcut). Only
+              // when the composer is empty and not already editing, so ArrowUp otherwise moves the
+              // caret as normal. The mention block above already owns ArrowUp when its dropdown is open.
+              if (e.key === 'ArrowUp' && draft === '' && editingId === null) {
+                const mine = [...messages].reverse().find((m) => m.userId === user.id && !m.deleted)
+                if (mine) {
+                  e.preventDefault()
+                  startEdit(mine)
+                }
+              }
               // Enter sends; Shift+Enter inserts a newline (Discord convention).
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
