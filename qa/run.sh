@@ -59,6 +59,11 @@ for f in "$ROOT"/qa/*.mjs; do
   node --check "$f" || { echo "[qa] SYNTAX ERROR in $f — aborting before boot"; exit 1; }
 done
 
+# Rule 15 — XSS-by-construction guard: fail the QA if any unsafe HTML/eval sink was introduced in
+# the client (dangerouslySetInnerHTML / innerHTML= / eval / …). Cheap source scan, pre-boot.
+echo "[qa] scanning client for unsafe HTML/eval sinks (Rule 15)…"
+node "$ROOT/web/scripts/check-no-unsafe-sinks.mjs" || { echo "[qa] unsafe sink found — aborting"; exit 1; }
+
 echo "[qa] installing Playwright (first run only)…"
 ( cd qa && npm install --silent && npx --yes playwright install chromium >/dev/null 2>&1 )
 
