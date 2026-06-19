@@ -1766,7 +1766,13 @@ async function main() {
   await pinsPanel.waitFor({ timeout: 8000 })
   await shot('07h-pins-panel.png')
   check(await pinsPanel.getByText(srvBody).isVisible(), 'pins panel lists the pinned message')
-  await pinsPanel.getByRole('button', { name: /close/ }).click()
+  // Esc closes the open panel (iter 201, Discord-standard): press Escape → the pins panel closes.
+  await page.keyboard.press('Escape')
+  await pinsPanel.waitFor({ state: 'detached', timeout: 4000 })
+  check(
+    (await page.locator('.search-results', { hasText: 'pinned message' }).count()) === 0,
+    'Esc closes the open pins panel',
+  )
 
   // 7i — Uploaded avatar: the viewer sets a profile picture via the settings modal
   // (My Account → Change Avatar) → the settings preview + header chip show the image

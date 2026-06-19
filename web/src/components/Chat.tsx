@@ -2175,6 +2175,31 @@ export function Chat({
     setSearchOpen(false) // collapse back to the 🔍 icon
   }
 
+  // Esc closes the open right-side panel (pins → search → members) or exits a thread, like
+  // Discord. Skipped while typing in a field, and deferred whenever a modal/picker owns Esc
+  // (each dismisses itself) — so one Esc closes the topmost thing, the next the panel beneath.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || isEditableTarget(e.target)) return
+      if (
+        settingsOpen ||
+        newDMOpen ||
+        rolesManagerFor != null ||
+        profileMember ||
+        emojiPickerOpen ||
+        pickerFor != null ||
+        bindingKey
+      )
+        return
+      if (pins !== null) setPins(null)
+      else if (searchResults !== null) clearSearch()
+      else if (membersOf !== null) setMembersOf(null)
+      else if (inThread && activeThread?.parentId != null) selectChannel(activeThread.parentId)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   // Admin toggle: flip the active server channel between open and read-only ('admins').
   const toggleReadOnly = async () => {
     if (!activeServerChannel || activeServerId == null) return
