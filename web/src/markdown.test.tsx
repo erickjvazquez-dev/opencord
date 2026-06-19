@@ -120,3 +120,67 @@ describe('renderMarkdown custom emoji (:name:)', () => {
     expect(strong).toBeTruthy()
   })
 })
+
+// Every <a> element the renderer emitted.
+function links(node: ReactNode) {
+  return flatten(node).filter(
+    (n): n is React.ReactElement<Record<string, unknown>> => isValidElement(n) && n.type === 'a',
+  )
+}
+// Every element whose type is a raw HTML tag NAME (string), e.g. an injected 'script'/'img'.
+function tags(node: ReactNode, tag: string) {
+  return flatten(node).filter((n) => isValidElement(n) && n.type === tag)
+}
+
+// Rule 15 — the autolinker is the single most security-sensitive render path: it is the only
+// place a URL becomes a clickable <a href>. These tests ENCODE its safety invariants so a future
+// change (e.g. broadening the scheme regex) that reintroduced javascript:/data: XSS fails loudly.
+// markdown.tsx returns React elements only (never dangerouslySetInnerHTML), so raw HTML in a
+// message body must always render as literal, inert text (Rule B).
+describe('renderMarkdown link & raw-HTML safety (Rule 15)', () => {
+  it('does NOT autolink a javascript: URL — it stays literal text, no <a>', () => {
+    const out = renderMarkdown('click javascript:alert(1) now')
+    expect(links(out)).toHaveLength(0)
+    expect(allText(out)).toContain('javascript:alert(1)')
+  })
+
+  it('does NOT autolink a data: URL (would be an HTML-payload vector) — literal, no <a>', () => {
+    const out = renderMarkdown('x data:text/html,<b>hi</b> y')
+    expect(links(out)).toHaveLength(0)
+    expect(allText(out)).toContain('data:text/html')
+  })
+
+  it('only http(s):// autolinks, and the <a> carries target=_blank + rel=noopener noreferrer', () => {
+    for (const url of ['http://a.example', 'https://b.example/path?q=1']) {
+      const ls = links(renderMarkdown(`go ${url} end`))
+      expect(ls).toHaveLength(1)
+      expect(ls[0].props.href).toBe(url)
+      expect(ls[0].props.target).toBe('_blank')
+      // noopener/noreferrer defeats reverse-tabnabbing (the opened page can't touch window.opener).
+      expect(ls[0].props.rel).toBe('noopener noreferrer')
+    }
+  })
+
+  it('never extracts attributes from a URL — an embedded quote stays inside href, no on* handler', () => {
+    // The whole token (incl. the quote + onmouseover text) is one URL string set as `href`;
+    // React escapes it as an attribute value. The parser must NOT split it into separate props.
+    const out = renderMarkdown('http://evil.example/"onmouseover="alert(1) tail')
+    const ls = links(out)
+    expect(ls).toHaveLength(1)
+    // href is the literal URL string (trailing sentence punctuation may be trimmed) — still http.
+    expect(String(ls[0].props.href).startsWith('http://evil.example/')).toBe(true)
+    // No event-handler prop was ever created from the URL content.
+    expect(Object.keys(ls[0].props).some((k) => /^on/i.test(k))).toBe(false)
+    expect('onmouseover' in ls[0].props).toBe(false)
+  })
+
+  it('renders raw <script>/<img onerror> in a message as INERT literal text (no element injected)', () => {
+    const out = renderMarkdown('<script>alert(1)</script> and <img src=x onerror=alert(2)>')
+    // No real <script> or <img> tag element was emitted — only literal strings.
+    expect(tags(out, 'script')).toHaveLength(0)
+    expect(tags(out, 'img')).toHaveLength(0)
+    const text = allText(out)
+    expect(text).toContain('<script>')
+    expect(text).toContain('<img src=x onerror=alert(2)>')
+  })
+})
