@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 189) — Rule-15 ledger advanced to the RICHEST surface (markdown autolinker); deferred the header redesign as spec-worthy
+
+Continued the render-site XSS-guard ledger, but jumped to the **highest-leverage** entry instead of the
+next plain-text one: the **markdown autolinker** — the only render path that turns user text into a
+clickable `<a href>`, and thus the one place a careless future change (broadening the scheme regex)
+could reintroduce real `javascript:`/`data:` XSS. Encoded 5 invariants as unit tests: javascript:/data:
+never autolink, only http(s) does, every `<a>` carries `target=_blank` + `rel=noopener noreferrer`, the
+parser never extracts attributes from a URL, and raw `<script>/<img onerror>` render inert. vitest 86/86.
+
+**Ledger status:** guarded = message body (now incl. explicit autolinker + raw-HTML unit tests), About
+Me (iter 141), group name (iter 187). Still unguarded (quick future wins): server name, channel
+name/topic, status text — all plain-text (React-escaped), lower-risk than the autolinker, so rightly
+deprioritised behind it. **Lesson — when working a guard ledger, order by BLAST RADIUS, not by list
+order: harden the one surface that turns text into executable/clickable output before the N plain-text
+ones that only ever render as escaped strings.**
+
+**Deferred (correctly):** the iter-188 P2 — icon-ify the DM header's text-label controls / overflow
+menu — is the real single-row fix, but it's a multi-element redesign (~10 buttons + a collapsible
+search) that needs a SPEC.md entry (Rule 6) and careful staging so it doesn't regress the many header
+QA flows. A partial slice would repeat the iter-188 "doesn't visibly fix it" trap. **Recommendation: a
+dedicated tick that specs then builds it end-to-end**, rather than nibbling at it. It stays a P2 in
+GOAL.md until then.
+
 ## 2026-06-19 (iter 188) — Header title truncation; AI-vision kept the fix HONEST (a green metric assertion ≠ the visual outcome)
 
 Fixed the iter-187 P1: the chat header title now ellipsis-truncates (`max-width:min(36ch,55vw)`, the
