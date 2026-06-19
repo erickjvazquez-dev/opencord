@@ -215,7 +215,11 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   classes → icon-ify → collapsible search → optional overflow → vision-verify single-row). **Slice 1
   DONE (iter 196):** QA selectors → classes. **Slice 2 DONE (iter 197):** action buttons icon-ified
   (aria-label + title); header cut from THREE rows → TWO (AI-vision verified), shipped + rollout-verified.
-  **Slice 3 (collapsible search) remaining** to reach single-row.
+  **Slice 3 DONE (iter 198):** collapsible 🔍 search — the action bar is now a single icon row; the
+  header is single-row with the on-demand member panel CLOSED (default). **Only remaining (optional
+  slice 4):** with the member panel OPEN the meta cluster (online/username/logout) still wraps to a 2nd
+  row; compacting/relocating it gives true single-row in that narrowed case too. P2 effectively resolved
+  for the common view.
 - [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
   video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
   publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go

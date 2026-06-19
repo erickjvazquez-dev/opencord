@@ -2650,7 +2650,13 @@ icon-only would break all of those at once. Doing it on a long session risks a m
    hover pill). readonly STATE moved text→aria-label; voice-presence count asserted via data-count. Cut
    the header from THREE rows → TWO (AI-vision verified); shipped + rollout-verified. Slice 3 (search)
    completes single-row.
-3. **Collapsible search.** Replace the always-open ~240px search box with a 🔍 icon that expands the
+3. **Collapsible search. — DONE (iter 198).** The ~240px search box is now a 🔍 icon that expands the
+   input on click and collapses on Esc / empty blur / channel-switch / clear. The action bar is a
+   single icon row; with the on-demand member-list panel CLOSED (default) the header is single-row.
+   Remaining: with the panel OPEN the meta cluster (online/username/logout) still wraps — slice 4 below.
+   QA uses an idempotent `openSearch()` (click 🔍 then fill). Shipped + rollout-verified.
+
+   *(original slice-3 plan kept for reference below.)* Replace the always-open ~240px search box with a 🔍 icon that expands the
    input on click (Esc/blur collapses) — reclaims the single biggest chunk of width. QA: click 🔍 →
    `.search-input` appears → type → results; collapse afterwards.
 4. **(Optional) overflow "⋯" menu** for the least-used actions (edit-topic, slowmode) if still tight.

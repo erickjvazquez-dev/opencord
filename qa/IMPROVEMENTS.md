@@ -3,6 +3,26 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 198) — Header redesign SLICE 3 (collapsible search): a state-gated element needs the QA to OPEN it first
+
+Final functional slice: the always-open search box became a 🔍 toggle (expand on click, collapse on
+Esc/empty-blur/channel-switch/clear). Action bar is now a single icon row; shipped + rollout-verified.
+The 3-row → 2-row → (action-bar single-row) arc of the header P2 is essentially resolved for the common
+(member-panel-closed) view; the only residue is the meta cluster wrapping when the panel is open (logged
+optional slice 4).
+
+**QA lesson — when an element becomes state-gated (only exists when expanded), the test must OPEN it
+first, idempotently.** The search input now lives behind the toggle, so I added an `openSearch()` helper
+that clicks `.search-toggle` IF present (collapsed) then waits for `.search-input`, and called it before
+EVERY search fill — because `clearSearch` (and channel-switch) now collapse the box, so a fill after a
+clear would hit a missing input. Idempotent-open-before-use is the clean pattern for any
+expand/collapse UI (it's the same shape as "ensure the panel is open before asserting its contents").
+
+**Also: know whether a surface is always-on or on-demand before judging "single-row".** The member-list
+panel is TOGGLED, so the default server-channel header is full-width and genuinely single-row now; only
+the panel-open case narrows the column enough to wrap the meta. Scoping the acceptance to the actual
+default view kept me from over-chasing a narrowed edge case as if it were the common one.
+
 ## 2026-06-19 (iter 197) — Header redesign SLICE 2 (icon-ify): slice 1's de-risking made the re-skin a clean, single-fix tick
 
 Re-skinned the header action bar from text labels to compact emoji icon buttons (aria-label + title).
