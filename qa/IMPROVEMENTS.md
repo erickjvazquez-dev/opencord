@@ -3,6 +3,25 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 193) — Backend Rule-15 gap: the WS transport frame cap was untested; "a close test can falsely pass on its own deadline"
+
+Rotated to backend after a run of frontend ticks. Found a real coverage gap: the WS hostile-frame
+battery tested the app-level body cap (maxMessageSize 4096 → oversized body dropped, connection lives)
+but NOT the transport-level `SetReadLimit(maxFrameSize 16384)` — the guard that closes the connection
+when one frame exceeds the limit, stopping a hostile client from streaming an unbounded frame to OOM
+the server. Added `TestServeWSFrameSizeLimitIntegration` (send >16 KiB → assert close + nothing
+persisted).
+
+**Lesson — a "the connection should CLOSE" test can falsely pass on its OWN read deadline.** My first
+version read in a loop with a 5s deadline and treated any read error as "closed". But if the guard were
+broken (connection stays open), the 5s deadline itself fires a timeout error → the test passes for the
+WRONG reason. Fix: distinguish the cause — `if ne, ok := err.(net.Error); ok && ne.Timeout()` → a
+TIMEOUT means the connection stayed open = FAIL; only a real close/EOF passes. Proven by raising
+maxFrameSize to 1 MiB (test FAILS "connection stayed OPEN"), then restoring 16384 (PASS). Same family as
+the iter-191 instrument-don't-guess lesson: a green assertion is worthless until you've shown it goes RED
+for the real defect — and for negative/"should-not-happen" tests, watch that your own timeout/teardown
+isn't the thing satisfying the assertion.
+
 ## 2026-06-19 (iter 192) — XSS-by-construction audit → a whole-CLASS guard; and "vitest green ≠ build green"
 
 Instead of adding the next per-field XSS render test from the ledger (server/channel name — all of
