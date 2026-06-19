@@ -3,6 +3,27 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 192) — XSS-by-construction audit → a whole-CLASS guard; and "vitest green ≠ build green"
+
+Instead of adding the next per-field XSS render test from the ledger (server/channel name — all of
+which are React-escaped, same proven mechanism), audited the WHOLE client and found it has zero
+unsafe sinks (no dangerouslySetInnerHTML / innerHTML= / eval / new Function anywhere). Encoded that as
+a single codebase-wide invariant lint (`check-no-unsafe-sinks.mjs`, wired into qa/run.sh) that fails if
+ANY future code introduces a sink — adversarially verified with a probe file. **Higher leverage than N
+per-field tests: guard the class, not each instance.** Reinforces the iter-189 "order a guard ledger
+by blast radius" lesson — the very top of that ladder is "does an unsafe sink exist at all", and one
+lint covers it forever.
+
+**The real catch — "vitest green ≠ build green".** I first wrote this as a vitest test (`security.test.ts`)
+using fs/path/process. `npx vitest run` passed 94/94 — but `npm run build` (`tsc -b`) FAILED: the app's
+`tsconfig.json` includes `src/**`, so it type-checks test files too, and the browser tsconfig has no node
+types. Had I trusted the green vitest run and committed, the next deploy's build would have broken. I
+caught it because Rule-14 verify means running the PRODUCTION build, not just the test runner. Fix: move
+the source-scan to a standalone node lint (its natural home — it's a lint, not a typed unit test), leaving
+tsconfig untouched (no weakening of the existing tests' type-checking). **Lesson: a "test" that needs node
+APIs does not belong in a browser app's type-checked source; and always run `npm run build`, not just
+`vitest run`, before calling a test-tier change done.**
+
 ## 2026-06-19 (iter 191) — Smart auto-scroll + jump-to-present; INSTRUMENT-don't-guess turned a 6-rebuild rabbit hole decisive
 
 Shipped a real UX-bug fix (the list stopped yanking a reader to the bottom on every new message while
