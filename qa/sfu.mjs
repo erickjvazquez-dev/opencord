@@ -59,12 +59,12 @@ async function main() {
   for (const pg of [a, b]) await pg.locator('.dot.online').waitFor({ timeout: 10000 })
 
   step('A joins voice (SFU transport)')
-  await a.getByRole('button', { name: /Join voice/ }).click()
+  await a.locator('.chat-header .voice-join').click()
   await a.locator('.voice-bar').waitFor({ timeout: 10000 })
   check(await a.locator('.voice-bar').isVisible(), 'A is in the voice bar')
 
   step('B joins voice')
-  await b.getByRole('button', { name: /Join voice/ }).click()
+  await b.locator('.chat-header .voice-join').click()
   await b.locator('.voice-bar').waitFor({ timeout: 10000 })
   check(await b.locator('.voice-bar').isVisible(), 'B is in the voice bar')
 

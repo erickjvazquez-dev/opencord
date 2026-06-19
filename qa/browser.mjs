@@ -154,7 +154,7 @@ async function main() {
   // the multi-peer voice.mjs run).
   step('voice: Join control renders + is enabled once connected, then joins solo')
   await page.locator('.dot.online').waitFor({ timeout: 8000 })
-  const joinVoiceBtn = page.getByRole('button', { name: /Join voice/ })
+  const joinVoiceBtn = page.locator('.chat-header .voice-join')
   check((await joinVoiceBtn.count()) > 0, 'voice: "Join voice" control is present')
   check(await joinVoiceBtn.isEnabled(), 'voice: "Join voice" is enabled once connected')
   await joinVoiceBtn.click()
@@ -850,7 +850,7 @@ async function main() {
   check(headerLines.logout === 1, `"log out" stays on one line (got ${headerLines.logout})`)
   check(headerLines.hOverflow <= 1, 'header has no horizontal overflow (scrollWidth ≤ clientWidth)')
   check(
-    await page.getByRole('button', { name: /Join voice/ }).isVisible(),
+    await page.locator('.chat-header .voice-join').isVisible(),
     'Join voice button is reachable in the server-channel header',
   )
   check(await page.getByRole('button', { name: 'log out' }).isVisible(), 'log out is reachable in the server-channel header')
@@ -1705,19 +1705,19 @@ async function main() {
 
   // 7e — Read-only: the owner toggles the server channel read-only.
   step('toggle the server channel read-only')
-  await page.getByRole('button', { name: 'make read-only' }).click()
+  await page.locator('.chat-header .readonly-toggle').click()
   await page.locator('.readonly-badge').waitFor({ timeout: 8000 })
   await shot('07e-readonly.png')
   check(await page.locator('.readonly-badge').isVisible(), 'channel shows the read-only badge after toggle')
   check(
-    await page.getByRole('button', { name: 'allow everyone' }).isVisible(),
+    ((await page.locator('.chat-header .readonly-toggle').textContent()) ?? '').includes('allow everyone'),
     'toggle flips to "allow everyone"',
   )
 
   // 7f — Channel topic: the admin sets a topic via "edit topic"; it shows in the header.
   step('admin sets a channel topic → it appears in the header')
   promptAnswer = 'Welcome to the QA server channel'
-  await page.getByRole('button', { name: 'edit topic' }).click()
+  await page.locator('.chat-header .topic-edit').click()
   await page.locator('.channel-topic').waitFor({ timeout: 8000 })
   await shot('07f-topic.png')
   check(
@@ -1728,7 +1728,7 @@ async function main() {
   // 7f2 — Slowmode: the admin sets a per-channel cooldown; a 🐌 badge appears.
   step('admin sets slowmode → 🐌 badge appears in the header')
   promptAnswer = '10'
-  await page.getByRole('button', { name: 'slowmode', exact: true }).click()
+  await page.locator('.chat-header .slowmode-edit').click()
   await page.locator('.slowmode-badge').waitFor({ timeout: 8000 })
   await shot('07f2-slowmode.png')
   check(
@@ -1747,7 +1747,7 @@ async function main() {
 
   // 7h — Pins panel: the "pins" header button lists the channel's pinned messages.
   step('open the pins panel → it lists the pinned message')
-  await page.getByRole('button', { name: 'pins', exact: true }).click()
+  await page.locator('.chat-header .pins-open').click()
   const pinsPanel = page.locator('.search-results', { hasText: 'pinned message' })
   await pinsPanel.waitFor({ timeout: 8000 })
   await shot('07h-pins-panel.png')

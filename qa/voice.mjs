@@ -101,7 +101,7 @@ async function main() {
   // roster). After C joins, every pair must hold its own RTCPeerConnection — a
   // genuine N-way mesh, not just a pair.
   const joinCall = async (pg, who) => {
-    await pg.getByRole('button', { name: /Join voice/ }).click()
+    await pg.locator('.chat-header .voice-join').click()
     await pg.locator('.voice-bar').waitFor({ timeout: 10000 })
     check(await pg.locator('.voice-bar').isVisible(), `${who} is in the voice bar`)
   }
