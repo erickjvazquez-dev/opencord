@@ -699,6 +699,72 @@ async function main() {
   )
   await b.screenshot({ path: join(SHOTS, 'rt-14-group-leave.png') })
 
+  // 15 — Group DM ADD member (realtime): proves the SendToUser push. A makes a fresh group
+  // (B + E, E registered via API for a uniquely-matchable title), B opens it. A brand-new user
+  // D logs in on #general — NOT in the group. A adds D → BOTH B (viewing it, via the channel
+  // broadcast) sees D appear in the title AND D (on #general, via the SendToUser push) sees the
+  // group appear in their sidebar — both LIVE, no reload. This is the add-member realtime edge
+  // the single-client + live-API E2E can't reach: a user NOT on the channel pushed into a new DM.
+  step('group DM add: A adds D → B sees D in the title + D sees the group appear, both live')
+  const userE = 'erin' + sfx
+  const userD = 'dave' + sfx
+  await a.evaluate(async (name) => {
+    await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: name, password: 'hunter2' }),
+    })
+  }, userE)
+  // D gets its own browser context, lands on #general (not in any group yet).
+  const davCtx = await browser.newContext({ viewport: { width: 1100, height: 820 } })
+  const dav = await davCtx.newPage()
+  dav.on('pageerror', (e) => {
+    console.log('  [pageerror DAV] ' + e.message)
+    failed++
+  })
+  dav.on('dialog', (dlg) => dlg.accept(undefined))
+  await register(dav, userD)
+
+  // A makes a fresh group with B + E (uniquely matchable by E), and B opens it.
+  await a.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await a.getByRole('button', { name: '+ New DM' }).click()
+  await a.locator('.group-modal').waitFor({ timeout: 4000 })
+  const g2 = a.locator('.group-chip-input')
+  await g2.fill(userB)
+  await g2.press('Enter')
+  await g2.fill(userE)
+  await g2.press('Enter')
+  await a.locator('.group-modal').getByRole('button', { name: /Create Group/ }).click()
+  await a.locator('.group-modal').waitFor({ state: 'detached', timeout: 8000 })
+  await b.reload({ waitUntil: 'domcontentloaded' })
+  await b.locator('.channel-item', { hasText: userE }).first().click()
+  await b.locator('.brand .channel').waitFor({ timeout: 8000 })
+
+  // A adds D via the ➕ header action (the prompt is answered with D's username via ans.a).
+  ans.a = userD
+  await a.locator('.chat-header .add-to-group').click()
+
+  // B (viewing the group) sees D appear in the title LIVE (channel broadcast → refetch).
+  let bAddTitle = ''
+  for (let i = 0; i < 60; i++) {
+    bAddTitle = (await b.locator('.brand .channel').textContent()) || ''
+    if (bAddTitle.includes(userD)) break
+    await b.waitForTimeout(200)
+  }
+  check(bAddTitle.includes(userD), `B sees D added to the group title live (got "${bAddTitle}")`)
+
+  // D (on #general, never reloaded) sees the new group appear in their sidebar LIVE via the
+  // SendToUser push — the row is titled by its members (incl. E, unique to D's only DM).
+  let dHasGroup = false
+  for (let i = 0; i < 60; i++) {
+    dHasGroup = (await dav.locator('.dm-list .channel-item', { hasText: userE }).count()) > 0
+    if (dHasGroup) break
+    await dav.waitForTimeout(200)
+  }
+  check(dHasGroup, 'D sees the group appear in their sidebar live (SendToUser push, no reload)')
+  await dav.screenshot({ path: join(SHOTS, 'rt-15-add-live.png') })
+  await davCtx.close()
+
   await browser.close()
   console.log(
     `\nrealtime QA: ${failed === 0 ? 'PASS' : 'FAIL (' + failed + ' issue[s])'}` +

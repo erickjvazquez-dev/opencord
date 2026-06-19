@@ -3924,3 +3924,32 @@ closed one tick after shipping.
 and well-covered. Remaining (lower priority): group naming (schema + rename UI + realtime relabel).
 
 **Cadence:** shipped a feature → ACTIVE (1800s).
+
+## 2026-06-18 (tick 182) — two-client realtime test for group-DM add (SendToUser push)
+
+Closed the realtime edge I logged last tick: add-member's "the added member sees the group appear LIVE,
+without reload" — the genuinely novel part (a user NOT connected to the channel getting pushed a new DM
+via SendToUser). Added realtime.mjs §15 with a THIRD browser context (D): A makes a fresh group (B + E,
+E via API for a uniquely-matchable title), B opens it, a brand-new D logs in on #general, then A adds D
+→ asserts BOTH B (viewing, via the channel broadcast) sees D in the title live AND D (on #general, via
+the SendToUser push) sees the group materialize in their sidebar live — no reload. AI-vision confirmed
+D's sidebar gained the group (stacked avatars and all). Both pass; full QA green.
+
+This is the leave-group coverage cadence repeated: ship the feature with store + live-API + single-client
+(tick N), then the two-client realtime edge (tick N+1). Group-DM membership management (add + leave) is
+now covered at EVERY level — store, live-API adversarial, single-client browser, two-client realtime,
+AI-vision. That's the bar for a "done" realtime feature; logging it as the template: a realtime mutation
+isn't fully covered until a SECOND client proves the live propagation through a real browser.
+
+**Test-harness technique reused + worth naming:** to test a push to a user who isn't on the mutated
+channel, spin a SHORT-LIVED extra browser context inside the section (create → use → close), rather than
+adding a permanent top-level context — keeps the new test self-contained and the harness lean. (Same
+"append §N, don't insert" hygiene as §14.)
+
+**Highest-value loop improvement (logged):** group-DM membership is complete + fully covered. The only
+remaining group-DM item is **naming** (a non-UNIQUE name column on dm channels + a rename header action +
+a realtime relabel push, like server-rename) — a backend+frontend+realtime slice for a future tick. Next
+tick could take naming OR rotate to a different component's north star (e.g. an audio/SFU reliability
+slice, or a Rule-15 adversarial pass on a not-recently-probed surface).
+
+**Cadence:** real QA coverage added (no product change → no deploy) → ACTIVE (1800s).

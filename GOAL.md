@@ -78,7 +78,9 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   dm-membership push so the group appears in their sidebar live, existing members refresh via the channel
   broadcast. `TestAddGroupDMMemberIntegration` (full adversarial matrix) + browser add-flow + **live E2E**
   (add→204, new member's /api/dms lists it, re-add→409, non-member→403); blast-radius guard PASS; shipped +
-  rollout-verified. In Discord you add people but only ever leave yourself, so **group-DM membership mgmt
+  rollout-verified, AND a two-client realtime test (iter 182, realtime.mjs §15: A adds D → B viewing sees D
+  in the title live AND D on #general sees the group appear in their sidebar live via the SendToUser push,
+  no reload — proving the not-on-channel member is pushed into the new DM). In Discord you add people but only ever leave yourself, so **group-DM membership mgmt
   is now complete (add + leave)**. **Intro-icon consistency DONE (iter 180):** the 68px group-DM welcome icon now
   stacks the same two member avatars as the sidebar (was a 👥 emoji) — browser QA asserts it + AI-vision;
   shipped + rollout-verified. Group-DM rendering is now consistent (sidebar + welcome).
