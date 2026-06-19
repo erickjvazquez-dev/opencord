@@ -3894,3 +3894,33 @@ next tick should either take ONE of them deliberately or rotate to another compo
 naming.
 
 **Cadence:** shipped a UI consistency fix → ACTIVE (1800s).
+
+## 2026-06-18 (tick 181) — add a member to a group DM (v0.2 DM sub-slice) shipped
+
+Completed group-DM membership management by mirroring leave-group: a "➕ add" header action adds a
+member via `POST /api/dms/{id}/members`. In Discord you ADD people and only ever LEAVE yourself (no
+"remove other"), so add+leave is the full set — group DMs are now functionally complete. Reused the
+leave-group template (store mutation → route → WS notify → client + refetch), which made this a fast,
+low-risk slice: store `AddGroupDMMember` with the full guard matrix (actor-member-first per Rule B,
+group-only, 10-cap, already-member, blocked), a route that resolves the identifier + does BOTH a
+channel broadcast (existing members) AND a `SendToUser` push (so the NEW member — not on the channel —
+still sees the group appear live). Verified at store + blast-radius + browser + **live-API adversarial**
+(204 / new-member-sees-it / 409 re-add / 403 non-member) + AI-vision levels.
+
+The blast-radius guard + the proactively-added README row meant ZERO red-gate cycles this tick — I've
+now internalized the two recurring gate-breakers (new WS type → client union; new route → README) and
+handle them up front. That's the loop teaching me: a guard that catches the same class twice becomes a
+pre-flight checklist item.
+
+**Highest-value loop improvement (next-tick QA gap, logged):** add-member's REALTIME edge — "the added
+member sees the group appear LIVE via the SendToUser dm-membership push, without reloading" — is proven
+by the live-API E2E (dave's /api/dms lists it) but NOT through two real browsers. Mirror the leave-group
+realtime test (now realtime.mjs section 14): A adds C to a group while B (a member) is viewing it and C
+is on #general → assert BOTH B's title grows AND C's sidebar gains the group, live. Append it LAST
+(the section-14 hygiene rule). This closes the last edge of group-DM membership the same way leave was
+closed one tick after shipping.
+
+**Coverage note:** group DMs are now create + render (stacked, consistent) + leave + add — fully built
+and well-covered. Remaining (lower priority): group naming (schema + rename UI + realtime relabel).
+
+**Cadence:** shipped a feature → ACTIVE (1800s).

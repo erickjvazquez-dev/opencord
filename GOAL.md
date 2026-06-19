@@ -72,7 +72,14 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   first two members' avatars (`.dm-group-stack`, two 15px Avatars offset + ringed in the sidebar bg)
   instead of a generic glyph; browser QA asserts the 2-avatar stack + AI-vision verified; shipped +
   rollout-verified. Later sub-slices (lower priority): group naming (needs a non-UNIQUE name column),
-  add/remove member. **Intro-icon consistency DONE (iter 180):** the 68px group-DM welcome icon now
+  **add-member DONE (iter 181):** a "➕ add" header action (groups only) adds a member via
+  `POST /api/dms/{id}/members {identifier}` (store `AddGroupDMMember`: actor-member-first, group-only,
+  10-cap, already-member/blocked guards, Rule B/15); the new member's client gets a `SendToUser`
+  dm-membership push so the group appears in their sidebar live, existing members refresh via the channel
+  broadcast. `TestAddGroupDMMemberIntegration` (full adversarial matrix) + browser add-flow + **live E2E**
+  (add→204, new member's /api/dms lists it, re-add→409, non-member→403); blast-radius guard PASS; shipped +
+  rollout-verified. In Discord you add people but only ever leave yourself, so **group-DM membership mgmt
+  is now complete (add + leave)**. **Intro-icon consistency DONE (iter 180):** the 68px group-DM welcome icon now
   stacks the same two member avatars as the sidebar (was a 👥 emoji) — browser QA asserts it + AI-vision;
   shipped + rollout-verified. Group-DM rendering is now consistent (sidebar + welcome).
 - [~] **Custom colored roles (Discord parity, tick-159 ROI #2)** — **slice 1 backend DONE (iter 162):**
