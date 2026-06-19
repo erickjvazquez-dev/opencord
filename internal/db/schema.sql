@@ -205,8 +205,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
 -- share a name with a channel. Recreate the partial unique indexes to exclude kind='thread'.
 DROP INDEX IF EXISTS channels_global_name_uniq;
 DROP INDEX IF EXISTS channels_server_name_uniq;
+-- This intermediate global index must ALSO exclude kind='dm': group DMs (server_id IS NULL) may
+-- share a name (the naming feature below), so a kind<>'thread'-only condition fails with 23505 on
+-- every re-run once two same-named group DMs exist — i.e. a boot failure. Match the final state.
 CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
-    ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL AND kind <> 'thread';
+    ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL AND kind NOT IN ('thread', 'dm');
 CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
     ON channels (server_id, name) WHERE server_id IS NOT NULL AND kind <> 'thread';
 -- Group DMs (v0.2) may be named (Discord-style) and group names are NOT unique — many
