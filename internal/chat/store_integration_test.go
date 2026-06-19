@@ -2839,3 +2839,69 @@ func TestAddGroupDMMemberIntegration(t *testing.T) {
 		t.Fatalf("add over cap = %v, want ErrGroupTooLarge", err)
 	}
 }
+
+// TestRenameGroupDMIntegration verifies naming a GROUP DM: set → ListDMs returns the name,
+// clear (empty) → NULL/"" → falls back to members; adversarial (non-member, 1:1, >100 chars).
+func TestRenameGroupDMIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	carol := regUser(t, pool)
+	stranger := regUser(t, pool)
+
+	grp, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, carol.ID})
+	if err != nil {
+		t.Fatalf("create group DM: %v", err)
+	}
+	nameOf := func(userID int64) string {
+		for _, d := range mustListDMs(t, store, userID) {
+			if d.ID == grp.ID {
+				return d.Name
+			}
+		}
+		t.Fatalf("group not in %d's DM list", userID)
+		return ""
+	}
+
+	// Adversarial first: a non-member can't rename (no leak); a 1:1 can't be named; too-long rejected.
+	if err := store.RenameGroupDM(ctx, grp.ID, stranger.ID, "Hax"); !errors.Is(err, chat.ErrForbidden) {
+		t.Fatalf("non-member rename = %v, want ErrForbidden", err)
+	}
+	oneToOne, _ := store.CreateOrGetDM(ctx, alice.ID, stranger.ID)
+	if err := store.RenameGroupDM(ctx, oneToOne.ID, alice.ID, "Nope"); !errors.Is(err, chat.ErrNotGroupDM) {
+		t.Fatalf("rename 1:1 = %v, want ErrNotGroupDM", err)
+	}
+	if err := store.RenameGroupDM(ctx, grp.ID, alice.ID, strings.Repeat("x", 101)); !errors.Is(err, chat.ErrInvalidGroupName) {
+		t.Fatalf("overlong rename = %v, want ErrInvalidGroupName", err)
+	}
+
+	// A member names it → every member's ListDMs shows the name.
+	if err := store.RenameGroupDM(ctx, grp.ID, bob.ID, "Weekend Trip"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if n := nameOf(alice.ID); n != "Weekend Trip" {
+		t.Fatalf("alice sees group name %q, want %q", n, "Weekend Trip")
+	}
+	if n := nameOf(carol.ID); n != "Weekend Trip" {
+		t.Fatalf("carol sees group name %q, want %q", n, "Weekend Trip")
+	}
+	// Clearing (empty/whitespace) removes the name → back to "" (member-list title).
+	if err := store.RenameGroupDM(ctx, grp.ID, alice.ID, "   "); err != nil {
+		t.Fatalf("clear name: %v", err)
+	}
+	if n := nameOf(alice.ID); n != "" {
+		t.Fatalf("after clear, name = %q, want empty", n)
+	}
+	// Group names are NOT unique: a second group can take the same name (the schema excludes
+	// kind='dm' from name uniqueness). This would error if the unique index still applied.
+	grp2, err := store.CreateGroupDM(ctx, alice.ID, []int64{bob.ID, carol.ID})
+	if err != nil {
+		t.Fatalf("create second group: %v", err)
+	}
+	if err := store.RenameGroupDM(ctx, grp.ID, alice.ID, "Shared Name"); err != nil {
+		t.Fatalf("name group 1: %v", err)
+	}
+	if err := store.RenameGroupDM(ctx, grp2.ID, alice.ID, "Shared Name"); err != nil {
+		t.Fatalf("two groups should be allowed the same name, got: %v", err)
+	}
+}

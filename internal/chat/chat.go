@@ -38,6 +38,8 @@ var (
 	ErrNotGroupDM = errors.New("can only leave a group DM")
 	// ErrAlreadyMember is returned when adding a user who is already in the group DM.
 	ErrAlreadyMember = errors.New("user is already in this group DM")
+	// ErrInvalidGroupName is returned when a group DM name is too long (>100 chars).
+	ErrInvalidGroupName = errors.New("group name too long (max 100 characters)")
 	// ErrForbidden is returned when a user acts on a channel they can't access
 	// (e.g. reacting to a message in a DM they're not a member of).
 	ErrForbidden = errors.New("forbidden")
@@ -100,6 +102,9 @@ type DMChannel struct {
 	CreatedAt time.Time `json:"createdAt"`
 	User      DMUser    `json:"user"`
 	Users     []DMUser  `json:"users"`
+	// Name is a group DM's custom name (Discord-style); "" when unnamed (the client then
+	// titles it by its members) or for a 1:1 DM.
+	Name string `json:"name,omitempty"`
 }
 
 // Server is a guild grouping channels under a shared membership. Role is the
@@ -1305,6 +1310,50 @@ func (s *Store) AddGroupDMMember(ctx context.Context, channelID, actorID, target
 	return err
 }
 
+// maxGroupNameLen bounds a group DM's custom name (Rule B). Names are titles, so they
+// allow spaces + caps (not the channel-slug rules).
+const maxGroupNameLen = 100
+
+// RenameGroupDM sets (or clears) a GROUP DM's custom name. The actor must be a member
+// (checked FIRST, no kind/size leak — Rule B); a 1:1 DM or non-DM channel → ErrNotGroupDM
+// (only groups are named). The name is trimmed and bounded ≤100 (ErrInvalidGroupName);
+// an EMPTY name clears it (NULL → the client falls back to the member-list title). Group
+// names are not unique (the schema excludes kind='dm' from name uniqueness).
+func (s *Store) RenameGroupDM(ctx context.Context, channelID, actorID int64, name string) error {
+	name = strings.TrimSpace(name)
+	if len([]rune(name)) > maxGroupNameLen {
+		return ErrInvalidGroupName
+	}
+	var kind string
+	var memberCount int
+	var actorIsMember bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT c.kind,
+		       (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id),
+		       EXISTS(SELECT 1 FROM channel_members WHERE channel_id = c.id AND user_id = $2)
+		  FROM channels c WHERE c.id = $1`,
+		channelID, actorID).Scan(&kind, &memberCount, &actorIsMember)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrChannelNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !actorIsMember {
+		return ErrForbidden
+	}
+	if kind != "dm" || memberCount < 3 {
+		return ErrNotGroupDM
+	}
+	// Empty name clears it (store NULL so ListDMs falls back to the member-list title).
+	var val *string
+	if name != "" {
+		val = &name
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE channels SET name = $2 WHERE id = $1`, channelID, val)
+	return err
+}
+
 // LookupUserByID resolves a user id to id+username, ErrUserNotFound if absent.
 func (s *Store) LookupUserByID(ctx context.Context, id int64) (DMUser, error) {
 	var u DMUser
@@ -1325,7 +1374,7 @@ func (s *Store) LookupUserByID(ctx context.Context, id int64) (DMUser, error) {
 // the blocked member is simply omitted from Users.
 func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT c.id, c.created_at, u.id, u.username
+		`SELECT c.id, c.created_at, c.name, u.id, u.username
 		   FROM channels c
 		   JOIN channel_members me    ON me.channel_id = c.id AND me.user_id = $1
 		   JOIN channel_members other ON other.channel_id = c.id AND other.user_id <> $1
@@ -1346,8 +1395,9 @@ func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) 
 	for rows.Next() {
 		var cid int64
 		var created time.Time
+		var name *string // group DM custom name; NULL for unnamed / 1:1
 		var ou DMUser
-		if err := rows.Scan(&cid, &created, &ou.ID, &ou.Username); err != nil {
+		if err := rows.Scan(&cid, &created, &name, &ou.ID, &ou.Username); err != nil {
 			return nil, err
 		}
 		if idx, ok := byID[cid]; ok {
@@ -1355,7 +1405,11 @@ func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) 
 			continue
 		}
 		byID[cid] = len(dms)
-		dms = append(dms, DMChannel{ID: cid, CreatedAt: created, User: ou, Users: []DMUser{ou}})
+		dm := DMChannel{ID: cid, CreatedAt: created, User: ou, Users: []DMUser{ou}}
+		if name != nil {
+			dm.Name = *name
+		}
+		dms = append(dms, dm)
 	}
 	return dms, rows.Err()
 }

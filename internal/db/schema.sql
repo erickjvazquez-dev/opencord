@@ -209,6 +209,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
     ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL AND kind <> 'thread';
 CREATE UNIQUE INDEX IF NOT EXISTS channels_server_name_uniq
     ON channels (server_id, name) WHERE server_id IS NOT NULL AND kind <> 'thread';
+-- Group DMs (v0.2) may be named (Discord-style) and group names are NOT unique — many
+-- groups can share a name — so exclude kind='dm' from the global name uniqueness too
+-- (same precedent as threads above). Recreate the global index with kind NOT IN (thread,dm).
+DROP INDEX IF EXISTS channels_global_name_uniq;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_global_name_uniq
+    ON channels (name) WHERE server_id IS NULL AND name IS NOT NULL AND kind NOT IN ('thread', 'dm');
 
 -- Server invites (v0.3): joining a server requires a valid, unguessable code created
 -- by a member — replaces the original open join-by-id.

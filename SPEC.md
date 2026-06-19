@@ -2597,3 +2597,27 @@ ErrAlreadyMember, blocked→ErrBlocked, cap→ErrGroupTooLarge); browser flow ad
 group title/stack updates; live E2E (add→204, the new member's /api/dms now lists the group). Ship +
 `railway up` + rollout-verify. (Two-client realtime "added member sees the group appear LIVE" → next
 tick, mirroring the leave-group coverage cadence.)
+
+## Group DM — naming (v0.2 DM sub-slice, backend slice 1)
+
+**Why:** the last group-DM membership/identity gap. Discord lets you name a group DM (else it's titled by
+its members). Backend slice 1 makes a group nameable + returns the name; slice 2 wires the client (a
+rename action + `dmTitle` using the name). Additive — an unnamed group renders exactly as today.
+
+- **Schema:** group DM names are NOT unique (many groups can share a name), so recreate the global
+  channel-name partial unique index to ALSO exclude `kind='dm'` (the exact precedent threads used) —
+  `kind NOT IN ('thread','dm')`. Idempotent (DROP IF EXISTS + CREATE IF NOT EXISTS), self-applied on boot.
+  Reuses the existing `channels.name` column (NULL for unnamed DMs).
+- **Store `RenameGroupDM(ctx, channelID, actorID, name)`:** actor must be a member (checked first, Rule B),
+  channel must be a GROUP DM (`kind='dm'`, ≥3 members; a 1:1 can't be named → `ErrNotGroupDM`); the name is
+  trimmed + bounded ≤100 (`ErrInvalidGroupName` if longer), and an EMPTY name clears it (NULL → back to the
+  member-list title). `DMChannel` gains `Name` (`json:"name,omitempty"`); `ListDMs` returns it (NULL→"").
+- **Route `PATCH /api/dms/{id}` `{name}`:** auth (Rule C), rename, then `BroadcastToChannel(dm-membership)`
+  so every member relabels live (reusing the leave/add realtime path). 204; maps `ErrForbidden`→403,
+  `ErrNotGroupDM`→400, `ErrInvalidGroupName`→400, not-found→404.
+
+**Verify (Rule 14/15):** `TestRenameGroupDMIntegration` (set → ListDMs returns the name; clear → NULL;
+adversarial: non-member→ErrForbidden, 1:1→ErrNotGroupDM, >100→ErrInvalidGroupName); live E2E (rename→204,
+ListDMs shows it, clear→"", non-member→403). go build/vet/test green. Slice 2 (client rename + dmTitle)
+next tick — the client ignores `name` until then, so this is dormant-but-ready (no UI change, no deploy
+needed unless I choose to ship the backend ahead).

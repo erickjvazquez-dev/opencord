@@ -458,6 +458,38 @@ func New(cfg config.Config, authsvc *auth.Service, store *chat.Store, hub *ws.Hu
 					w.WriteHeader(http.StatusNoContent)
 				}
 			})
+			// Rename (or clear the name of) a group DM. Any member may rename; all members
+			// relabel live via the dm-membership refetch (reusing the leave/add realtime path).
+			r.Patch("/dms/{id}", func(w http.ResponseWriter, r *http.Request) {
+				me, _ := auth.UserFrom(r.Context())
+				id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+				if err != nil {
+					http.Error(w, `{"error":"invalid channel id"}`, http.StatusBadRequest)
+					return
+				}
+				var in struct {
+					Name string `json:"name"`
+				}
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&in); err != nil {
+					http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+					return
+				}
+				switch err := store.RenameGroupDM(r.Context(), id, me.ID, in.Name); {
+				case errors.Is(err, chat.ErrForbidden):
+					http.Error(w, `{"error":"only a member can rename this group"}`, http.StatusForbidden)
+				case errors.Is(err, chat.ErrNotGroupDM):
+					http.Error(w, `{"error":"only a group DM can be named"}`, http.StatusBadRequest)
+				case errors.Is(err, chat.ErrInvalidGroupName):
+					http.Error(w, `{"error":"group name too long (max 100 characters)"}`, http.StatusBadRequest)
+				case errors.Is(err, chat.ErrChannelNotFound):
+					http.Error(w, `{"error":"group DM not found"}`, http.StatusNotFound)
+				case err != nil:
+					http.Error(w, `{"error":"could not rename the group"}`, http.StatusInternalServerError)
+				default:
+					hub.BroadcastToChannel(id, ws.Event{Type: "dm-membership", ChannelID: id})
+					w.WriteHeader(http.StatusNoContent)
+				}
+			})
 			mountServerRoutes(r, store, hub)
 			r.Get("/messages", chat.HandleRecent(store))
 			// Create a message carrying file/image attachments (multipart). Plain
