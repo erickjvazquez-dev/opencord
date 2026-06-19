@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-18 (iter 187) — Rule-15 rotation: hardened the newest user-text render site (group name); vision caught a header-truncation P1
+
+Rotated off group-DM features to a **security/Rule-15 pass**, applied to the *newest unhardened input*:
+the group `name` shipped iters 184–186 is user-controlled text rendered in header/sidebar/welcome/
+composer with no inert-render guard. Added browser QA that renames a group to
+`<img src=x onerror="window.__ocGrpXss=1">` and proves it's inert (literal text, no `<img>` injected,
+onerror never fires). The payload *discriminates*: if escaping ever breaks the flag flips and the test
+goes red. Confirmed the backend is already safe (parameterized SQL, rune-based ≤100 cap) and the other
+name sinks (document.title, Notification API) are text-only → React escaping is the sole defense, now
+guarded.
+
+**Lesson — keep a running "user-text render-site → XSS guard" ledger.** Guarded so far: message body
+(escaped-script test), About Me (iter 141), **group name (this tick)**. Still UNGUARDED and worth a
+future Rule-15 tick: **server name**, **channel name/topic**, **status text**. The rule: any tick that
+ships a feature rendering NEW user text adds its inert-render assertion in the SAME tick (Rule 15 step
+5) — don't let the ledger grow an unguarded entry.
+
+**Vision caught a real P1 (logged to GOAL.md appearance-polish):** the adversarial 41-char name made the
+chat HEADER wrap its actions to a second line — the header title doesn't ellipsis-truncate like the
+sidebar does (iter 114). This bites NORMAL use too (a group with many members has a long member-list
+title). Concrete next-tick fix: `min-width:0`+`overflow:hidden`+`ellipsis` on the header title, actions
+`flex-shrink:0`, + a many-member-group QA assertion that the header stays one row. **Meta-lesson: an
+adversarial input is also a free stress test of layout — vision-grade the screenshot for polish, not
+just the security assertion.**
+
 ## 2026-06-18 (iter 186) — Closed the rename realtime gap; DM-membership realtime coverage is now COMPLETE → rotate component
 
 Added realtime.mjs §16: A renames a shared group → B (viewing it, never reloading) sees the header,
