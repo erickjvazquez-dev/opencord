@@ -2666,3 +2666,23 @@ icon-only would break all of those at once. Doing it on a long session risks a m
 **Acceptance:** the server-channel header (member list open) is one row at ≥1100px; every action stays
 reachable with an accessible name; no QA regression. Until built, the iter-188 title cap stands and this
 stays a P2 in GOAL.md.
+
+## Scroll-up history pagination (load older messages)
+
+**Why:** history is a fixed window — `Recent` returns the newest 50 with no cursor, so a channel with
+>50 messages can never show older history (scroll-up hits a hard wall). Discord loads older history as
+you scroll up. **Backend slice 1 DONE (iter 203):** `RecentBefore(ctx, channelID, viewerID, beforeID,
+limit)` (beforeID>0 = page strictly older than that id, oldest-first; 0 = newest page == Recent, which is
+now a thin wrapper so its 15+ callers are untouched); `GET /messages?before=<id>` parses the cursor
+(absent/0/invalid = newest). Test `TestRecentBeforePaginationIntegration`; shipped + live-verified
+(?before=0/huge/invalid all 200). *(This slice also surfaced + fixed a latent migration boot bug — the
+intermediate channels_global_name_uniq recreate didn't exclude group DMs; see `fix(db)` iter 203.)*
+
+**Frontend slice 2 (next):** on scroll near the TOP of `.messages`, fetch the page before the oldest
+loaded message (`?before=<oldest.id>`), PREPEND it, and PRESERVE the scroll position (anchor on the
+previously-top message so the view doesn't jump). Key interaction: the iter-191 smart-auto-scroll keys
+on `messages` changing — prepending older messages must NOT trigger auto-scroll-to-bottom (it only fires
+when atBottom or channelChanged or own-send, none true while reading history up top, so it should be
+safe, but VERIFY). Stop paging when a returned page is shorter than the limit (reached channel start).
+Browser-QA: post >50 messages, open the channel, scroll to top, assert older messages load + the view
+doesn't jump.

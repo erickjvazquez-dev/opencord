@@ -313,7 +313,7 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   result scrolls to + briefly flashes the original message in the channel (closing the
   panel first when needed). Frontend-only; reply-jump (inline) + search-jump (close-panel
   path) E2E + AI-vision verified. (No-op when the target is older than the loaded window —
-  fetch-older-on-jump is a follow-up.)
+  fetch-older-on-jump is a follow-up.) **History pagination backend DONE (iter 203):** `RecentBefore` + `GET /messages?before=<id>` (the fixed-50 window now has a scroll-up cursor); frontend prepend-on-scroll-up is the next slice — see SPEC.md "Scroll-up history pagination".
 - [x] Smart auto-scroll + jump-to-present DONE (iter 191) — the message list no longer yanks a
   reader who has scrolled up into history to the bottom on every new message: it auto-follows
   only when already pinned to the bottom (80px slack) or the new message is the reader's own

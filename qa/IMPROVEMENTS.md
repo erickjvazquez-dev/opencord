@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-19 (iter 203) — A functional gap (fixed-window history) → backend pagination, which UNCOVERED a latent prod boot bug
+
+Swept the FUNCTIONAL axis and found a real gap: history is a fixed 50-message window (no `before`
+cursor), so a busy channel can never show older messages. Shipped the backend slice (RecentBefore +
+`?before=`). But the headline was the bug the work flushed out.
+
+**Adding a test that re-migrated AFTER an existing test exposed a production boot bug.** My new store
+test runs `setup()` (which re-runs the full schema) AFTER `TestRenameGroupDMIntegration` creates two
+group DMs named "Shared Name". The migrate then failed: the INTERMEDIATE recreate of
+`channels_global_name_uniq` used `kind <> 'thread'` — it didn't exclude `'dm'`, even though the FINAL
+index (and the naming feature) allow same-named group DMs. Because `db.Migrate` re-runs the whole schema
+EVERY boot, once two same-named group DMs exist in prod, that intermediate CREATE fails with 23505 and
+the server won't start. Prod wasn't broken yet (no same-named group DMs), but it was a latent trap.
+
+**Lessons:**
+- **A test that re-runs migrations against accumulated data is a cheap fuzzer for migration idempotency.**
+  The bug was invisible to every existing test because none re-migrated after the duplicate existed;
+  one new test in the right position caught a real prod-boot hazard. Worth having a dedicated
+  "migrate twice on a DB that exercised every feature" guard.
+- **When a feature loosens a uniqueness rule, grep for EVERY index/constraint on that column — including
+  transient/intermediate migration steps.** Group-DM naming correctly fixed the FINAL index but left an
+  earlier recreate inconsistent; both run every boot.
+- Don't anchor on the first hypothesis: I assumed a `uniqueChannel()` UnixNano collision (fixed it too,
+  a real latent flake), but the actual cause was the migration. Querying the DB for the real duplicate
+  (it returned none under my assumed predicate) is what redirected me to read the index's true WHERE.
+
 ## 2026-06-19 (iter 202) — Error-state axis: a "Reconnecting…" banner; the failing test pointed at a real PRODUCT gap, not just a test gap
 
 Continued sweeping fresh axes (now error-states): added a debounced "Reconnecting…" banner for a dropped
