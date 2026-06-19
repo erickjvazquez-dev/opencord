@@ -1805,6 +1805,18 @@ export function Chat({
   const activeChannelName = current?.name ?? activeServerChannel?.name ?? activeThread?.name
   // A thread is being viewed iff the active channel is the tracked active thread.
   const inThread = !!activeThread && activeThread.id === channelId
+  // The chat-header title text (thread / DM / group / voice / text channel). Computed once so
+  // it's both the visible label AND the hover `title` — the header ellipsis-truncates a long
+  // title (many-member group or long custom name) instead of wrapping the actions to a 2nd row.
+  const headerLabel = inThread
+    ? `🧵 ${activeChannelName ?? '…'}`
+    : activeDM
+      ? dmIsGroup(activeDM)
+        ? dmTitle(activeDM)
+        : `@${dmTitle(activeDM)}`
+      : activeChannelIsVoice
+        ? `🔊 ${activeChannelName ?? '…'}`
+        : `#${activeChannelName ?? '…'}`
   // My role in the server whose member panel is open (owner/admin/member/undefined).
   const myRoleInPanel = membersOf?.members.find((x) => x.userId === user.id)?.role
   const iAmServerOwner = myRoleInPanel === 'owner'
@@ -2353,16 +2365,8 @@ export function Chat({
                 ←
               </button>
             )}
-            <span className="channel">
-              {inThread
-                ? `🧵 ${activeChannelName ?? '…'}`
-                : activeDM
-                  ? dmIsGroup(activeDM)
-                    ? dmTitle(activeDM)
-                    : `@${dmTitle(activeDM)}`
-                  : activeChannelIsVoice
-                    ? `🔊 ${activeChannelName ?? '…'}`
-                    : `#${activeChannelName ?? '…'}`}
+            <span className="channel" title={headerLabel}>
+              {headerLabel}
             </span>
             {activeIsReadOnly && (
               <span className="readonly-badge" title="read-only — only admins can post">

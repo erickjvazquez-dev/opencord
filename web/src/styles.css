@@ -655,6 +655,21 @@ button:disabled {
   font-weight: 500;
 }
 
+/* The header title ellipsis-truncates instead of pushing the action controls onto a second
+   row: a many-member group (long member-list title) or a long custom group name stays on one
+   line. Mirrors the .channel-topic pattern. Capped responsively so it never exceeds the
+   viewport on a narrow screen; the full title is on the span's `title` (hover) attribute.
+   The header's deliberate control-wrap (when the member-list sidebar narrows the column)
+   still works — this only stops the TITLE from being what forces the wrap. */
+.chat-header .channel {
+  max-width: min(36ch, 55vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .meta {
   display: flex;
   align-items: center;

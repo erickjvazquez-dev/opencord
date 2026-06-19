@@ -1957,6 +1957,25 @@ async function main() {
   )
   await page.locator('.chat-header').screenshot({ path: join(SHOTS, '07k2-group-renamed.png') })
 
+  // P1 fix (iter 188): a long header title must ELLIPSIS-TRUNCATE, not wrap the action buttons
+  // (pins/mute/add/rename/leave/voice) onto a second row. Set a long name and assert the title
+  // element is actually clipped (its full content is wider than its capped visible box).
+  const longName = 'Weekend Trip Planning ' + 'x'.repeat(60) // ~82 chars, under the 100 cap
+  promptAnswer = longName
+  await renameBtn.click()
+  await page
+    .locator('.brand .channel')
+    .filter({ hasText: 'Weekend Trip Planning' })
+    .waitFor({ timeout: 8000 })
+  const titleClip = await page
+    .locator('.chat-header .channel')
+    .evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
+  check(
+    titleClip.scroll > titleClip.client,
+    `a long group title is ellipsis-clipped in the header (scrollW ${titleClip.scroll} > clientW ${titleClip.client})`,
+  )
+  await page.locator('.chat-header').screenshot({ path: join(SHOTS, '07k4-group-name-truncated.png') })
+
   // Rule 15 — a HOSTILE group name must render as INERT literal text, never execute. The name
   // is user-controlled text rendered in the header/sidebar/welcome/composer (slice 2, iter 185).
   // React escapes it today; encode that as a regression so a future dangerouslySetInnerHTML on

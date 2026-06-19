@@ -195,13 +195,16 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   rules but ZERO `:active` ones — added a global press dim (`opacity:.8`, + `brightness(.9)` on filled
   accent buttons) so every button/link gives tactile feedback on press; deliberately NOT a `transform`
   (a positional nudge moves the element on mousedown and breaks pointer/Playwright click-stability —
-  caught by QA). New browser-QA `3f4` holds a button and asserts it dims. **Still TODO:** consistent
-  spacing sweep; broader "feels like Discord" pass; **P1 (vision-found iter 187): the chat HEADER
-  title does not truncate** — a long DM/group title (a group with many members, or a long custom
-  name) wraps and pushes the header actions (pins/mute/add/rename/leave/voice) onto a second line.
-  The sidebar already ellipsis-truncates (iter 114); the header title needs the same `min-width:0`
-  + `overflow:hidden` + `text-overflow:ellipsis` treatment with the actions kept `flex-shrink:0` on
-  one row. Browser QA should create a many-member group and assert the header stays single-row.
+  caught by QA). New browser-QA `3f4` holds a button and asserts it dims. **Header title truncation
+  DONE (iter 188):** the chat header title (`.chat-header .channel`) now ellipsis-truncates
+  (`max-width:min(36ch,55vw)` + `overflow:hidden` + `text-overflow:ellipsis`, the `.channel-topic`
+  pattern) with the full title on a hover `title` attr — a long custom group name or many-member
+  member-list title no longer grows unbounded; browser QA `07k4` sets an ~82-char name and asserts
+  the title element is clipped (scrollW > clientW), AI-vision verified the ellipsis. **Still TODO:**
+  consistent spacing sweep; broader "feels like Discord" pass; **P2 (follow-up from iter 188): the
+  DM header's many TEXT-label controls still wrap** (pins/mute/add/rename/leave/voice + a wide search
+  box exceed the row even with the title capped) — Discord keeps these single-row by using icon-only
+  buttons / an overflow "⋯" menu. That's the real single-row fix; the title cap was the first half.
 - [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
   video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
   publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go
