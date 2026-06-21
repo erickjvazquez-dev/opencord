@@ -2678,7 +2678,7 @@ now a thin wrapper so its 15+ callers are untouched); `GET /messages?before=<id>
 (?before=0/huge/invalid all 200). *(This slice also surfaced + fixed a latent migration boot bug — the
 intermediate channels_global_name_uniq recreate didn't exclude group DMs; see `fix(db)` iter 203.)*
 
-**Frontend slice 2 (next):** on scroll near the TOP of `.messages`, fetch the page before the oldest
+**Frontend slice 2 DONE (iter 204):** a "↑ Load older messages" pill at the top pages older history in (prepend + scroll-anchor via useLayoutEffect; the iter-191 auto-scroll skips the prepend via justPrependedRef; intro replaces the button at the channel start). De-risked from auto-load-on-scroll to a button (no stale-closure handler); auto-load is a future enhancement. QA seeds a global pgseed channel (60 msgs) so the button + 50→60 paging + no-yank are E2E-verified; shipped + rollout-verified. ORIGINAL PLAN: on scroll near the TOP of `.messages`, fetch the page before the oldest
 loaded message (`?before=<oldest.id>`), PREPEND it, and PRESERVE the scroll position (anchor on the
 previously-top message so the view doesn't jump). Key interaction: the iter-191 smart-auto-scroll keys
 on `messages` changing — prepending older messages must NOT trigger auto-scroll-to-bottom (it only fires

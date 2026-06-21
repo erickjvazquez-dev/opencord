@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 204) — History pagination frontend; SEEDING GLOBAL STATE in QA pollutes other tests' assertions
+
+Shipped the "Load older messages" frontend slice (prepend + scroll-anchor + skip-the-auto-scroll). It
+WORKED first try in QA — the wins were process choices, and one real QA-architecture lesson.
+
+**Lesson 1 — de-risk a fiddly interaction to its simplest shippable form.** The spec wanted auto-load-
+on-scroll-to-top, which needs a scroll handler calling a state-dependent callback (stale-closure trap,
+the iter-191 rabbit hole). On a saturated context I shipped an explicit "Load older" BUTTON instead: same
+core value (older history accessible), none of the stale-closure/scroll-trigger complexity. Auto-load is
+a clean future enhancement. Pick the version whose risk matches the context.
+
+**Lesson 2 — seeding GLOBAL state to test feature A breaks feature B's tests.** To make the button appear
+I needed 50+ messages, which WS rate-limits and REST won't do (needs a file), so run.sh SQL-seeds a
+global `pgseed` channel (60 msgs). The pagination test passed immediately — but the realtime tab-badge
+tests FAILED: a global channel with 60 messages nobody read is 60 UNREAD for every user, so B's tab
+showed `● Opencord` when the test expected a clean title. The seed was correct for the feature under test
+and wrong for an unrelated one sharing the same global namespace. Fix: have the affected test READ the
+seeded channel first (conditional on its existence). **Rule: when a test fixture mutates shared/global
+state (a global channel, a default workspace, a singleton), audit every OTHER test that reads that state
+— unread counts, "list all X", totals, badges — and neutralize the fixture there. Prefer scoping the
+fixture (a private/server channel) when possible; when it must be global, make the readers tolerant.**
+
+**Lesson 3 — the anchor proof is visible, not just numeric.** "Count grew 50→60" proves paging; "not at
+bottom after" proves the anchor didn't yank. But the AI-vision screenshot (older seeds in view + the
+jump-to-present pill showing = stayed scrolled up) is what confirmed the *experience* is right, not just
+the metrics.
+
 ## 2026-06-19 (iter 203) — A functional gap (fixed-window history) → backend pagination, which UNCOVERED a latent prod boot bug
 
 Swept the FUNCTIONAL axis and found a real gap: history is a fixed 50-message window (no `before`
