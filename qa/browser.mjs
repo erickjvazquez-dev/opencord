@@ -857,10 +857,12 @@ async function main() {
   // (~220px, shown >900px) narrows this column, so the header controls have far
   // less room than in #general. Regression for the iter-90 AI-vision finding:
   // without flex-wrap the flex items shrank to min-content and wrapped their TEXT
-  // across lines — "Join voice" → 2 lines, "1 online ·" → 3 lines, "log out" →
-  // 2 lines — a cramped, broken-looking header. The objective signal is rendered
-  // text-line count per control: each label control must occupy a single line.
-  step('server-channel header stays clean under the member-list sidebar (no text wrapping)')
+  // across lines. As of iter 206 the user identity cluster (avatar + presence +
+  // log out) MOVED OUT of the header into the bottom-left sidebar user panel
+  // (Discord layout), so the header is now just brand + title + action icons and
+  // the panel can never crowd it. The objective signal is rendered text-line count
+  // per remaining control + the panel living in the SIDEBAR, not the header.
+  step('server-channel header stays clean (user panel moved to the sidebar, no text wrapping)')
   check(await page.locator('.member-list').isVisible(), 'member-list sidebar is present (the narrow-header case)')
   const headerLines = await page.locator('.chat-header').evaluate((header) => {
     // Rendered text lines of an element, padding/border-corrected (robust to
@@ -878,19 +880,27 @@ async function main() {
     return {
       brand: lines('.brand'),
       voice: lines('.voice-join'),
-      logout: lines('.meta .link'),
+      hasUserPanel: !!header.querySelector('.sidebar-user'),
       hOverflow: header.scrollWidth - header.clientWidth,
     }
   })
   check(headerLines.brand === 1, `brand ("Opencord #channel") stays on one line (got ${headerLines.brand})`)
   check(headerLines.voice === 1, `"Join voice" stays on one line (got ${headerLines.voice})`)
-  check(headerLines.logout === 1, `"log out" stays on one line (got ${headerLines.logout})`)
+  check(headerLines.hasUserPanel === false, 'the user identity panel is NOT in the header (moved to the sidebar)')
   check(headerLines.hOverflow <= 1, 'header has no horizontal overflow (scrollWidth ≤ clientWidth)')
   check(
     await page.locator('.chat-header .voice-join').isVisible(),
     'Join voice button is reachable in the server-channel header',
   )
-  check(await page.getByRole('button', { name: 'log out' }).isVisible(), 'log out is reachable in the server-channel header')
+  // The identity cluster now lives in the bottom-left sidebar user panel (Discord parity).
+  check(
+    await page.locator('.sidebar .sidebar-user .self-chip').isVisible(),
+    'the user settings chip is reachable in the sidebar user panel',
+  )
+  check(
+    await page.locator('.sidebar .sidebar-user').getByRole('button', { name: 'log out' }).isVisible(),
+    'log out is reachable in the sidebar user panel',
+  )
 
   // 7b — Invite: the invite button mints a code (shown in a prompt to copy).
   step('click invite → a server invite code is generated')
@@ -2198,20 +2208,26 @@ async function main() {
     'selecting a channel closes the drawer',
   )
 
-  // 8b — Mobile header controls: the always-shown user controls (⚙ user-settings chip
-  // + log out) must stay reachable and NOT cause horizontal overflow at phone width.
-  // The presence/status controls moved into the settings modal this cycle.
-  step('phone-width header: ⚙ settings chip reachable, no horizontal overflow')
-  await page.waitForTimeout(350) // let the drawer's slide-out transition settle for a clean shot
-  check(
-    await page.getByRole('button', { name: 'user settings' }).isVisible(),
-    'user-settings chip is reachable on mobile',
-  )
-  check(await page.getByRole('button', { name: 'log out' }).isVisible(), 'log out is reachable on mobile')
+  // 8b — Mobile header + user panel: the header must NOT overflow horizontally at phone width,
+  // and the user controls (⚙ user-settings chip + log out) must stay reachable. As of iter 206
+  // those controls live in the bottom-left sidebar user panel, which on mobile is the off-canvas
+  // drawer — so reaching them is: open the drawer (☰) → tap the panel (Discord-mobile behavior).
+  step('phone-width: header no overflow; user panel (settings + log out) reachable via the drawer')
   const mHeaderOverflow = await page
     .locator('.chat-header')
     .evaluate((h) => h.scrollWidth - h.clientWidth)
   check(mHeaderOverflow <= 1, `mobile header has no horizontal overflow (got ${mHeaderOverflow}px)`)
+  await page.getByRole('button', { name: 'menu' }).click() // open the off-canvas drawer
+  await page.locator('.app.sidebar-open').waitFor({ timeout: 4000 })
+  await page.waitForTimeout(350) // let the drawer's slide-in transition settle for a clean shot
+  check(
+    await page.locator('.sidebar-user').getByRole('button', { name: 'user settings' }).isVisible(),
+    'user-settings chip is reachable in the mobile drawer user panel',
+  )
+  check(
+    await page.locator('.sidebar-user').getByRole('button', { name: 'log out' }).isVisible(),
+    'log out is reachable in the mobile drawer user panel',
+  )
   await shot('08b-mobile-header.png')
 
   await browser.close()

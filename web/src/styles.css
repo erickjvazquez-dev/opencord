@@ -690,17 +690,40 @@ button:disabled {
   cursor: default;
 }
 
-.meta {
+/* Discord-style user panel pinned to the bottom of the sidebar (iter 206): identity (self-chip)
+   on top, then a presence + log-out foot row. `margin-top: auto` pins it below the scrolling
+   channel/DM/server navs. Moved here from the chat header so the header is a clean single row and
+   this never wraps in a group DM / narrow column. */
+.sidebar-user {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: #161719;
+  border-top: 1px solid rgba(0, 0, 0, 0.3);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.sidebar-user .self-chip {
+  width: 100%;
+  justify-content: flex-start;
+}
+.sidebar-user-foot {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  color: var(--text-muted);
-  font-size: 14px;
-  /* Keep the presence + avatar + log-out group on one line (never split "log
-     out" across two rows) and anchor it to the right edge of whatever header
-     row it lands on. */
+  padding: 0 4px;
+}
+.sidebar-user-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   white-space: nowrap;
-  margin-left: auto;
+}
+.sidebar-user-logout {
+  white-space: nowrap;
 }
 
 .dot {
@@ -2112,15 +2135,6 @@ button:disabled {
     align-items: center;
   }
 
-  /* The user-controls row (avatar + presence picker + status + log out) is a
-     nowrap flex group anchored right; on a phone the group can be wider than the
-     viewport, so let it wrap onto multiple lines instead of overflowing the
-     header horizontally. Individual items already ellipsis-truncate. */
-  .meta {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    min-width: 0;
-  }
   .status-edit {
     max-width: 12ch;
   }
@@ -2159,11 +2173,6 @@ button:disabled {
   /* Keep the header readable on a narrow screen. */
   .chat-header {
     padding: 12px 14px;
-  }
-
-  .meta {
-    font-size: 12px;
-    gap: 8px;
   }
 }
 

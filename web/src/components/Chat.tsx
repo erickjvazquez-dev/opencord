@@ -2511,6 +2511,45 @@ export function Chat({
             Join server
           </button>
         </div>
+        {/* Discord-style user panel pinned to the bottom of the sidebar: identity + presence +
+            settings + log out. Moved out of the chat header (iter 206) so the header stays a clean
+            single row of title + action icons, and so this never wraps in a group DM / narrow column. */}
+        <div className="sidebar-user">
+          <button
+            type="button"
+            className="self-chip"
+            title="User settings"
+            aria-label="user settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <span className="self-chip-avatar">
+              <Avatar
+                token={token}
+                userId={user.id}
+                username={user.username}
+                className="avatar avatar-self"
+                bust={avatarVersion}
+              />
+              <span
+                className={`presence-pip presence-${myPresence} self-chip-pip`}
+                aria-hidden
+              />
+            </span>
+            <span className="self-chip-name">{user.username}</span>
+            <span className="self-chip-gear" aria-hidden>
+              ⚙
+            </span>
+          </button>
+          <div className="sidebar-user-foot">
+            <span className="sidebar-user-presence" title={`${online} online`}>
+              <span className={connected ? 'dot online' : 'dot offline'} />
+              {online} online
+            </span>
+            <button className="link sidebar-user-logout" onClick={onLogout}>
+              log out
+            </button>
+          </div>
+        </div>
       </aside>
 
       <div className="chat">
@@ -2705,38 +2744,6 @@ export function Chat({
                 🔍
               </button>
             ))}
-          <div className="meta">
-            <span className={connected ? 'dot online' : 'dot offline'} />
-            {online} online
-            <button
-              type="button"
-              className="self-chip"
-              title="User settings"
-              aria-label="user settings"
-              onClick={() => setSettingsOpen(true)}
-            >
-              <span className="self-chip-avatar">
-                <Avatar
-                  token={token}
-                  userId={user.id}
-                  username={user.username}
-                  className="avatar avatar-self"
-                  bust={avatarVersion}
-                />
-                <span
-                  className={`presence-pip presence-${myPresence} self-chip-pip`}
-                  aria-hidden
-                />
-              </span>
-              <span className="self-chip-name">{user.username}</span>
-              <span className="self-chip-gear" aria-hidden>
-                ⚙
-              </span>
-            </button>
-            <button className="link" onClick={onLogout}>
-              log out
-            </button>
-          </div>
         </header>
 
         {reconnecting && (

@@ -2686,3 +2686,32 @@ when atBottom or channelChanged or own-send, none true while reading history up 
 safe, but VERIFY). Stop paging when a returned page is shorter than the limit (reached channel start).
 Browser-QA: post >50 messages, open the channel, scroll to top, assert older messages load + the view
 doesn't jump.
+
+## Bottom-left sidebar user panel (Discord layout parity) — iter 206
+
+**Why:** Discord's iconic layout puts the user panel (avatar + presence + name + settings) at the
+BOTTOM-LEFT of the sidebar, and keeps the channel header to just title + action icons. Opencord put
+the user identity cluster (`.meta`: online count + self-chip + log out) in the chat HEADER's top-right,
+which (a) is non-Discord and (b) wraps to a 2nd header row in group DMs / when the member-list panel
+narrows the column (the iter-188/195 "appearance slice-4" P2; see 07l-group-header.png). Moving the
+cluster out of the header into a sidebar footer fixes the wrap permanently AND matches Discord.
+
+**Change (minimal, mostly a move):**
+- Cut the `.meta` cluster from `<header className="chat-header">` and render it as a
+  `<div className="sidebar-user">` footer at the BOTTOM of `<aside className="sidebar">` (after the
+  server actions). Children unchanged (online dot + count, `.self-chip` settings button, `log out`),
+  so every class/aria selector (`user settings`, `log out`, `.self-chip-pip.presence-*`,
+  `.self-chip .avatar-self`, `N online`) keeps resolving — only the parent location moves.
+- CSS: replace the header-anchored `.meta` rule with a `.sidebar-user` footer bar (border-top,
+  bg, flex, the self-chip flex-grows); drop the two mobile `.meta` header overrides (now moot).
+- The header keeps `flex-wrap` (harmless) but nothing forces a wrap anymore → single-row header.
+
+**QA delta:** the header-wrap line-count test no longer measures `.meta` in the header (it's gone);
+repurpose it to assert the header has NO `.sidebar-user` and no h-overflow, and that the panel +
+its self-chip/log-out are reachable in the sidebar. Mobile: the panel lives in the drawer, so the
+phone test opens the drawer to reach settings/log out (Discord-mobile behavior). Desktop tests that
+click `user settings`/`log out` are unaffected (the 220px sidebar is always visible).
+
+**Verify:** tsc + vitest + full browser/realtime/voice/search QA green; AI-vision confirms the
+bottom-left panel + clean single-row header (incl. the group-DM header that used to wrap); deploy +
+rollout-verify.
