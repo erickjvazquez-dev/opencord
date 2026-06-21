@@ -370,6 +370,36 @@ async function main() {
   await page.setViewportSize({ width: 1100, height: 820 }) // restore the desktop viewport
   await page.waitForTimeout(250)
 
+  // 3f2b — History pagination (iter 204): the seeded `pgseed` channel has 60 messages, so opening
+  // it shows the "Load older" button; clicking it pages older history in WITHOUT yanking the view
+  // to the bottom (the prepend is scroll-anchored + skips the auto-scroll).
+  step('history pagination: "Load older" pages in older messages without jumping to the bottom')
+  const pgChan = page.locator('.channel-item', { hasText: 'pgseed' }).first()
+  if ((await pgChan.count()) > 0) {
+    await pgChan.click()
+    await page.locator('.messages .message').last().waitFor({ timeout: 8000 })
+    const loadOlderBtn = page.locator('.load-older-btn')
+    await loadOlderBtn.waitFor({ timeout: 6000 })
+    check((await loadOlderBtn.count()) > 0, 'the "Load older" button appears in a channel with >50 messages')
+    const before = await page.locator('.messages .message').count()
+    await loadOlderBtn.click()
+    let after = before
+    for (let i = 0; i < 40; i++) {
+      after = await page.locator('.messages .message').count()
+      if (after > before) break
+      await page.waitForTimeout(100)
+    }
+    check(after > before, `clicking "Load older" pages in more history (${before} → ${after})`)
+    const notBottom = await page
+      .locator('.messages')
+      .evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight > 80)
+    check(notBottom, 'loading older history did not yank the view to the bottom (scroll anchored)')
+    await shot('03f2b-load-older.png')
+    await page.locator('.channel-item', { hasText: 'general' }).first().click() // back to #general
+  } else {
+    check(false, 'pgseed channel present (run.sh seed step ran)')
+  }
+
   // 3f2 — Accessibility: a WCAG 2 A/AA scan of the populated chat (messages,
   // avatars, links, mentions) must have no serious/critical violations (UI north
   // star: accessible). This is content-rich, so it covers contrast etc.

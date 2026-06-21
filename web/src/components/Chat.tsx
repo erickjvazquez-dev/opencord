@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import {
   addReaction,
   createChannel,
@@ -15,6 +15,7 @@ import {
   editMessage,
   fetchChannels,
   fetchDMs,
+  fetchMessagesBefore,
   leaveGroupDM,
   addGroupDMMember,
   renameGroupDM,
@@ -366,6 +367,15 @@ export function Chat({
   const atBottomRef = useRef(true)
   const lastChannelRef = useRef<number | null>(null)
   const [showJump, setShowJump] = useState(false)
+  // History pagination (load older): a plain ref to the scroll container (for anchoring), a flag
+  // for whether more history may exist, and refs to guard concurrent loads + carry the scroll
+  // anchor / suppress the auto-scroll across a prepend.
+  const messagesElRef = useRef<HTMLElement | null>(null)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const loadingOlderRef = useRef(false)
+  const prependAnchorRef = useRef<number | null>(null) // scrollHeight before a prepend, to restore position
+  const justPrependedRef = useRef(false) // tells the auto-scroll effect to skip this messages change
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
   // Whether the active channel is a DM — kept fresh for the WS message handler, whose
@@ -458,6 +468,9 @@ export function Chat({
       if (data.type === 'history' && data.history) {
         const hist = data.history
         setMessages(hist)
+        // A full initial window (the server caps at 50) means older history may exist → offer
+        // "load older"; a partial window means we already have the whole channel.
+        setHasMoreHistory(hist.length >= 50)
         setVoicePresence([]) // fresh channel — a voice-presence event follows iff a call is live
         // Seed "mine" from the server's per-viewer flags (history is viewer-scoped).
         const mine = new Set<string>()
@@ -627,6 +640,7 @@ export function Chat({
   const detachScrollRef = useRef<() => void>(() => {})
   const messagesRef = useCallback((el: HTMLElement | null) => {
     detachScrollRef.current()
+    messagesElRef.current = el
     if (!el) return
     const handler = () => {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
@@ -637,10 +651,57 @@ export function Chat({
     detachScrollRef.current = () => el.removeEventListener('scroll', handler)
   }, [])
 
+  // Load the page of history OLDER than the oldest loaded message, prepend it, and anchor the
+  // scroll so the view doesn't jump (record scrollHeight before; the layout effect below restores
+  // position after the DOM grows). Guarded against concurrent loads; stops when a short page or an
+  // empty page signals the channel start.
+  const loadOlder = useCallback(async () => {
+    if (loadingOlderRef.current || channelId == null) return
+    const el = messagesElRef.current
+    const oldest = messages[0]
+    if (!el || !oldest) return
+    loadingOlderRef.current = true
+    setLoadingOlder(true)
+    try {
+      const older = await fetchMessagesBefore(token, channelId, oldest.id)
+      if (older.length < 50) setHasMoreHistory(false)
+      if (older.length > 0) {
+        prependAnchorRef.current = el.scrollHeight
+        justPrependedRef.current = true
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id))
+          return [...older.filter((m) => !seen.has(m.id)), ...prev]
+        })
+      }
+    } catch {
+      /* leave hasMoreHistory as-is; the reader can retry */
+    } finally {
+      loadingOlderRef.current = false
+      setLoadingOlder(false)
+    }
+  }, [messages, channelId, token])
+
+  // After a prepend, restore the scroll position so the older messages slot in ABOVE the view
+  // instead of yanking it. Runs before paint (useLayoutEffect) so there's no visible jump.
+  useLayoutEffect(() => {
+    if (prependAnchorRef.current == null) return
+    const el = messagesElRef.current
+    if (el) el.scrollTop += el.scrollHeight - prependAnchorRef.current
+    prependAnchorRef.current = null
+  }, [messages])
+
   useEffect(() => {
     // Switching channels always lands on the newest message (instant). Otherwise auto-scroll
     // to a new message only when already at the bottom OR it's the reader's own send — never
     // yank a reader who has scrolled up; surface the jump-to-present button instead.
+    // A prepend (load-older) changes `messages` but must NOT auto-scroll — the layout effect
+    // already anchored the view; without this a prepend would yank to the bottom when the newest
+    // message happens to be the reader's own.
+    if (justPrependedRef.current) {
+      justPrependedRef.current = false
+      lastChannelRef.current = channelId
+      return
+    }
     const channelChanged = lastChannelRef.current !== channelId
     lastChannelRef.current = channelId
     const mine = messages.length > 0 && messages[messages.length - 1].userId === user.id
@@ -3428,6 +3489,25 @@ export function Chat({
             searchResults === null &&
             pins === null &&
             threads === null &&
+            !activeChannelIsVoice &&
+            hasMoreHistory &&
+            messages.length > 0 && (
+              <div className="load-older-row">
+                <button
+                  type="button"
+                  className="load-older-btn"
+                  onClick={() => void loadOlder()}
+                  disabled={loadingOlder}
+                >
+                  {loadingOlder ? 'Loading…' : '↑ Load older messages'}
+                </button>
+              </div>
+            )}
+          {membersOf === null &&
+            searchResults === null &&
+            pins === null &&
+            threads === null &&
+            !hasMoreHistory &&
             !activeChannelIsVoice && (
             <div className="channel-intro">
               <div className="channel-intro-icon" aria-hidden>

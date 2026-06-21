@@ -792,6 +792,21 @@ export async function searchMessages(
   return data as Message[]
 }
 
+// Fetch a page of history OLDER than `before` (a message id) for the channel — used to load more
+// history when the reader pages up. Oldest-first within the page (same shape as the WS history);
+// an empty array means the channel start has been reached.
+export async function fetchMessagesBefore(
+  token: string,
+  channelId: number,
+  before: number,
+): Promise<Message[]> {
+  const res = await fetch(`/api/messages?channel=${channelId}&before=${before}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(`could not load older messages (${res.status})`)
+  return (await res.json()) as Message[]
+}
+
 export async function fetchPins(token: string, channelId: number): Promise<Message[]> {
   const res = await fetch(`/api/messages/pins?channel=${channelId}`, {
     headers: { Authorization: `Bearer ${token}` },

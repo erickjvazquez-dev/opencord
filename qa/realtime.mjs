@@ -455,6 +455,16 @@ async function main() {
       (await bSrvChanBtn.locator('.mention-badge').count()) === 0,
     'opening the channel clears both the unread dot and the mention badge',
   )
+  // The browser-QA seeds a global `pgseed` channel (history pagination) with 60 messages that B has
+  // never opened — read it so the tab-badge assertions below see only THIS test's unread state, not
+  // the seed's. Conditional: standalone realtime runs (no seed) just skip it.
+  const bPgseed = b.locator('.channel-item', { hasText: 'pgseed' }).first()
+  if ((await bPgseed.count()) > 0) {
+    await bPgseed.click()
+    await b.waitForTimeout(400)
+    await bSrvChanBtn.click() // back to the server channel for the assertions + the mute test
+    await b.waitForTimeout(400)
+  }
   // Tab badge clears too once everything is read.
   check(
     (await b.title()) === 'Opencord',

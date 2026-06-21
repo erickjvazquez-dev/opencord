@@ -753,6 +753,32 @@ button:disabled {
 .channel-intro {
   padding: 16px 4px 8px;
 }
+
+/* "Load older messages" — a centered pill at the very top of the scrollback while older history
+   exists (history pagination, iter 204). Clicking it pages older messages in above the view. */
+.load-older-row {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+}
+.load-older-btn {
+  background: var(--bg-input);
+  color: var(--text);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.load-older-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.load-older-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .channel-intro-icon {
   width: 68px;
   height: 68px;
