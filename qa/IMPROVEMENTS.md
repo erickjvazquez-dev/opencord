@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 209) — Custom status in the user panel (rotated off security); + a RECURRING deploy-no-op finding the rollout-verify keeps catching
+
+Rotated off the two security ticks (207/208) per plan, to a contained UI parity polish that builds on
+the iter-206 sidebar user panel: the panel now shows the caller's **custom status + emoji under their
+username** (Discord's user-panel layout). Used existing `myStatus`/`myStatusEmoji` state (already synced
+from the member list) and the member-list status render pattern — hidden entirely when no status is set,
+so it's zero-change for users without one. Verified: tsc + vitest 86/86, full browser/realtime/voice/
+search QA green (extended the set-status flow to assert the panel shows it), AI-vision confirmed
+"🚀 shipping presence" under the name, deployed + rollout-verified (bundle carries `self-chip-status`).
+
+**LOOP-PROCESS finding (important, now confirmed TWICE — 206 and 209): the first `railway up` of a tick
+silently no-ops.** Both ticks, the first deploy invocation (`eval "$CCF_DEPLOY_CMD" | tail -N`) returned
+empty output and did NOT roll the bundle over (live stayed on the prior hash for 2+ minutes); a second,
+DIRECT `railway up --service opencord --ci` printed full build logs + "Deploy complete" and rolled over.
+The rollout-verify step (compare local vs live bundle hash) caught it BOTH times — `/healthz` was 200 on
+the stale container the whole time, exactly the trap it guards. **This is why the loop's "never trust a
+deploy you didn't rollout-verify" rule is non-negotiable.** Mitigation for future ticks (and a candidate
+loop-rule tightening): after `railway up`, ALWAYS poll the bundle hash; if it hasn't changed within ~90s,
+re-run `railway up` directly (not via the eval wrapper) and re-verify — don't assume the first one shipped.
+Root cause not yet pinned (eval-wrapper vs direct invocation is the only obvious difference; possibly a
+Railway CLI quirk when a build was recently triggered); worth a dedicated look if it recurs a third time.
+
+**Next-tick candidate (logged):** continue the rotation — either advance a non-UI component (chat
+realtime robustness, or an infra/one-command check), or the natural next user-panel parity step
+(mute/deafen quick-toggles, which needs voice-session integration so it's a bigger, SPEC-first tick).
+Avoid a 3rd straight UI-panel micro-polish; spread the work across components per the excellence rotation.
+
 ## 2026-06-21 (iter 208) — Finished the IDOR-scoping SWEEP: when one endpoint has an invariant gap, audit ALL its siblings in the same sweep
 
 Executed the next-tick candidate I logged in 207: audited the SIBLING client-supplied-id read paths
