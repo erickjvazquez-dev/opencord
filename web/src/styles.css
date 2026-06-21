@@ -2596,12 +2596,34 @@ button:disabled {
   height: 11px;
   border: 2px solid var(--bg-elevated);
 }
+/* The name + custom-status stack between the avatar and the gear (Discord user panel).
+   flex:1 + min-width:0 lets both lines ellipsis-truncate at the panel width. */
+.self-chip-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.2;
+}
 .self-chip-name {
-  max-width: 120px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
+}
+/* The caller's own custom status under their name in the user panel (parity with the
+   member-list status line). Hidden entirely when no status is set. */
+.self-chip-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 .self-chip-gear {
   color: var(--text-muted);

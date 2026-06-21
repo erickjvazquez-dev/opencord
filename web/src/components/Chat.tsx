@@ -2535,7 +2535,15 @@ export function Chat({
                 aria-hidden
               />
             </span>
-            <span className="self-chip-name">{user.username}</span>
+            <span className="self-chip-text">
+              <span className="self-chip-name">{user.username}</span>
+              {(myStatus || myStatusEmoji) && (
+                <span className="self-chip-status" title={myStatus || ''}>
+                  {myStatusEmoji && <span className="status-emoji">{myStatusEmoji}</span>}
+                  {myStatus}
+                </span>
+              )}
+            </span>
             <span className="self-chip-gear" aria-hidden>
               ⚙
             </span>

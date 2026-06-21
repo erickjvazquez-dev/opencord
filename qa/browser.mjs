@@ -1419,6 +1419,18 @@ async function main() {
     ),
     'status emoji renders before the status line in the member list',
   )
+  // iter 209 — the custom status ALSO shows under the name in the bottom-left user panel (Discord
+  // parity; `myStatus` syncs from the member list). Emoji + text both render in the self-chip.
+  const panelStatus = page.locator('.sidebar-user .self-chip-status')
+  await panelStatus.waitFor({ timeout: 8000 })
+  check(
+    (await panelStatus.textContent())?.includes(myStatus) ?? false,
+    'custom status renders under the username in the sidebar user panel',
+  )
+  check(
+    ((await page.locator('.sidebar-user .self-chip-status .status-emoji').textContent()) ?? '').includes(myStatusEmoji),
+    'status emoji renders before the status line in the user panel',
+  )
   await shot('07d2-status.png')
 
   // 7d2b — Presence picker (in settings): choosing "Do Not Disturb" recolors the self
