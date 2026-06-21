@@ -370,30 +370,37 @@ async function main() {
   await page.setViewportSize({ width: 1100, height: 820 }) // restore the desktop viewport
   await page.waitForTimeout(250)
 
-  // 3f2b — History pagination (iter 204): the seeded `pgseed` channel has 60 messages, so opening
-  // it shows the "Load older" button; clicking it pages older history in WITHOUT yanking the view
-  // to the bottom (the prepend is scroll-anchored + skips the auto-scroll).
-  step('history pagination: "Load older" pages in older messages without jumping to the bottom')
+  // 3f2b — History pagination (iter 204/205): the seeded `pgseed` channel has 120 messages, so
+  // opening it loads the newest 50 and shows the "↑ Load older" button. Discord-style, scrolling near
+  // the TOP auto-loads the next page (iter 205) with NO click — the button is a visible fallback, the
+  // scroll is the primary path (and reaching the button itself scrolls to the top, so the two share
+  // the same loadOlder path). Either way, older history must page in WITHOUT yanking the view to the
+  // bottom (the prepend is scroll-anchored + skips the auto-scroll).
+  step('history pagination: scrolling to the top auto-loads older history (button present as fallback) without yanking')
   const pgChan = page.locator('.channel-item', { hasText: 'pgseed' }).first()
   if ((await pgChan.count()) > 0) {
     await pgChan.click()
     await page.locator('.messages .message').last().waitFor({ timeout: 8000 })
     const loadOlderBtn = page.locator('.load-older-btn')
     await loadOlderBtn.waitFor({ timeout: 6000 })
-    check((await loadOlderBtn.count()) > 0, 'the "Load older" button appears in a channel with >50 messages')
+    check((await loadOlderBtn.count()) > 0, 'the "↑ Load older" fallback button appears in a channel with >50 messages')
     const before = await page.locator('.messages .message').count()
-    await loadOlderBtn.click()
+    // Auto-load: scroll the message list to the TOP and assert older history pages in with NO click.
+    // The scroll-anchor pushes the viewport back down after each prepend, so re-nudge to the top to
+    // page through more (it stops on its own when hasMoreHistory goes false at the channel start).
+    await page.locator('.messages').evaluate((el) => { el.scrollTop = 0 })
     let after = before
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 60; i++) {
       after = await page.locator('.messages .message').count()
       if (after > before) break
+      await page.locator('.messages').evaluate((el) => { if (el.scrollTop > 120) el.scrollTop = 0 })
       await page.waitForTimeout(100)
     }
-    check(after > before, `clicking "Load older" pages in more history (${before} → ${after})`)
+    check(after > before, `scrolling to the top auto-loads more history with no click (${before} → ${after})`)
     const notBottom = await page
       .locator('.messages')
       .evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight > 80)
-    check(notBottom, 'loading older history did not yank the view to the bottom (scroll anchored)')
+    check(notBottom, 'auto-load-on-scroll did not yank the view to the bottom (scroll anchored)')
     await shot('03f2b-load-older.png')
     await page.locator('.channel-item', { hasText: 'general' }).first().click() // back to #general
   } else {

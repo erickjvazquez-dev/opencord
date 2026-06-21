@@ -53,16 +53,18 @@ curl -sf http://localhost:8080/healthz >/dev/null 2>&1 || {
 
 # Seed a dedicated global channel with >50 messages so the history-pagination "Load older" button
 # has something to page (iter 204). Direct SQL — the WS path is rate-limited and the REST path
-# requires a file, so neither can cheaply seed 60 messages. A separate channel keeps #general clean.
-echo "[qa] seeding the pgseed channel with 60 messages for history pagination…"
+# requires a file, so neither can cheaply seed messages. A separate channel keeps #general clean.
+# 120 messages = THREE pages (newest 50 on open, +50 via the button, +20 via auto-load-on-scroll)
+# so the browser QA can exercise BOTH the click fallback and the scroll-to-top auto-load (iter 205).
+echo "[qa] seeding the pgseed channel with 120 messages for history pagination…"
 docker exec opencord-db-1 psql -U opencord -d opencord -q -c "
   INSERT INTO users (username, password_hash) VALUES ('pgseed-user', 'x') ON CONFLICT (username) DO NOTHING;
   INSERT INTO channels (name) SELECT 'pgseed' WHERE NOT EXISTS (SELECT 1 FROM channels WHERE name='pgseed' AND server_id IS NULL);
   INSERT INTO messages (channel_id, user_id, body, created_at)
   SELECT (SELECT id FROM channels WHERE name='pgseed' AND server_id IS NULL),
          (SELECT id FROM users WHERE username='pgseed-user'),
-         'history seed ' || g, now() - (interval '1 second' * (300 - g))
-  FROM generate_series(1, 60) g;" >/dev/null 2>&1 || echo "[qa] pgseed seed failed (pagination test will skip)"
+         'history seed ' || g, now() - (interval '1 second' * (600 - g))
+  FROM generate_series(1, 120) g;" >/dev/null 2>&1 || echo "[qa] pgseed seed failed (pagination test will skip)"
 
 # Parse-check every QA script BEFORE the expensive boot — a one-char syntax slip in a
 # .mjs otherwise isn't caught until ~3 min in (Postgres + Go build + Vite + Playwright

@@ -372,6 +372,8 @@ export function Chat({
   // anchor / suppress the auto-scroll across a prepend.
   const messagesElRef = useRef<HTMLElement | null>(null)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
+  const hasMoreHistoryRef = useRef(hasMoreHistory) // mirror for the once-created scroll handler
+  hasMoreHistoryRef.current = hasMoreHistory
   const [loadingOlder, setLoadingOlder] = useState(false)
   const loadingOlderRef = useRef(false)
   const prependAnchorRef = useRef<number | null>(null) // scrollHeight before a prepend, to restore position
@@ -646,6 +648,12 @@ export function Chat({
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
       atBottomRef.current = atBottom
       setShowJump(!atBottom)
+      // Discord-style auto-load: scrolling near the TOP pages in older history. The button stays
+      // as a visible fallback; loadOlder anchors the scroll so the view never yanks, and its own
+      // loadingOlderRef/hasMoreHistory guards make repeated scroll fires cheap no-ops.
+      if (el.scrollTop < 120 && hasMoreHistoryRef.current && !loadingOlderRef.current) {
+        void loadOlderRef.current()
+      }
     }
     el.addEventListener('scroll', handler, { passive: true })
     detachScrollRef.current = () => el.removeEventListener('scroll', handler)
@@ -680,6 +688,10 @@ export function Chat({
       setLoadingOlder(false)
     }
   }, [messages, channelId, token])
+  // Mirror for the once-created scroll handler so auto-load-on-scroll always calls the freshest
+  // loadOlder (with current messages[0]/channelId) instead of a stale closure.
+  const loadOlderRef = useRef(loadOlder)
+  loadOlderRef.current = loadOlder
 
   // After a prepend, restore the scroll position so the older messages slot in ABOVE the view
   // instead of yanking it. Runs before paint (useLayoutEffect) so there's no visible jump.
