@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 207) — Track-0 security tick: IDOR guard on the pagination cursor; a global-id cursor is an attack surface even when the code is currently scoped
+
+After two feature ticks (205 auto-load, 206 sidebar panel), spent this tick on Track 0 (the loop's
+stated top priority — "do this MOST"): closed a real COVERAGE gap rather than shipping a 3rd feature.
+Audited the iter-203 scroll-up cursor (`GET /messages?before=<id>` → `RecentBefore`) as a classic IDOR
+surface: the cursor is a GLOBAL monotonic message id, so a natural attack is "feed channel A's endpoint
+a `before` id from channel B and see if B's history leaks." The code is already safe (the query is
+`WHERE m.channel_id = $1 AND m.id < $3`, and the handler gates on `CanAccessChannel`), but that
+invariant was UNTESTED. Added `TestRecentBeforeChannelScopingIntegration` (interleaves ids across two
+channels, pages A with B's cursors, asserts every row is A's). **Proved it catches a regression** (Rule
+15, the full loop even for an already-secure path): temporarily dropped `m.channel_id = $1` → test
+failed with "before=b3 leaked a non-channel-A message: id=118 channel=2"; restored → passed.
+
+**Learning (logged): a cursor/id parameter is an attack surface to TEST, not just to read.** When an
+endpoint accepts a client-supplied id that indexes a global/monotonic space (message ids, here),
+encode the scoping invariant as a test even if today's query is correct — a future refactor that drops
+the `WHERE channel_id` clause would otherwise silently turn it into a cross-tenant leak with all
+happy-path tests still green. The proactive "break-it-to-prove-the-test-bites" step is cheap (one
+revertible one-line patch) and is the only thing that proves the guard actually guards.
+
+**Process note:** test-only tick → committed + pushed to source control but did NOT `railway up` (the
+deployed binary excludes `_test.go`, so it's byte-identical; deploying would be pure churn, Rule 10).
+The loop's "always railway up" is for APP changes; a pure test addition correctly skips it. Skipped the
+every-3rd-tick browser QA too — zero UI surface changed and it ran fully green last tick (206).
+
+**Next-tick candidate (logged):** audit the SIBLING client-supplied-id read paths for the same
+channel-scoping + CanAccessChannel invariant and add guards where missing — pins (`?before`? no, but
+`channel`), reactions, search (`SearchMessages`), thread history. If any read path scopes by something
+other than the access-checked channel, that's the next IDOR test (or fix). One sweep, one guard each.
+
 ## 2026-06-21 (iter 206) — Bottom-left sidebar user panel (Discord layout); a RELOCATION is low-risk when QA selectors are class/aria-based, not position-based
 
 Shipped the appearance slice-4 P2 fix the *right* way: instead of compacting the header `.meta`
