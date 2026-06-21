@@ -1084,6 +1084,69 @@ func TestSearchOperatorsIntegration(t *testing.T) {
 	}
 }
 
+// SearchMessages must be strictly CHANNEL-SCOPED: a search in channel A must never return channel
+// B's messages, even when the same word/author appears in both. The search SQL is built DYNAMICALLY
+// (free text + from:/has:/before:/after: operators), so it's the most refactor-prone read path — a
+// future operator that forgot to keep `m.channel_id = $1` as the first AND-condition would silently
+// turn search into a cross-channel leak with every single-channel test still green. This locks the
+// invariant (Rule 15), paralleling TestRecentBeforeChannelScopingIntegration for the history cursor.
+func TestSearchMessagesChannelScopingIntegration(t *testing.T) {
+	store, pool, alice := setup(t)
+	ctx := context.Background()
+	bob := regUser(t, pool)
+	chA, _ := store.CreateChannel(ctx, uniqueChannel())
+	chB, _ := store.CreateChannel(ctx, uniqueChannel())
+
+	// The SAME distinctive word + the SAME author (alice) appear in BOTH channels, so only the
+	// channel scope — not the body or author filter — can keep B's rows out of an A search.
+	mustSave := func(ch int64, u auth.User, body string) {
+		if _, err := store.Save(ctx, ch, u.ID, u.Username, body); err != nil {
+			t.Fatalf("save %q: %v", body, err)
+		}
+	}
+	mustSave(chA.ID, alice, "needle in channel A")
+	mustSave(chB.ID, alice, "needle in channel B")
+	mustSave(chB.ID, bob, "another needle in B")
+
+	scopedBodies := func(label string, msgs []chat.Message) []string {
+		out := make([]string, 0, len(msgs))
+		for _, m := range msgs {
+			if m.ChannelID != chA.ID {
+				t.Fatalf("%s leaked a non-channel-A message: id=%d channel=%d body=%q", label, m.ID, m.ChannelID, m.Body)
+			}
+			out = append(out, m.Body)
+		}
+		return out
+	}
+
+	// Free-text search for the shared word in channel A: only A's row, never B's two.
+	res, err := store.SearchMessages(ctx, chA.ID, "needle", 50)
+	if err != nil {
+		t.Fatalf("search A 'needle': %v", err)
+	}
+	got := scopedBodies("free-text", res)
+	if len(got) != 1 || got[0] != "needle in channel A" {
+		t.Fatalf("channel-A search for 'needle' should return only A's row, got %v", got)
+	}
+
+	// from:<alice> in channel A: alice posted "needle" in BOTH channels, but the search must return
+	// only her channel-A message — the author filter must not widen across channels.
+	resFrom, err := store.SearchMessages(ctx, chA.ID, "from:"+alice.Username, 50)
+	if err != nil {
+		t.Fatalf("search A from:alice: %v", err)
+	}
+	gotFrom := scopedBodies("from:", resFrom)
+	if len(gotFrom) != 1 || gotFrom[0] != "needle in channel A" {
+		t.Fatalf("channel-A from:alice should return only A's row (not B's), got %v", gotFrom)
+	}
+
+	// Sanity: the same searches against channel B DO see B's rows (proves the scoping isn't just
+	// returning nothing — the data is really there, only the channel boundary filters it).
+	if bRes, err := store.SearchMessages(ctx, chB.ID, "needle", 50); err != nil || len(bRes) != 2 {
+		t.Fatalf("channel-B search for 'needle' should return B's 2 rows, got %d err=%v", len(bRes), err)
+	}
+}
+
 // TestSearchDateOperatorsIntegration covers the before:/after: date operators:
 // day-exclusive bounds, combining into a window, and that a malformed or hostile
 // date is treated as inert free text (never errors, never injects — Rule B/15).
