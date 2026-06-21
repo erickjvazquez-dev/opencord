@@ -3,6 +3,18 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 211) — 2nd green tick: confirmed maintenance plateau; next substantive work is a fresh-context big feature
+
+Gate green (build/vet/test/live-health). Probed two more candidate small gaps — they're already done:
+grouped-message hover-timestamp gutter (Discord parity) EXISTS (`.hover-time`, Chat.tsx ~3622), and
+WS hostile/oversized/flood/access coverage is comprehensive (checked iter 210). Every contained item
+I reach for is already shipped — the honest signal that the product has hit a maintenance plateau and
+the remaining value is in LARGE features (mute/deafen↔voice integration; voice-channel/SFU evolution;
+tunneling/accounts) that each need a SPEC-first tick from a fresh context (Rule 6), not a long one.
+No code churn (Rule 10); idle_streak→2, cadence at the 3600s ceiling. The loop is correctly relaxing
+to a light heartbeat while healthy; a specific user task or a fresh-context big-feature tick is the
+right next mover. (Logged tersely on purpose — a green tick shouldn't grow the context it's conserving.)
+
 ## 2026-06-21 (iter 210) — GREEN maintenance tick: verified, no churn, widened cadence (the honest call after 5 ships in one long session)
 
 Build/vet/test all green, live `/healthz` ok, the iter-209 deploy is live-verified, no P0/P1 open.
