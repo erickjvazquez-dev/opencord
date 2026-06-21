@@ -2975,3 +2975,87 @@ func TestRecentBeforePaginationIntegration(t *testing.T) {
 		t.Fatalf("Recent wrapper changed behavior: len=%d err=%v", len(rec), err)
 	}
 }
+
+// RecentBefore must be strictly CHANNEL-SCOPED: the `before` cursor is a global, monotonic message
+// id, so feeding it an id that belongs to a DIFFERENT channel must NEVER leak that channel's
+// messages — pagination only ever returns rows from the requested channel, older than the numeric
+// cursor. This locks down the IDOR-shaped invariant on the scroll-up cursor (Rule 15): a future
+// refactor of the RecentBefore query that dropped `m.channel_id = $1` would make this fail loudly.
+func TestRecentBeforeChannelScopingIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	chA, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create channel A: %v", err)
+	}
+	chB, err := store.CreateChannel(ctx, uniqueChannel())
+	if err != nil {
+		t.Fatalf("create channel B: %v", err)
+	}
+	// Interleave posts so the two channels' (globally monotonic) ids interleave:
+	// a1 < b1 < a2 < b2 < a3 < b3.
+	post := func(ch int64, body string) int64 {
+		m, err := store.Save(ctx, ch, u.ID, u.Username, body)
+		if err != nil {
+			t.Fatalf("save %q: %v", body, err)
+		}
+		return m.ID
+	}
+	post(chA.ID, "a1")
+	post(chB.ID, "b1")
+	a2 := post(chA.ID, "a2")
+	b2 := post(chB.ID, "b2")
+	post(chA.ID, "a3")
+	b3 := post(chB.ID, "b3")
+
+	// onlyChannelA fails the test if any returned row is not from channel A.
+	onlyChannelA := func(label string, msgs []chat.Message) {
+		for _, m := range msgs {
+			if m.ChannelID != chA.ID {
+				t.Fatalf("%s leaked a non-channel-A message: id=%d channel=%d body=%q", label, m.ID, m.ChannelID, m.Body)
+			}
+		}
+	}
+
+	// Cursor = b3 (a channel-B id, numerically larger than every channel-A id): paging channel A
+	// returns ALL of A (a1,a2,a3) and ZERO channel-B rows.
+	pageAll, err := store.RecentBefore(ctx, chA.ID, u.ID, b3, 50)
+	if err != nil {
+		t.Fatalf("recentBefore A before=b3: %v", err)
+	}
+	onlyChannelA("before=b3", pageAll)
+	if len(pageAll) != 3 || pageAll[0].Body != "a1" || pageAll[2].Body != "a3" {
+		t.Fatalf("before=b3 (foreign id > all A): want a1,a2,a3 got %d %v", len(pageAll), bodies(pageAll))
+	}
+
+	// Cursor = b2 (a channel-B id, numerically between a2 and a3): paging channel A returns only the
+	// A rows older than that id (a1,a2) — never B's b1/b2, and never a3.
+	pageMid, err := store.RecentBefore(ctx, chA.ID, u.ID, b2, 50)
+	if err != nil {
+		t.Fatalf("recentBefore A before=b2: %v", err)
+	}
+	onlyChannelA("before=b2", pageMid)
+	if len(pageMid) != 2 || pageMid[0].Body != "a1" || pageMid[1].Body != "a2" {
+		t.Fatalf("before=b2 (foreign id between a2,a3): want a1,a2 got %d %v", len(pageMid), bodies(pageMid))
+	}
+
+	// Sanity: a2 is the A-channel cursor between a1 and a3 — paging A before a2 yields just a1
+	// (proves the foreign-id cases above aren't accidentally returning everything).
+	pageOwn, err := store.RecentBefore(ctx, chA.ID, u.ID, a2, 50)
+	if err != nil {
+		t.Fatalf("recentBefore A before=a2: %v", err)
+	}
+	onlyChannelA("before=a2", pageOwn)
+	if len(pageOwn) != 1 || pageOwn[0].Body != "a1" {
+		t.Fatalf("before=a2 (own id): want a1 got %d %v", len(pageOwn), bodies(pageOwn))
+	}
+}
+
+// bodies extracts message bodies for readable test failures.
+func bodies(msgs []chat.Message) []string {
+	out := make([]string, len(msgs))
+	for i, m := range msgs {
+		out[i] = m.Body
+	}
+	return out
+}
