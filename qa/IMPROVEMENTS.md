@@ -3,6 +3,40 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 208) — Finished the IDOR-scoping SWEEP: when one endpoint has an invariant gap, audit ALL its siblings in the same sweep
+
+Executed the next-tick candidate I logged in 207: audited the SIBLING client-supplied-id read paths
+for the same channel-scoping + `CanAccessChannel` invariant. Findings: all three message-read paths —
+`RecentBefore` (history), `PinnedMessages` (pins), `SearchMessages` (search) — are uniformly gated by
+`CanAccessChannel` in their handlers AND scoped by `m.channel_id = $1` in their store queries. The code
+is safe everywhere. But only `RecentBefore` had an explicit cross-channel guard (207). Added
+`TestSearchMessagesChannelScopingIntegration` for the highest-risk of the remaining two: **search**,
+because it builds its WHERE clause DYNAMICALLY (free text + from:/has:/before:/after:), so it's the
+most likely to regress — a new operator that dropped the leading `channel_id` AND-condition would leak
+across channels with every single-channel test still green. Proven to catch it (Rule 15): forcing the
+channel condition true → "free-text leaked a non-channel-A message"; restored → passes. Left `Pins`
+without a dedicated test — its query is STATIC (`m.channel_id=$1 AND m.pinned`), the lowest refactor
+risk; noted as verified-safe rather than manufacturing a low-value guard.
+
+**Learning (logged): an IDOR-class finding is a SWEEP trigger, not a one-off fix.** When you discover
+that an invariant (here: channel-scoping of a client-supplied id) needs a guard on endpoint X, the
+same invariant almost always applies to X's siblings that share the access pattern. Audit them all in
+the same arc and guard them by RISK (dynamic-SQL > cursor > static query), instead of guarding only
+the endpoint that happened to surface the question. Two ticks (207 RecentBefore, 208 Search) closed
+the message-read IDOR surface; Pins is verified-safe-by-construction. This "find-on-one → sweep-the-
+siblings" rule generalizes to the next invariant class (e.g. admin-gating on the server-mutation
+endpoints, block-symmetry on the DM paths).
+
+**Process note (continued):** test-only tick again → committed + pushed, NO `railway up` (binary
+byte-identical), NO browser QA (zero UI surface changed) — correct per anti-churn. Two consecutive
+Track-0 security-coverage ticks balance the two prior feature ships (205/206); the suite is now
+materially stronger on the read-path IDOR surface without any product churn.
+
+**Next-tick candidate (logged):** rotate OFF security for a tick — either a UI/polish parity item
+(e.g. surface mute/deafen in the new sidebar user panel, a natural Discord-parity add now that the
+panel exists) or a fresh component per the per-component-excellence rotation (audio/chat/infra/UI).
+The read-path IDOR sweep is done; don't keep mining the same vein past diminishing returns.
+
 ## 2026-06-21 (iter 207) — Track-0 security tick: IDOR guard on the pagination cursor; a global-id cursor is an attack surface even when the code is currently scoped
 
 After two feature ticks (205 auto-load, 206 sidebar panel), spent this tick on Track 0 (the loop's
