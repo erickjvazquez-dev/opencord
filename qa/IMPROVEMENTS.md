@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 210) — GREEN maintenance tick: verified, no churn, widened cadence (the honest call after 5 ships in one long session)
+
+Build/vet/test all green, live `/healthz` ok, the iter-209 deploy is live-verified, no P0/P1 open.
+Checked the chat/realtime component's WS edge-case coverage before reaching for work: it's already
+comprehensive — `TestServeWSHostileFrameHandling` (non-JSON garbage, type-confused field, empty/
+whitespace/oversized body vs the 4 KiB `maxMessageSize`), `TestServeWSFrameSizeLimitIntegration` (a
+>16 KiB frame rejected by `SetReadLimit`, distinct from the app-level body bound), the voice flood
+guard, the hostile-kind-frame drop, and WS access control (garbage token 401, malformed channel 400).
+No real WS coverage gap to close.
+
+**Decision: a green tick is the correct output here, not invented work.** This session has shipped 5
+substantive improvements (205 auto-load, 206 sidebar panel, 207+208 IDOR guards, 209 status-in-panel)
+and the context is now very long. The remaining high-value work is LARGE features (mute/deafen needs
+voice-session integration; group-DM/voice-channel evolution; tunneling/accounts) that each warrant a
+fresh-context, SPEC-first tick (Rule 6) — exactly the kind of work a long, degrading context does
+WORST. Per the loop's own rule ("a green iteration with nothing to fix is valid AND is the signal to
+widen the cadence — log it, don't invent work to stay busy"), I logged green, made no code commit
+(anti-churn, Rule 10), bumped `idle_streak`→1, and widened the next wake to 2700s. The right next
+substantive tick starts from a FRESH context re-reading GOAL.md + this log.
+
+**Loop-process note (reinforces 209):** the value of writing every decision here is exactly this —
+after a `/clear`, the next tick reads "5 ships done, product green, do a big feature SPEC-first from a
+fresh head" and picks up correctly with zero in-context memory. The durable log IS the loop's
+continuity across context refreshes; a green tick that records WHY it was green is more useful to the
+next tick than a forced micro-commit.
+
+**Next-tick candidate (logged, fresh-context):** pick ONE large parity feature and do it SPEC-first —
+strongest candidates: (a) voice user-panel mute/deafen quick-toggles (integrates the existing voice
+DSP with an always-visible control), or (b) advance a non-UI component (audio→SFU is the big one but
+needs stack-guardian per Rule 16; infra one-command-scale check). Start from a clean context.
+
 ## 2026-06-21 (iter 209) — Custom status in the user panel (rotated off security); + a RECURRING deploy-no-op finding the rollout-verify keeps catching
 
 Rotated off the two security ticks (207/208) per plan, to a contained UI parity polish that builds on
