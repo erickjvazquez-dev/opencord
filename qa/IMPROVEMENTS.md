@@ -3,6 +3,40 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 205) — Auto-load-on-scroll (Discord parity); when a NEW path subsumes an old one, test the UNIFIED behavior, not the old discrete step
+
+Shipped Discord-style auto-load-on-scroll for history: scrolling near the top of `.messages` now
+pages older history in automatically, with the iter-204 "↑ Load older" button kept as a visible
+fallback. Stale-closure-safe via `loadOlderRef`/`hasMoreHistoryRef` mirrors feeding the once-created
+native scroll listener (the existing `messagesRef` callback-ref), guarded by `loadingOlderRef` +
+`hasMoreHistory`. Verified: blast-radius guard PASS, tsc clean, vitest 86/86, full browser/realtime/
+voice/search QA green (browser=0…), AI-vision confirmed the anchored mid-history view, deployed +
+rollout-verified (live bundle byte-identical to the local build).
+
+**QA-process learning (the real lesson): a discrete assertion can become unmeasurable once a new code
+path subsumes the old one.** My first QA attempt kept the iter-204 "click the button → count grows"
+assertion AND added a separate "scroll to top → count grows" assertion. It FAILED (`120 → 120`) — not
+because auto-load was broken, but because **reaching the button requires Playwright to scroll it into
+view, which now triggers auto-load**, so by the time the button-click resolved, the scroll-into-view +
+button had already cascaded through ALL pages (the button test reported `50 → 120`, impossible from a
+single 50-capped fetch — proof both paths fired). The old discrete button-click step is no longer
+isolable. **Fix: test the UNIFIED behavior** — assert the fallback button is *present*, then assert
+scroll-to-top auto-loads (the now-primary path) without yanking. When a feature merges two triggers
+into one path, don't assert each trigger separately; assert the observable outcome once.
+
+**Loop-process note:** this is the same family as "a test-trigger gap is often a product gap" (iter
+202) but inverted — here a passing-looking change exposed that an EXISTING assertion had silently
+become a tautology against the new behavior. Whenever a change touches a path an existing QA step
+drives, re-read that step and ask "does this assertion still measure what it claims, or did my change
+make it trivially true/false?" Added to the playbook.
+
+**Next-tick candidate (logged):** the appearance slice-4 P2 — the header `.meta` cluster (online
+count + self-chip + log out) still wraps to a 2nd row in group DMs / with the member panel open
+(see 07l-group-header.png). The Discord-faithful fix is a bottom-left sidebar user panel (move user/
+account controls out of the header), but it's >3 files + touches ~10 QA selectors matched by text
+("log out", ⚙, "N online") → needs a SPEC'd, selector-migrated multi-slice tick (same shape as the
+iter-195 chat-header compaction). Flagged, not started, to keep this tick surgical.
+
 ## 2026-06-21 (iter 204) — History pagination frontend; SEEDING GLOBAL STATE in QA pollutes other tests' assertions
 
 Shipped the "Load older messages" frontend slice (prepend + scroll-anchor + skip-the-auto-scroll). It
