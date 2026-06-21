@@ -3,6 +3,41 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 206) — Bottom-left sidebar user panel (Discord layout); a RELOCATION is low-risk when QA selectors are class/aria-based, not position-based
+
+Shipped the appearance slice-4 P2 fix the *right* way: instead of compacting the header `.meta`
+cluster in place, RELOCATED it out of the header into a Discord-style bottom-left sidebar user panel
+(`.sidebar-user`). This permanently fixes the group-DM / member-panel-open header wrap AND advances
+Discord layout parity (the owner's TOP PRIORITY). Header is now a clean single row everywhere.
+Verified: blast-radius guard PASS, tsc + vitest 86/86, full browser/realtime/voice/search QA green,
+AI-vision confirmed the panel (desktop + mobile drawer) + the now-single-row group header, deployed +
+rollout-verified (live bundle carries `sidebar-user`).
+
+**QA-process learning: the blast radius of a UI MOVE is bounded by HOW the QA selects elements.**
+~15 QA call sites touch the moved cluster (`user settings` button ×12, `log out` ×3, `.self-chip-pip`,
+`.self-chip .avatar-self`, `/N online/`). Because they select by **role/aria-label/class** — not by
+**DOM position** ("the button in the header") — moving the entire cluster to a different parent left
+them ALL resolving unchanged. Only the THREE assertions that explicitly encoded *position* ("`.meta`
+in the header", "reachable in the header") needed editing. **Lesson: aria/role/class-based QA
+selectors make layout relocations cheap and safe; position-coupled selectors are the ones that break.**
+This is the inverse of the iter-195 chat-header redesign, which was high-risk precisely because the QA
+matched header buttons by visible TEXT in their header context. Bias the QA toward role/aria/stable-
+class selectors so future relocations stay low-cost. (Confirmed by the blast-radius guard, which
+classified each consumer as desktop-visible vs mobile-drawer and found zero breakage beyond the 3
+position-coupled assertions.)
+
+**Process note (the ONE real snag this tick):** the FIRST `railway up` returned empty output and did
+NOT roll over (live bundle unchanged after 2+ min) — a silent partial/interrupted deploy. The
+rollout-verify step (compare local vs live bundle hash) CAUGHT it; a re-run printed "Deploy complete"
+and the hash matched. **Reinforces: never trust a deploy you didn't rollout-verify** — `/healthz` was
+200 the whole time (the OLD container), exactly the trap the loop's bundle-hash check exists to catch.
+The loop rule already mandates this; this tick is proof it earns its keep.
+
+**Next-tick candidates (logged):** (1) the user panel could gain Discord's mute/deafen mic icons (we
+have voice DSP + input-volume already — surfacing quick mute/deafen toggles in the panel is natural);
+(2) message grouping (consecutive same-author messages within N min collapse the avatar/name header,
+Discord-style) — a visible chat-density parity gap worth a look.
+
 ## 2026-06-21 (iter 205) — Auto-load-on-scroll (Discord parity); when a NEW path subsumes an old one, test the UNIFIED behavior, not the old discrete step
 
 Shipped Discord-style auto-load-on-scroll for history: scrolling near the top of `.messages` now

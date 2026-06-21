@@ -216,10 +216,15 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   DONE (iter 196):** QA selectors → classes. **Slice 2 DONE (iter 197):** action buttons icon-ified
   (aria-label + title); header cut from THREE rows → TWO (AI-vision verified), shipped + rollout-verified.
   **Slice 3 DONE (iter 198):** collapsible 🔍 search — the action bar is now a single icon row; the
-  header is single-row with the on-demand member panel CLOSED (default). **Only remaining (optional
-  slice 4):** with the member panel OPEN the meta cluster (online/username/logout) still wraps to a 2nd
-  row; compacting/relocating it gives true single-row in that narrowed case too. P2 effectively resolved
-  for the common view.
+  header is single-row with the on-demand member panel CLOSED (default). **Slice 4 DONE (iter 206) —
+  P2 FULLY RESOLVED:** the meta cluster (avatar + presence + username + ⚙ + log out + online count)
+  was RELOCATED out of the header entirely into a Discord-style **bottom-left sidebar user panel**
+  (`.sidebar-user`, pinned via `margin-top:auto`). The header is now a clean single row of title +
+  action icons in EVERY case — group DMs and member-panel-open included (verified by AI-vision on
+  07l-group-header.png, which used to wrap). Mostly a move (all self-chip/log-out/presence classes +
+  aria kept, so QA selectors resolved unchanged); on mobile the panel lives in the off-canvas drawer.
+  Full QA green, blast-radius guard PASS, rollout-verified (live bundle carries `sidebar-user`). Spec:
+  SPEC.md "Bottom-left sidebar user panel". **✅ Appearance header-compaction COMPLETE (slices 1–4).**
 - [~] **Video calling** — slice 1 DONE (iter 135): **camera on/off in a mesh voice call** with a live
   video tile for each participant (the #1 missing Discord feature). Reuses the proven screen-share
   publish/render pipeline + an additive `kind: 'screen'|'camera'` tag on the `voice-screen` frame (Go
