@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 225) — acted on the flake-watch: QA gate now self-diagnoses failures
+
+Turned iter-224's logged watch ("if browser=1-with-no-✗ recurs, capture the output") into a permanent
+fix instead of waiting for a recurrence — the "improve the rule, don't just note it" principle. `qa/run.sh`
+now tees each suite to a per-suite log and, on a non-zero exit, re-prints just that suite's failure-
+relevant lines (`✗ FAIL` / `[pageerror]` / crash / timeout / `QA: FAIL`) with the benign avatar-404
+console noise filtered out. So a red gate now explains itself at the bottom instead of burying the reason
+under hundreds of 404 lines. Verified both paths: extraction surfaces the right lines on a synthetic log;
+a green full run stays silent (summary returns early on rc=0) and the tees don't break the green path.
+
+**Decision discipline this tick (worth recording):** I considered three candidates and grep-checked each
+before acting — manual presence status (online/idle/dnd/invisible) turned out ALREADY built (the
+grep-before-building rule again stopped a re-implementation), the avatar-404 fix stayed correctly
+deprioritized (cached, zero-UX-impact, per iter-221), so the diagnosability fix — directly actionable from
+my OWN prior reflection — was the honest highest-value pick. On a mature product, "what did I already log
+that I can now permanently fix?" is a strong tick-selection heuristic.
+
+**Maturity steady-state (honest):** the product is feature-complete for MVP+ parity; ticks are now
+keep-green + tooling-hardening + surfacing owner-decision items (header-icon design pass; the big epics:
+cascaded SFU, tunneling, email, Cloud tier). Discipline: each tick must do GENUINE value (no churn); a
+true no-op tick logs green WITHOUT committing.
+
+**Possible next coverage target:** manual presence status (set yourself idle/dnd/invisible) exists but I
+didn't find a browser-QA assertion that a *second* user sees your changed status — a candidate coverage gap.
+
+**Component advanced:** infra/QA (loop-tooling — self-diagnosing failures). **Cadence:** shipped a fix +
+the header-icon P1 still open → ACTIVE (1800s).
+
 ## 2026-06-22 (iter 224) — scroll-to-divider on open; "set intent at data-arrival, not the trigger"
 
 Closed iter-223's follow-up: opening an unread channel now lands on the "New" line, not the bottom
