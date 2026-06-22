@@ -38,7 +38,8 @@ async function main() {
     viewport: { width: 1100, height: 820 },
     // Pre-grant OS notification permission so the in-app toggle's
     // Notification.requestPermission() resolves 'granted' headlessly (no real prompt).
-    permissions: ['notifications'],
+    // clipboard-* lets the "copy message text" action write + the test read it back.
+    permissions: ['notifications', 'clipboard-read', 'clipboard-write'],
   })
   // Headless Chromium can't show a real OS notification, so STUB window.Notification
   // before the app loads: record every constructed notification to window.__notifs so
@@ -569,6 +570,17 @@ async function main() {
     (await msg.locator('.reaction .rcount').first().textContent())?.trim() === '1',
     'reaction count shows 1',
   )
+
+  // 3b2 — Copy text (Discord parity, iter 237): hover a message → "copy" writes the RAW
+  // body to the clipboard and the button briefly confirms "copied!". Proves the action
+  // works end-to-end (clipboard contents), not just that the button renders.
+  step('hover message → copy → clipboard holds the raw body + "copied!" confirms')
+  await msg.hover()
+  await msg.getByRole('button', { name: 'copy message text' }).click()
+  await msg.getByRole('button', { name: 'copy message text' }).filter({ hasText: 'copied!' }).waitFor({ timeout: 4000 })
+  check(true, 'copy button shows the "copied!" confirmation')
+  const clip = await page.evaluate(() => navigator.clipboard.readText())
+  check(clip === body, `clipboard holds the message's raw body (got ${JSON.stringify(clip).slice(0, 40)})`)
 
   // 3g — Reply: hover a message → reply → the composer shows a "Replying to" bar →
   // send → the new message renders a quoted preview of the original (chat parity).

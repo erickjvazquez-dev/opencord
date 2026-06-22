@@ -254,6 +254,8 @@ export function Chat({
   // broadcast is count-only (mine=false), so we own this locally; seeded from history.
   const [myReactions, setMyReactions] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<number | null>(null)
+  // Brief "copied!" confirmation on the message "copy text" hover action (clears after ~1.2s).
+  const [copiedMsgId, setCopiedMsgId] = useState<number | null>(null)
   // Composer custom-emoji picker: open state for the popover above the textarea that
   // lists the active server's custom emoji and inserts `:name:` at the caret on click.
   // Separate from the per-message reaction palette (`pickerFor`) above.
@@ -1425,6 +1427,20 @@ export function Chat({
       await navigator.clipboard.writeText(code)
     } catch {
       window.prompt('Copy this invite code:', code)
+    }
+  }
+
+  // Message hover "copy text" action (Discord parity): copy the RAW body — markdown,
+  // code, links, :emoji: shortcodes intact — with a brief "copied!" confirmation.
+  // Best-effort: falls back to a copyable prompt where the Clipboard API is unavailable
+  // (e.g. a non-secure context), mirroring copyInvite.
+  const copyMessageText = async (m: Message) => {
+    try {
+      await navigator.clipboard.writeText(m.body)
+      setCopiedMsgId(m.id)
+      window.setTimeout(() => setCopiedMsgId((id) => (id === m.id ? null : id)), 1200)
+    } catch {
+      window.prompt('Copy this message:', m.body)
     }
   }
 
@@ -3777,6 +3793,13 @@ export function Chat({
                       )}
                       <button onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}>
                         react
+                      </button>
+                      <button
+                        className="msg-copy"
+                        aria-label="copy message text"
+                        onClick={() => void copyMessageText(m)}
+                      >
+                        {copiedMsgId === m.id ? 'copied!' : 'copy'}
                       </button>
                     </span>
                   )}
