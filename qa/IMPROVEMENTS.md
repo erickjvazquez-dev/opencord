@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 226) — proved presence privacy invariant at the RENDERED surface (not just the pure fn)
+
+Closed iter-225's logged coverage gap (the "what did I already log that I can now fix?" heuristic again):
+presence STATUS (idle/dnd/invisible) reaching OTHER users had a thorough unit test for `EffectivePresence`
+but no end-to-end proof. Added a two-client realtime check — B sets DND → A sees the red DND dot in the
+members panel; B sets invisible → A sees B OFFLINE (the privacy invariant) — through the rendered member
+list. AI-vision confirmed the red DND dot.
+
+**Lesson — a unit test proves the LOGIC; only the E2E proves the WIRING, and for a PRIVACY invariant that
+distinction matters.** `EffectivePresence(connected, "invisible") → offline` was unit-green, but that says
+nothing about whether the members-list HTTP endpoint actually CALLS it with the live-connection set — a
+wiring bug there (returning raw `presence_state`) would leak "this user is hiding" to others. The test
+confirmed the wiring is correct, but the POINT is the gap class: **for privacy/security invariants, an
+E2E that asserts the invariant holds AT THE SURFACE THE OTHER USER SEES is essential — the pure-function
+test can be 100% green while the boundary leaks.** (Pairs with iter-220's negative-assertion and iter-223's
+both-states lessons.)
+
+**Coverage status (honest):** the product's user-facing surfaces are now broadly E2E-covered (chat,
+realtime incl. reconnect/lossless/divider, voice, roles/moderation, DMs/groups, search, unread, presence
+status + privacy, markdown incl. headers/masked-links, security/bidi). The remaining high-value work is
+owner-steered (header-icon design pass) or multi-tick epics. Genuinely few untested surfaces remain.
+
+**Component advanced:** chat/security (presence privacy proven E2E). **Cadence:** shipped a test + the
+header-icon P1 still open → ACTIVE (1800s).
+
 ## 2026-06-22 (iter 225) — acted on the flake-watch: QA gate now self-diagnoses failures
 
 Turned iter-224's logged watch ("if browser=1-with-no-✗ recurs, capture the output") into a permanent
