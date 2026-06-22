@@ -241,6 +241,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   highest-blast-radius (core mesh), so flagged for a dedicated implementation tick OR deferral in favour
   of higher-ROI parity (custom-emoji reactions, role colors) — owner's call. SFU video: later.
 
+- [ ] **Voice mute/deafen in the user panel (Discord parity)** — always-available mic-mute + deafen
+  toggles in the bottom-left `.sidebar-user` panel, including a **pre-call "join already muted"** that
+  applies your persisted self-mute on the next join. SPEC written (iter 212): see SPEC.md "Voice
+  mute/deafen in the user panel" — 5 slices (persisted voiceSettings flags → panel toggles → apply-on-join
+  → 2-client voice QA proving B hears silence on A's pre-muted join → ship). **Queued as the next
+  substantive feature; implement from a FRESH context.**
+
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
 

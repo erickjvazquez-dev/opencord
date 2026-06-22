@@ -3,6 +3,21 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 212) — SPEC-first for mute/deafen-in-panel, then hand off to a fresh context (the right call after a long session)
+
+The user kept the loop running (8th tick), signalling "do real feature work." The natural next parity
+feature — voice mute/deafen in the user panel — is genuinely CROSS-COMPONENT (panel UI + persisted
+voiceSettings + the live voice session's mute/deafen + apply-on-join), exactly what the loop flags for a
+SPEC-first, fresh-context tick (Rule 6). Rather than build it in a very long context (degradation risk,
+Step-0 judgment trigger), I did the correct first step: wrote an IMPLEMENTATION-READY SPEC (SPEC.md
+"Voice mute/deafen in the user panel", 5 slices with exact file/line anchors + the 2-client voice-QA that
+proves pre-call mute), queued it as a GOAL.md TOP-PRIORITY item, and proactively cleared context so the
+NEXT tick implements it with a clean head. The `~/.claude/needs_clear` Stop-hook bridge is confirmed wired
++ safe (on-stop.sh; also auto-fires <20% ctx) and the pending ScheduleWakeup survives the clear, so the
+loop continues uninterrupted — just fresher. **Lesson: "spec-now, build-next-tick-fresh" is the clean way
+to start a big feature at the end of a long session — the SPEC is real progress AND the fresh context is
+where the build belongs.**
+
 ## 2026-06-21 (iter 211) — 2nd green tick: confirmed maintenance plateau; next substantive work is a fresh-context big feature
 
 Gate green (build/vet/test/live-health). Probed two more candidate small gaps — they're already done:

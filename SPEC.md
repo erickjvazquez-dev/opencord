@@ -2715,3 +2715,46 @@ click `user settings`/`log out` are unaffected (the 220px sidebar is always visi
 **Verify:** tsc + vitest + full browser/realtime/voice/search QA green; AI-vision confirms the
 bottom-left panel + clean single-row header (incl. the group-DM header that used to wrap); deploy +
 rollout-verify.
+
+## Voice mute/deafen in the user panel (Discord parity) — SPEC for iter 212+ (implement from a fresh context)
+
+**Why:** Discord's bottom-left user panel always shows mic-mute + deafen toggles — the canonical place
+to mute yourself, including BEFORE joining a call ("join already muted"). Opencord has mute/deafen only
+in the in-call voice bar (`toggleMute`/`toggleDeafen` in Chat.tsx, functional only while `voiceRef.current`
+exists; `muted`/`deafened` reset on join/leave). The iter-206 sidebar user panel (`.sidebar-user`) is now
+the natural home for always-available mute/deafen.
+
+**Current state (verified iter 211/212):**
+- `Chat.tsx`: `muted`/`setMuted` (~323), `deafened`/`setDeafened` (~325); `toggleMute` (~1008) does
+  `if (voiceRef.current) setMuted(voiceRef.current.toggleMute())`; `toggleDeafen` (~1073) sets state +
+  `voiceRef.current?.setDeafened(next)`. Both no-op the live session when not in a call. State resets in
+  `joinVoice`/leave (584-585, 986, 999-1000).
+- `web/src/voiceSettings.ts` is the localStorage source of truth (device ids + DSP flags, default-on).
+- The in-call voice bar already renders mute/deafen buttons (mirror their icons/aria for consistency).
+
+**Slices (build minimal, verify each — Rule 14):**
+1. **Persisted self-mute/deafen defaults.** Add `selfMute:boolean` + `selfDeafen:boolean` to
+   `voiceSettings.ts` (default false) with the existing get/set + a vitest (default/persist/corrupt-input,
+   mirroring the other flags). Pure, no UI — ships green on its own.
+2. **Panel toggles.** In `.sidebar-user` (new `.sidebar-user-voice` row, or extend `.sidebar-user-foot`)
+   add a 🎤 mute button and a 🎧 deafen button (aria-label "toggle mute" / "toggle deafen", a struck/red
+   state when active). They read/write the slice-1 state AND, when `voiceRef.current` exists, call the
+   existing `toggleMute`/`toggleDeafen` so in-call behavior is unchanged (the panel becomes a 2nd control
+   point). Deafen-implies-muted stays (existing logic). CSS only; mirror the voice-bar button styling.
+3. **Apply-on-join.** In `joinVoice`, instead of unconditionally `setMuted(false)`, seed `muted`/`deafened`
+   from the persisted slice-1 defaults and apply them to the new session (mute the mic / deafen) right
+   after connect — so "join already muted" works. Keep the in-call toggles authoritative thereafter.
+4. **QA (grow the suite):** browser QA — panel mute/deafen toggle + persist across a modal/remount + the
+   struck visual (AI-vision). Voice QA (`qa/voice.mjs`, 2-client) — set self-mute in the panel BEFORE
+   joining, then A joins a call with B: assert B measures ~silence for A's mic immediately on join (the
+   pre-set mute applied), then A un-mutes in the panel → B hears A. This proves slice 3 end-to-end (the
+   send-path RMS pattern already used by the input-volume test).
+5. **Verify + ship:** tsc + vitest + full browser/realtime/voice/search QA green; AI-vision the panel
+   buttons (idle + active states); deploy + rollout-verify (bundle carries the new control). Blast-radius
+   guard: the change touches `joinVoice` + `muted`/`deafened` + voiceSettings — check the voice-bar
+   mute/deafen + the two-client voice tests still pass (they share `toggleMute`/`toggleDeafen`).
+
+**Acceptance:** mute/deafen reachable from the user panel always; pre-call mute applies on the next join
+(B hears silence); in-call behavior + the voice-bar controls unchanged; full QA + AI-vision green.
+**Blast radius:** `joinVoice`, `muted`/`deafened`, `voiceSettings.ts`, the voice-bar buttons, the
+two-client voice tests. SPEC-first because it spans UI + state + the live voice session (>3 surfaces).
