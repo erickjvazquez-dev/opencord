@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 221) — shipped markdown headers (chat parity); grep-before-building killed a low-value chase
+
+Started by investigating iter-220's "many 404s in QA" finding — but reading the Avatar component first
+showed it already caches the 404 per user AND renders initials IMMEDIATELY (url starts null), so the 404
+is a silent background request with ZERO UX impact; eliminating it needs a `has_avatar` field across the
+API for no user-visible gain. Correctly **dropped it** (grep-before-building stopped a low-value chase —
+the inverse of iter-218, where the same discipline redirected TO the real gap). Pivoted to a genuine
+parity gap the same survey surfaced: the markdown subset had no headers. Shipped `#`/`##`/`###` + `-#`
+subtext — pure formatting (no new security surface; header content reuses the XSS-safe `renderInline`),
+with vitest + browser QA + AI-vision (clean Discord-like hierarchy) + live rollout-verify (CSS bundle
+carries md-h*/md-subtext).
+
+**Loop-process note — findings deserve a value check, not reflexive action.** A logged finding ("404
+noise") isn't automatically worth a tick. The right move was a 2-minute code read to size its real impact
+BEFORE building. Generalize: when picking up a prior tick's logged finding, first grep/read to confirm it
+still matters and is worth the cost — a finding can be real yet not worth fixing (zero-UX-impact, or fix
+cost ≫ benefit). Pairs with the existing grep-before-building rule.
+
+**Follow-up logged (GOAL):** masked links `[text](url)` — higher-usage than headers but a PHISHING
+surface (display text ≠ URL), so it's a Rule-15 tick (http(s)-only URL validation reusing the autolink
+guard + a `title`=real-URL anti-spoof + the javascript:/data:-stays-inert adversarial cases). Underline
+`__` deferred (collides with `_italic_`).
+
+**Component advanced:** chat/UI (Discord markdown parity — headers). **Cadence:** shipped a feature + open
+P1s remain (header-icon design pass, masked links) → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 220) — proved LOSSLESS realtime across a reconnect (chat north star); test-anchor lesson
 
 Advanced the chat north star's *verification*: the §1e reconnect QA checked connectivity recovery (banner
