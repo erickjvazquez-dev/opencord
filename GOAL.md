@@ -344,12 +344,15 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   proved no collateral. Regression tests: unit (`stripBidiControls`, exact char set) + integration through
   the real store + through the **real WS ingest path** (`TestServeWSHostileFrameHandling`). Live-probed
   the deploy (WS sent U+202E/U+2066 on the wire → persisted clean "wire-live-clean").
-- [ ] **Security follow-up (iter 216): extend bidi/control stripping to OTHER rendered user text.** The
-  Trojan-Source class also applies to **usernames** (a U+202E username can visually impersonate another
-  user — arguably higher-impact than a message body), plus **channel/server names, custom status, thread
-  titles, group-DM names**. Lift `stripBidiControls` into a shared sanitizer and apply it at each ingest
-  (register/rename/status). Usernames also warrant rejecting NON-printable/zero-width chars outright
-  (stricter than messages, since they're identity). Reproduce → fix → re-attack → regress, per Rule 15.
+- [x] **Bidi stripping extended to all rendered names — DONE (iter 217).** Applied `stripBidiControls` at
+  every display-name write path: server names (`CreateServer`/`RenameServer`), server channels
+  (`CreateServerChannelOfKind`, covering the create-channel funnel), global channels (`CreateChannel`),
+  threads (`CreateThread`), categories (`CreateChannelCategory`), group-DM names (`RenameGroupDM`), custom
+  status + status emoji (`SetUserStatus`), and custom role names (`validateRole`, covering create + update).
+  **Usernames were already safe** — auth's `^[a-zA-Z0-9_]{3,32}$` rejects these chars at registration (no
+  change needed). Rule-15 cycle: reproduced (server name stored 9 controls verbatim) → fixed → re-attacked
+  (clean) → proved no collateral (Arabic + emoji name preserved). Regression: `TestBidiControlStrippingNamesIntegration`
+  (server/channel/thread/status/role). go build/vet/test green; live-probed the deploy.
 - [~] Roles & permissions — server roles (owner/admin/member); roles UI (members panel + owner promote/demote); admin-gated channel creation; **message moderation** (admins delete others' messages) with a delete-button UI shown to admins in server channels — all two-user E2E verified; **read-only / announcement channels** (per-channel posting policy: only admins post, WS-enforced) with an admin toggle, a 🔒 badge, and a disabled composer for non-admins — all E2E verified. (A full per-role permission matrix is future polish beyond MVP parity.)
 - [x] Invites — invite-code join (replaces the open join-by-id gap): members mint codes, redeeming admits you; non-member can't mint/guess (403/404), adversarially verified. (Membership mgmt: roles done; **kick + ban + timeout done** — owner/admin, with live WS eviction; ban blocks rejoining until unban; timeout temporarily mutes a member server-side)
 - [x] Search — in-channel message search (case-insensitive, access-gated, LIKE-wildcards escaped per Rule B), header search box + results panel (channel-spanning search later)

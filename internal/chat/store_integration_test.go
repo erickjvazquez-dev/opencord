@@ -3167,3 +3167,74 @@ func TestBidiControlStrippingIntegration(t *testing.T) {
 		t.Fatalf("EditMessage did not strip bidi controls: got %q", edited.Body)
 	}
 }
+
+// TestBidiControlStrippingNamesIntegration extends the Trojan-Source defense (iter 217)
+// to every OTHER user-controlled field that renders as a display name — server/channel/
+// thread/category/group names, custom status, and custom role names. A bidi override in
+// a server or role name spoofs the sidebar/badge the same way it spoofs a message. (User
+// NAMES are already safe — auth's `^[a-zA-Z0-9_]{3,32}$` rejects these characters at
+// registration.) Legit Unicode names (Arabic + emoji) must survive.
+func TestBidiControlStrippingNamesIntegration(t *testing.T) {
+	store, _, owner := setup(t)
+	ctx := context.Background()
+	const bidi = "‪‫‬‭‮⁦⁧⁨⁩"
+	hasBidi := func(s string) bool { return strings.ContainsAny(s, bidi) }
+
+	srv, err := store.CreateServer(ctx, owner.ID, "Guild"+bidi+"X")
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	if srv.Name != "GuildX" {
+		t.Fatalf("server name not sanitized: %q", srv.Name)
+	}
+
+	ch, err := store.CreateServerChannel(ctx, srv.ID, "gen"+bidi+"eral")
+	if err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	if ch.Name != "general" || hasBidi(ch.Name) {
+		t.Fatalf("server channel name not sanitized: %q", ch.Name)
+	}
+
+	renamed, err := store.RenameServer(ctx, srv.ID, owner.ID, "New"+bidi+"Name")
+	if err != nil {
+		t.Fatalf("rename server: %v", err)
+	}
+	if renamed.Name != "NewName" {
+		t.Fatalf("renamed server not sanitized: %q", renamed.Name)
+	}
+
+	if err := store.SetUserStatus(ctx, owner.ID, "sta"+bidi+"tus", ""); err != nil {
+		t.Fatalf("set status: %v", err)
+	}
+	ms, err := store.ListServerMembers(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("list members: %v", err)
+	}
+	var gotStatus string
+	for _, m := range ms {
+		if m.UserID == owner.ID {
+			gotStatus = m.Status
+		}
+	}
+	if gotStatus != "status" || hasBidi(gotStatus) {
+		t.Fatalf("custom status not sanitized: %q", gotStatus)
+	}
+
+	role, err := store.CreateServerRole(ctx, srv.ID, owner.ID, "ad"+bidi+"min", "#ff0000", false)
+	if err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+	if role.Name != "admin" || hasBidi(role.Name) {
+		t.Fatalf("role name not sanitized: %q", role.Name)
+	}
+
+	// Legit Unicode (Arabic server name + emoji) must pass through untouched.
+	intl, err := store.CreateServer(ctx, owner.ID, "خادم 🎮")
+	if err != nil {
+		t.Fatalf("create intl server: %v", err)
+	}
+	if intl.Name != "خادم 🎮" {
+		t.Fatalf("legitimate Unicode name was altered: %q", intl.Name)
+	}
+}

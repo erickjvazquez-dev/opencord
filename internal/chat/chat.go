@@ -1352,7 +1352,7 @@ const maxGroupNameLen = 100
 // an EMPTY name clears it (NULL → the client falls back to the member-list title). Group
 // names are not unique (the schema excludes kind='dm' from name uniqueness).
 func (s *Store) RenameGroupDM(ctx context.Context, channelID, actorID int64, name string) error {
-	name = strings.TrimSpace(name)
+	name = stripBidiControls(strings.TrimSpace(name)) // Rule B: no Trojan-Source spoofing in a rendered name
 	if len([]rune(name)) > maxGroupNameLen {
 		return ErrInvalidGroupName
 	}
@@ -1449,6 +1449,7 @@ func (s *Store) ListDMs(ctx context.Context, userID int64) ([]DMChannel, error) 
 // CreateServer creates a server owned by ownerID and adds the owner as its first
 // member, atomically.
 func (s *Store) CreateServer(ctx context.Context, ownerID int64, name string) (Server, error) {
+	name = stripBidiControls(name) // Rule B: no Trojan-Source spoofing in a rendered name
 	srv := Server{Name: name, OwnerID: ownerID}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -1957,6 +1958,7 @@ func (s *Store) RenameServer(ctx context.Context, serverID, actorID int64, name 
 	if role != "owner" && role != "admin" {
 		return Server{}, ErrForbidden
 	}
+	name = stripBidiControls(name) // Rule B: no Trojan-Source spoofing in a rendered name
 	srv := Server{Role: role}
 	err = s.pool.QueryRow(ctx,
 		`UPDATE servers SET name = $1 WHERE id = $2 RETURNING id, name, owner_id, created_at`,
@@ -2055,7 +2057,7 @@ func (s *Store) ListServerMembers(ctx context.Context, serverID int64) ([]Server
 // validateRole normalizes + checks a custom role's name and color (Rule B). The trimmed
 // name must be 1-32 chars; the color a #RGB/#RRGGBB hex.
 func validateRole(name, color string) (string, string, error) {
-	name = strings.TrimSpace(name)
+	name = stripBidiControls(strings.TrimSpace(name)) // Rule B: no Trojan-Source spoofing in a rendered role name
 	if name == "" || len([]rune(name)) > 32 {
 		return "", "", ErrInvalidRoleName
 	}
@@ -2212,11 +2214,11 @@ const maxStatusEmojiLen = 16
 // an empty/whitespace value clears that field (NULL). Only ever called for the
 // JWT-derived caller (Rule C) — there is no target-user parameter.
 func (s *Store) SetUserStatus(ctx context.Context, userID int64, status, emoji string) error {
-	status = strings.TrimSpace(status)
+	status = stripBidiControls(strings.TrimSpace(status)) // Rule B: no Trojan-Source spoofing in a rendered status
 	if r := []rune(status); len(r) > maxStatusLen {
 		status = string(r[:maxStatusLen])
 	}
-	emoji = strings.TrimSpace(emoji)
+	emoji = stripBidiControls(strings.TrimSpace(emoji))
 	if r := []rune(emoji); len(r) > maxStatusEmojiLen {
 		emoji = string(r[:maxStatusEmojiLen])
 	}
@@ -2371,6 +2373,7 @@ func (s *Store) CreateServerChannelInCategory(ctx context.Context, serverID int6
 // text channel (so the wire JSON stays byte-identical to a pre-voice channel) and "voice" for a
 // voice channel.
 func (s *Store) CreateServerChannelOfKind(ctx context.Context, serverID int64, name string, categoryID *int64, kind string) (Channel, error) {
+	name = stripBidiControls(name) // Rule B: no Trojan-Source spoofing in a rendered name
 	if kind == "" {
 		kind = "public"
 	}
@@ -2417,7 +2420,7 @@ const maxThreadNameLen = 100
 // to a message it can't see) and DROPPED (not honored) otherwise. The caller verifies the actor
 // can access+post in the parent (the route does); a thread does NOT participate in name uniqueness.
 func (s *Store) CreateThread(ctx context.Context, parentID int64, name string, fromMessageID *int64) (Channel, error) {
-	name = strings.TrimSpace(name)
+	name = stripBidiControls(strings.TrimSpace(name)) // Rule B: no Trojan-Source spoofing in a rendered name
 	if name == "" || len([]rune(name)) > maxThreadNameLen {
 		return Channel{}, ErrInvalidThreadName
 	}
@@ -2494,6 +2497,7 @@ const maxCategoryNameLen = 32
 // CreateChannelCategory creates a category under serverID. The caller verifies admin and
 // passes an already-trimmed, non-empty, length-bounded name (the handler validates it).
 func (s *Store) CreateChannelCategory(ctx context.Context, serverID int64, name string) (ChannelCategory, error) {
+	name = stripBidiControls(name) // Rule B: no Trojan-Source spoofing in a rendered name
 	c := ChannelCategory{ServerID: serverID, Name: name}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO channel_categories (server_id, name) VALUES ($1, $2) RETURNING id, created_at`,
@@ -3094,6 +3098,7 @@ func HandleChannels(store *Store) http.HandlerFunc {
 // CreateChannel inserts a new channel, returning ErrChannelExists if the name is
 // already taken.
 func (s *Store) CreateChannel(ctx context.Context, name string) (Channel, error) {
+	name = stripBidiControls(name) // Rule B: no Trojan-Source spoofing in a rendered name
 	c := Channel{Name: name}
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO channels (name) VALUES ($1) RETURNING id, created_at`, name,
