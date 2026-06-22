@@ -251,6 +251,35 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+// isBidiControl reports whether r is a Unicode bidirectional embedding, override, or
+// isolate control — the "Trojan Source" characters (CVE-2021-42574). They have no
+// legitimate use in chat text but reorder how a message renders versus its logical
+// content, enabling spoofing (e.g. a URL or quoted line that displays differently than
+// it reads). Legitimate RTL scripts (Arabic, Hebrew) render correctly without these
+// explicit controls, and ZWJ/emoji/CJK are deliberately NOT in this set, so stripping
+// only these is safe.
+func isBidiControl(r rune) bool {
+	switch r {
+	case '‪', '‫', '‬', '‭', '‮', // LRE RLE PDF LRO RLO
+		'⁦', '⁧', '⁨', '⁩': // LRI RLI FSI PDI
+		return true
+	}
+	return false
+}
+
+// stripBidiControls removes the bidi controls above from a message body. Rule B:
+// neutralize on the server so every client and all stored history is protected, not
+// just whichever renderer happens to be safe today. strings.Map returns the input
+// unchanged (no allocation) when no control is present — the overwhelming common case.
+func stripBidiControls(s string) string {
+	return strings.Map(func(r rune) rune {
+		if isBidiControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // Save inserts a message into the given channel and returns it fully populated.
 // It's the no-reply path; SaveReply carries the optional reply reference.
 func (s *Store) Save(ctx context.Context, channelID, userID int64, username, body string) (Message, error) {
@@ -281,6 +310,7 @@ func (s *Store) SaveReply(ctx context.Context, channelID, userID int64, username
 	} else if blocked {
 		return Message{}, ErrTimedOut
 	}
+	body = stripBidiControls(body) // Rule B: neutralize Trojan-Source spoofing on ingest
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
 	if err := s.resolveReply(ctx, s.pool, channelID, &m, &replyTo); err != nil {
 		return Message{}, err
@@ -366,6 +396,7 @@ func (s *Store) SaveWithAttachments(ctx context.Context, channelID, userID int64
 	}
 	defer tx.Rollback(ctx)
 
+	body = stripBidiControls(body) // Rule B: neutralize Trojan-Source spoofing on ingest
 	m := Message{ChannelID: channelID, UserID: userID, Username: username, Body: body}
 	if err := s.resolveReply(ctx, tx, channelID, &m, &replyTo); err != nil {
 		return Message{}, err
@@ -758,6 +789,7 @@ func (s *Store) SetMessagePinned(ctx context.Context, id, actorID int64, pinned 
 // EditMessage updates the body of the caller's own (non-deleted) message, stamps
 // edited_at, and returns the updated message (username is filled by the caller).
 func (s *Store) EditMessage(ctx context.Context, id, userID int64, body string) (Message, error) {
+	body = stripBidiControls(body) // Rule B: an edit must not re-introduce Trojan-Source spoofing
 	m := Message{ID: id, UserID: userID, Body: body}
 	err := s.pool.QueryRow(ctx,
 		`UPDATE messages SET body = $1, edited_at = now()

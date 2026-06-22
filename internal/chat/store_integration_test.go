@@ -3122,3 +3122,48 @@ func bodies(msgs []chat.Message) []string {
 	}
 	return out
 }
+
+// TestBidiControlStrippingIntegration is the end-to-end Rule-15 proof that message
+// bodies cannot carry Unicode bidirectional override/embedding/isolate controls — the
+// "Trojan Source" / RTL-override spoofing class (CVE-2021-42574). Those characters have
+// no legitimate use in chat text but reorder how a message renders vs. its logical
+// content, so the server strips them on EVERY write path (Save/SaveReply via the store
+// chokepoint, plus EditMessage). Legitimate Unicode — emoji (incl. ZWJ sequences),
+// RTL scripts (Arabic), CJK — must pass through untouched.
+func TestBidiControlStrippingIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+
+	// The 9 Trojan-Source controls (LRE RLE PDF LRO RLO LRI RLI FSI PDI), interleaved
+	// with text that must survive: ASCII, an emoji, a ZWJ emoji sequence, Arabic, CJK.
+	bidi := "‪‫‬‭‮⁦⁧⁨⁩"
+	payload := "safe" + bidi + "text 🎉 👨‍💻 مرحبا 你好"
+	const wantClean = "safetext 🎉 👨‍💻 مرحبا 你好"
+
+	m, err := store.Save(ctx, ch.ID, u.ID, u.Username, payload)
+	if err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if m.Body != wantClean {
+		t.Fatalf("SaveReply did not strip bidi controls\n got %q\nwant %q", m.Body, wantClean)
+	}
+	if strings.ContainsAny(m.Body, bidi) {
+		t.Fatalf("a bidi control survived the save path: %q", m.Body)
+	}
+	// Legit Unicode preserved verbatim (no over-stripping of emoji/ZWJ/Arabic/CJK).
+	for _, keep := range []string{"🎉", "👨‍💻", "مرحبا", "你好"} {
+		if !strings.Contains(m.Body, keep) {
+			t.Fatalf("legitimate text %q was stripped from %q", keep, m.Body)
+		}
+	}
+
+	// An EDIT must not be a re-injection hole: editing to a bidi payload is stripped too.
+	edited, err := store.EditMessage(ctx, m.ID, u.ID, "edit"+bidi+"ed ✅")
+	if err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if edited.Body != "edited ✅" {
+		t.Fatalf("EditMessage did not strip bidi controls: got %q", edited.Body)
+	}
+}

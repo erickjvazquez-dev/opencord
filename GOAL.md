@@ -334,6 +334,15 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
 ## Next (v0.3 — Roles & Polish)
 
 - [x] Rate limiting + abuse protection — per-connection WS token bucket (Rule 15)
+- [x] **Trojan-Source / bidi-spoofing hardening (Rule 15, iter 216).** Message bodies could carry
+  Unicode bidirectional override/embedding/isolate controls (U+202A–U+202E, U+2066–U+2069 — CVE-2021-42574),
+  which reorder how a message renders vs. its logical content (spoofing a URL/quoted line). The server now
+  strips them on EVERY write path at the store chokepoint (`Save`/`SaveReply`/`SaveWithAttachments` + an
+  edit can't re-inject via `EditMessage`) — Rule B, server-side, protecting all clients + stored history.
+  Legit Unicode (emoji incl. ZWJ sequences, Arabic/Hebrew RTL, CJK, combining marks, LRM/RLM marks) is
+  preserved. Reproduced (test failed pre-fix: 9 controls stored verbatim) → fixed → re-attacked (clean) →
+  proved no collateral. Regression tests: unit (`stripBidiControls`, exact char set) + integration through
+  the real store + through the **real WS ingest path** (`TestServeWSHostileFrameHandling`).
 - [~] Roles & permissions — server roles (owner/admin/member); roles UI (members panel + owner promote/demote); admin-gated channel creation; **message moderation** (admins delete others' messages) with a delete-button UI shown to admins in server channels — all two-user E2E verified; **read-only / announcement channels** (per-channel posting policy: only admins post, WS-enforced) with an admin toggle, a 🔒 badge, and a disabled composer for non-admins — all E2E verified. (A full per-role permission matrix is future polish beyond MVP parity.)
 - [x] Invites — invite-code join (replaces the open join-by-id gap): members mint codes, redeeming admits you; non-member can't mint/guess (403/404), adversarially verified. (Membership mgmt: roles done; **kick + ban + timeout done** — owner/admin, with live WS eviction; ban blocks rejoining until unban; timeout temporarily mutes a member server-side)
 - [x] Search — in-channel message search (case-insensitive, access-gated, LIKE-wildcards escaped per Rule B), header search box + results panel (channel-spanning search later)

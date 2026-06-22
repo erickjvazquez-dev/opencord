@@ -568,6 +568,11 @@ func TestServeWSHostileFrameHandling(t *testing.T) {
 	// reference must be DROPPED (Rule B), leaving ReplyTo nil.
 	send(`{"body":"ok-bogus-reply","replyTo":999999999}`)
 	send(`{"body":"ok-neg-reply","replyTo":-1}`)
+	// Legit text wrapped in Unicode bidi controls (Trojan-Source / CVE-2021-42574): the
+	// message MUST persist, but the spoofing controls are stripped by the store on the real
+	// WS ingest path, leaving clean text. The runes (U+202E RLO, U+2066 LRI) are valid in a
+	// JSON string unescaped, so this is exactly what a hostile client would send on the wire.
+	send(`{"body":"` + "‮wire-bidi-clean⁦" + `"}`)
 	// Final legit message: if it lands, the connection survived the whole battery.
 	send(`{"body":"final-legit"}`)
 
@@ -601,6 +606,16 @@ func TestServeWSHostileFrameHandling(t *testing.T) {
 	for _, banned := range []string{"", "12345", `this is not json at all }{`} {
 		if _, ok := byBody[banned]; ok {
 			t.Fatalf("hostile frame content was persisted: %q", banned)
+		}
+	}
+	// 2b. The bidi-laden body persisted with its Trojan-Source controls stripped (clean
+	// text kept) — and NO persisted body anywhere still carries a bidi control.
+	if _, ok := byBody["wire-bidi-clean"]; !ok {
+		t.Fatal("a bidi-laden body did not persist clean (expected controls stripped, text kept)")
+	}
+	for body := range byBody {
+		if strings.ContainsAny(body, "‪‫‬‭‮⁦⁧⁨⁩") {
+			t.Fatalf("a Unicode bidi control survived the WS ingest path: %q", body)
 		}
 	}
 	// 3. The legit-body / hostile-replyTo messages persisted but with NO reply ref.
