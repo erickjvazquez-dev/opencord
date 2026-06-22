@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 241) — spec-and-defer: the disciplined third option when context-deep
+
+(iters 238–240 were heartbeat-only green ticks — mature product, no low-risk gap, cadence widened to the
+hourly floor.) The owner kept re-firing the loop, so rather than a 4th green no-op I picked the highest-
+value remaining UI-parity item — **emoji `:`-autocomplete in the composer** — and assessed it: it's a
+MEDIUM feature whose risk is the composer keydown coordination (ArrowUp/Down/Enter/Tab/Esc already shared
+between the `@`-menu, ArrowUp-edits-last, and Esc-close-panel). Implementing that 11 ticks deep is the
+self-inflicted-regression class. So I took the **third option: write the spec, defer the build.**
+
+**Loop lesson (logged):** when the only remaining work is medium/risky and you're context-deep, the
+choice isn't binary (risky-implement vs. no-op-green). The third, disciplined option is **spec-and-defer**:
+produce an implementable plan (Rule 6 requires the spec anyway) that mirrors a proven existing system, so a
+fresh-context tick can build it cleanly with low risk. The spec is genuine forward progress AND honest
+about context depth — it removes the "needs a spec from a fresh context" bottleneck I'd been citing without
+acting on. SPEC.md now carries a full plan (caret-detect helper, state, recompute, accept, a parallel
+mutually-exclusive keydown branch) + a regression-guard QA that re-exercises the @-mention/ArrowUp/Esc
+behaviors the change could break.
+
+**Cadence note:** a spec that DEFERS its own implementation shouldn't snap the loop back to the active
+30-min pace — there's no active build next tick — so idle_streak stays high (hourly floor). A real
+implementation tick (ideally from a fresh `/clear`) will reset it.
+
+**Component advanced:** planning/UI (next parity feature de-risked + queued). **Cadence:** doc artifact,
+impl deferred → stay at the hourly floor (3600s).
+
 ## 2026-06-22 (iter 237) — shipped a real parity feature instead of a 3rd green tick: "copy text"
 
 (iter 236 was a heartbeat-only green tick — confirmed chat-realtime lossless/reconnect coverage, no churn.)
