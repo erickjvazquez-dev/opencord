@@ -3,6 +3,35 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 224) — scroll-to-divider on open; "set intent at data-arrival, not the trigger"
+
+Closed iter-223's follow-up: opening an unread channel now lands on the "New" line, not the bottom
+(read-state parity complete: divider + scroll-to). Two takeaways:
+
+**1. Effect-timing pattern — set scroll-intent where the DATA arrives, not where the trigger fires.** My
+first attempt set the "scroll to divider" flag in the channel-SWITCH effect, but that effect fires FIRST
+with the OLD channel's stale messages still in state (setMessages([]) hasn't re-rendered yet), so the flag
+got consumed against stale data. The fix: set the flag in the WS HISTORY HANDLER — which runs exactly when
+the NEW channel's messages + boundary arrive (no staleness) — and let a dedicated effect perform the
+scroll once the divider renders, with the existing auto-scroll effect standing down via the flag. Codify:
+when an action must happen on "the new data," hook the data-arrival callback, not the navigation trigger
+that precedes it; intermediate renders carry stale state.
+
+**2. AI-vision earned its keep on a scroll nuance tests can't see.** `scrollIntoView({block:'center'})`
+passed the in-viewport assertion but the screenshot showed the divider jammed at the bottom with the
+unread messages hidden below (only 2 unread → center clamps low). Switched to `block:'start'` (divider up,
+unread below). A boolean "is it in the viewport" test would never have caught the bad PLACEMENT — only the
+visual review did. Reinforces the Rule-14 AI-vision step for any scroll/layout change.
+
+**QA-stability watch (logged, not yet acted):** one browser-QA run flaked to `browser=1` with NO printed
+`✗ FAIL` (so a pageerror/timeout, not an assertion) and did not reproduce across two reruns. My divider
+effect is defensive (optional-chaining, flag-gated) so it's an unlikely cause, but if `browser=1`-with-no-✗
+recurs, capture the full browser output to find the silent failure (the QA should surface pageerrors in
+the gate line, not just inline).
+
+**Component advanced:** chat/UI (read-state parity now complete — divider + land-on-it). **Cadence:**
+shipped a feature + the header-icon P1 still open → ACTIVE (1800s).
+
 ## 2026-06-22 (iter 223) — shipped the "New messages" divider end-to-end; reuse-existing-timing > new mechanism
 
 A full-stack Discord-parity feature in one tick (backend + client + CSS + store test + two-client E2E +
