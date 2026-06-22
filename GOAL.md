@@ -681,8 +681,11 @@ item from here as the structural milestones above land.
   render site. Caught by a new `naturalWidth>0` QA assertion (element-existence checks had missed it for
   4 ticks). QA lesson logged: assert auth-gated images LOAD, not just exist.
 - [x] Markdown — bold/italic/strikethrough, inline & fenced code, `> ` blockquotes,
-  `||spoilers||` (click to reveal), `- `/`1. ` lists, and autolinked URLs; XSS-safe
-  (React elements, no innerHTML); E2E + AI-vision verified.
+  `||spoilers||` (click to reveal), `- `/`1. ` lists, autolinked URLs, **and `#`/`##`/`###`
+  headers + `-#` subtext (Discord parity, iter 221)** — styled visual hierarchy (h1 1.5em → h3,
+  bold; subtext small+muted), inline markdown still works inside a header, `#channel`/`####`/bare
+  `# ` correctly NOT headers; XSS-safe (React elements, no innerHTML — header content flows through
+  the same `renderInline`); vitest + browser QA + AI-vision verified.
 - [~] Mentions — `@user` chips (your own highlighted), plus `@everyone`/`@here`
   highlighted as all-mentions; **`@`-autocomplete** (typing `@`+partial offers
   channel-active usernames; ↑/↓ to move, Enter/Tab to accept, Esc to dismiss,

@@ -121,6 +121,45 @@ describe('renderMarkdown custom emoji (:name:)', () => {
   })
 })
 
+// Every <div> whose className contains `cls` (headers/subtext render as styled divs).
+function divsWithClass(node: ReactNode, cls: string) {
+  return flatten(node).filter(
+    (n): n is React.ReactElement<{ className?: string }> =>
+      isValidElement(n) && n.type === 'div' && String((n.props as { className?: string }).className || '').includes(cls),
+  )
+}
+
+describe('renderMarkdown headers + subtext (Discord parity)', () => {
+  it('renders #/##/### as md-h1/md-h2/md-h3 with the text', () => {
+    for (const [src, cls] of [['# Big', 'md-h1'], ['## Mid', 'md-h2'], ['### Small', 'md-h3']]) {
+      const out = renderMarkdown(src)
+      const hs = divsWithClass(out, cls)
+      expect(hs).toHaveLength(1)
+      expect(allText(out)).toContain(src.replace(/^#+\s+/, ''))
+    }
+  })
+  it('renders -# as a md-subtext div', () => {
+    const out = renderMarkdown('-# tiny note')
+    expect(divsWithClass(out, 'md-subtext')).toHaveLength(1)
+    expect(allText(out)).toContain('tiny note')
+  })
+  it('keeps inline markdown working inside a header (# **bold**)', () => {
+    const out = renderMarkdown('# hi **there**')
+    expect(divsWithClass(out, 'md-h1')).toHaveLength(1)
+    expect(flatten(out).some((n) => isValidElement(n) && n.type === 'strong')).toBe(true)
+  })
+  it('does NOT treat #channel (no space) or #### (4+) or a bare "# " as a header', () => {
+    expect(divsWithClass(renderMarkdown('#channel chatter'), 'md-h')).toHaveLength(0)
+    expect(divsWithClass(renderMarkdown('#### too deep'), 'md-h')).toHaveLength(0) // 4 hashes → not 1..3
+    expect(divsWithClass(renderMarkdown('# '), 'md-h')).toHaveLength(0) // no content
+  })
+  it('a header with raw HTML keeps it inert (no script/img element, Rule B)', () => {
+    const out = renderMarkdown('# <script>alert(1)</script>')
+    expect(tags(out, 'script')).toHaveLength(0)
+    expect(allText(out)).toContain('<script>')
+  })
+})
+
 // Every <a> element the renderer emitted.
 function links(node: ReactNode) {
   return flatten(node).filter(

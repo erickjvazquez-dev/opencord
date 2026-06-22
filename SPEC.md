@@ -2800,3 +2800,26 @@ credential-pairing are what this slice verifies.
 
 **Blast radius:** `docker-compose.yml`, `.env.example` (new), `README.md`. No Go code changes (the
 server already reads the env). The Railway deploy is untouched (it never runs the `turn` profile).
+
+## Markdown headers + subtext (chat parity, iter 221)
+
+**Why:** Discord supports line headers (`# H1`, `## H2`, `### H3`) and subtext (`-# small`) in
+messages — a common formatting primitive Opencord's markdown subset lacked (it had bold/italic/
+strike/spoiler/code/quote/lists/autolink/emoji). Pure FORMATTING — no new security surface: the
+header's inline content still flows through the existing XSS-safe `renderInline` (no
+dangerouslySetInnerHTML; raw HTML stays literal, Rule B).
+
+**Design (minimal, fits the existing line-oriented renderer):** in `renderBlocks`, before the
+quote/list/para run logic, match two single-line forms — `HEADER = /^(#{1,3})\s+(.+)$/` (level =
+hash count) and `SUBTEXT = /^-#\s+(.+)$/` — and emit a styled `<div class="md-h md-h{1..3}">` /
+`<div class="md-subtext">` with the inline-rendered content. Visual weight only (chat text, not
+document headings): CSS gives a controlled hierarchy (h1 1.5em → h3 1.07em, bold; subtext 0.8em
+muted) so a header never dominates the message list. `#`-with-a-space is required, so `#channel`
+(no space) is unaffected; `-#` doesn't collide with the `- ` bullet (which needs a space after the
+dash). Empty-content (`# ` alone) stays a paragraph.
+
+**Verify:** vitest (each level → the right class + inline children still render, e.g. `# **x**` keeps
+the `<strong>`; raw HTML in a header stays inert); browser QA sends a `#`/`##`/`-#` message and
+asserts the rendered classes + readable text; AI-vision the hierarchy. **Blast radius:** markdown.tsx,
+styles.css, markdown.test.tsx, qa/browser.mjs. No backend (bodies already store + broadcast verbatim,
+now bidi-sanitized).

@@ -1121,6 +1121,26 @@ button:disabled {
   border-left: 3px solid var(--accent, rgba(127, 127, 127, 0.5));
   color: var(--text-muted, inherit);
 }
+/* Discord-style markdown headers + subtext — visual weight only (chat text, not document
+   structure), with a controlled hierarchy so a header never dominates the message list. */
+.message .body .md-h {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 2px 0;
+}
+.message .body .md-h1 {
+  font-size: 1.5em;
+}
+.message .body .md-h2 {
+  font-size: 1.25em;
+}
+.message .body .md-h3 {
+  font-size: 1.07em;
+}
+.message .body .md-subtext {
+  font-size: 0.8em;
+  color: var(--text-muted, inherit);
+}
 .message .body .spoiler {
   background: var(--text, #111);
   color: transparent;

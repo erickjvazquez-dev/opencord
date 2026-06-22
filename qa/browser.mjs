@@ -361,6 +361,28 @@ async function main() {
     'bullet list renders as <ul> with two <li>',
   )
 
+  // 3e2 — markdown headers + subtext (iter 221, Discord parity): #/##/### + -# render as
+  // styled header/subtext divs in ONE message; inline markdown still works inside a header.
+  step('send #/##/### headers + -# subtext → md-h1/h2/h3 + md-subtext render')
+  await page.waitForTimeout(3000) // rate-limit bucket refill before this send
+  await composer.click()
+  await composer.fill('# Big **head**')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('## Mid head')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('### Small head')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('-# tiny subtext')
+  await composer.press('Enter')
+  const headMsg = page.locator('.message', { hasText: 'tiny subtext' }).last()
+  await headMsg.locator('.body .md-h1').waitFor({ timeout: 8000 })
+  await shot('03e2-headers.png')
+  check((await headMsg.locator('.body .md-h1').count()) === 1, '"# " renders as an md-h1 header')
+  check((await headMsg.locator('.body .md-h1 strong').count()) === 1, 'inline **bold** still renders inside a header')
+  check((await headMsg.locator('.body .md-h2').count()) === 1, '"## " renders as md-h2')
+  check((await headMsg.locator('.body .md-h3').count()) === 1, '"### " renders as md-h3')
+  check((await headMsg.locator('.body .md-subtext').count()) === 1, '"-# " renders as md-subtext')
+
   // 3f — @mention: a mention of yourself is highlighted distinctly from others.
   step('send a message mentioning self + another → self-mention is highlighted')
   await page.waitForTimeout(3000) // let the rate-limit bucket refill before this send

@@ -133,6 +133,10 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
 const QUOTE = /^>\s?/
 const BULLET = /^[-*]\s+/ // "- item" or "* item" (the space distinguishes it from *italic*)
 const NUMBERED = /^\d+\.\s+/ // "1. item"
+// Discord-style line headers + subtext. The space is required, so `#channel` (no space)
+// and `-item` are unaffected; empty-content (`# ` alone) falls through to a paragraph.
+const HEADER = /^(#{1,3})\s+(.+)$/ // "# H1" / "## H2" / "### H3" (level = hash count)
+const SUBTEXT = /^-#\s+(.+)$/ // "-# small muted subtext"
 
 type LineKind = 'quote' | 'bullet' | 'numbered' | 'para'
 function lineKind(line: string): LineKind {
@@ -151,6 +155,32 @@ function renderBlocks(text: string, ctx: Ctx): ReactNode[] {
   const out: ReactNode[] = []
   let i = 0
   while (i < lines.length) {
+    // Headers + subtext are single styled lines (not runs), matched before the run logic.
+    // Visual weight only (chat text, not document structure); inline content stays XSS-safe.
+    const hm = HEADER.exec(lines[i])
+    if (hm) {
+      out.push(
+        React.createElement(
+          'div',
+          { key: `md${ctx.n++}`, className: `md-h md-h${hm[1].length}` },
+          ...renderInline(hm[2], ctx),
+        ),
+      )
+      i++
+      continue
+    }
+    const sm = SUBTEXT.exec(lines[i])
+    if (sm) {
+      out.push(
+        React.createElement(
+          'div',
+          { key: `md${ctx.n++}`, className: 'md-subtext' },
+          ...renderInline(sm[1], ctx),
+        ),
+      )
+      i++
+      continue
+    }
     const kind = lineKind(lines[i])
     if (kind === 'quote') {
       const quoted: string[] = []
