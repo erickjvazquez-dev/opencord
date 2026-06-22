@@ -67,6 +67,31 @@ func TestMiddleware(t *testing.T) {
 		}
 	})
 
+	// Rule-15 wiring lock: a token that is correctly signed with the SAME secret but
+	// already past its exp must be rejected at the MIDDLEWARE, not just by auth.Parse
+	// (TestParseRejectsExpired covers the unit; this proves the boundary calls it). The
+	// garbage case above fails at parsing; an expired token passes signature verification
+	// and fails ONLY claims validation, so a refactor that dropped exp checks (e.g.
+	// jwt.WithoutClaimsValidation) would sail past "garbage" yet be caught here. A
+	// replayed/stale session token must never grant access (stale-credential bypass).
+	t.Run("rejects a validly-signed but expired token with 401", func(t *testing.T) {
+		expired, err := New(nil, []byte("secret"), -time.Minute).Issue(User{ID: 7, Username: "dave"})
+		if err != nil {
+			t.Fatalf("mint expired token: %v", err)
+		}
+		reached = false
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+		r.Header.Set("Authorization", "Bearer "+expired)
+		protected.ServeHTTP(rec, r)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401 (expired token must be rejected)", rec.Code)
+		}
+		if reached {
+			t.Fatal("handler must not run with an expired token")
+		}
+	})
+
 	t.Run("accepts valid token and exposes the user", func(t *testing.T) {
 		reached = false
 		rec := httptest.NewRecorder()

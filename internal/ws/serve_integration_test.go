@@ -149,6 +149,22 @@ func TestServeWSAccessControlIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("expired token is 401", func(t *testing.T) {
+		// A token correctly signed with the SAME secret for a real channel MEMBER but
+		// past its exp must be rejected at the handshake BEFORE the membership check —
+		// proving the WS upgrade validates token expiry, not just signature/shape. The
+		// garbage case fails at parsing; this isolates the expiry wiring (a regression
+		// dropping exp checks would 403/200 here, not 401). A replayed/expired session
+		// must never open a socket. Pairs with the HTTP-middleware expiry lock.
+		expiredTok, err := auth.New(nil, []byte(wsTestSecret), -time.Minute).Issue(member)
+		if err != nil {
+			t.Fatalf("mint expired token: %v", err)
+		}
+		if got := getStatus(t, h.srv.URL, chQ+"&token="+expiredTok); got != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401 (expired token must be rejected at the handshake)", got)
+		}
+	})
+
 	t.Run("malformed channel id is 400", func(t *testing.T) {
 		if got := getStatus(t, h.srv.URL, "?channel=abc&token="+memberTok); got != http.StatusBadRequest {
 			t.Fatalf("status = %d, want 400", got)
