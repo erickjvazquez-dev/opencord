@@ -34,7 +34,7 @@ jobs:
       - run: go test ./...   # DB integration tests run when DATABASE_URL is set (above)
 
   web:
-    name: web (typecheck · build)
+    name: web (typecheck · test · build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,4 +47,5 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build
