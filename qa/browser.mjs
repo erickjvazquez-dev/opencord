@@ -1023,6 +1023,15 @@ async function main() {
     await page.locator('.search-results').getByText(srvBody).isVisible(),
     'search finds the matching message',
   )
+  // 7c-hl — the matched term is highlighted in the result (Discord parity, iter 229).
+  check(
+    (await page.locator('.search-results .search-match').count()) > 0,
+    'the matched term is highlighted (<mark class="search-match">) in the result',
+  )
+  check(
+    ((await page.locator('.search-results .search-match').first().textContent()) ?? '').toLowerCase() === 'server',
+    'the highlighted text is the matched query term',
+  )
   await page.getByRole('button', { name: 'clear' }).click()
   check((await page.locator('.search-results').count()) === 0, 'clearing search returns to the channel')
 

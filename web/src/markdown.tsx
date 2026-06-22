@@ -259,3 +259,41 @@ export function renderMarkdown(
   if (last < text.length) nodes.push(...renderBlocks(text.slice(last), ctx))
   return nodes
 }
+
+// highlightMatches wraps case-insensitive occurrences of `query` in <mark class="search-match">
+// within the React tree renderMarkdown produced — used to bold the matched term in search results
+// (Discord parity). It only re-wraps EXISTING text nodes (never injects markup from the message;
+// the query is the viewer's own input, React-escaped inside the <mark>), so the XSS invariant is
+// untouched. Childless nodes and custom components (EmojiImg) pass through unchanged.
+export function highlightMatches(node: ReactNode, query: string): ReactNode {
+  const q = query.trim()
+  if (!q) return node
+  const needle = q.toLowerCase()
+  let n = 0
+  const walk = (node: ReactNode): ReactNode => {
+    if (typeof node === 'string') {
+      if (!node.toLowerCase().includes(needle)) return node
+      const parts: ReactNode[] = []
+      const hay = node.toLowerCase()
+      let i = 0
+      let idx: number
+      while ((idx = hay.indexOf(needle, i)) !== -1) {
+        if (idx > i) parts.push(node.slice(i, idx))
+        parts.push(
+          React.createElement('mark', { key: `hl${n++}`, className: 'search-match' }, node.slice(idx, idx + q.length)),
+        )
+        i = idx + q.length
+      }
+      if (i < node.length) parts.push(node.slice(i))
+      return parts
+    }
+    if (Array.isArray(node)) return node.map(walk)
+    if (React.isValidElement(node)) {
+      const kids = (node.props as { children?: ReactNode }).children
+      if (kids == null) return node
+      return React.cloneElement(node, undefined, walk(kids))
+    }
+    return node
+  }
+  return walk(node)
+}

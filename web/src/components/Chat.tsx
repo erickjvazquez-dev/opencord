@@ -79,7 +79,7 @@ import type {
   ServerMember,
   User,
 } from '../types'
-import { renderMarkdown } from '../markdown'
+import { renderMarkdown, highlightMatches } from '../markdown'
 import { visibleMessages } from '../blocking'
 import { getDesktopNotify, mentionsMe, shouldNotify, showNotification } from '../notify'
 import { dayLabel, shortTime, messageTimestamp } from '../dates'
@@ -3490,7 +3490,14 @@ export function Chat({
                       </span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}</div>
+                    <div className="body">
+                      {m.deleted
+                        ? m.body
+                        : highlightMatches(
+                            renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token }),
+                            searchQuery,
+                          )}
+                    </div>
                   </div>
                 </div>
               ))}

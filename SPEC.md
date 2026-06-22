@@ -2869,3 +2869,22 @@ E2E (B reads #general → switches away → A posts 2 → B returns → a "New" 
 messages); AI-vision. **Blast radius:** chat.go (+ store test), ws/hub.go (Event field), ws/client.go
 (history wiring + serve test), types.ts, Chat.tsx, styles.css, qa/realtime.mjs. No schema change
 (`channel_reads` already exists).
+
+## Search-match highlighting (UI polish, iter 229)
+
+**Why:** Discord bolds the matched term inside each search result so a long list is scannable.
+Opencord's results render the message body (markdown) but never highlight the query — found via
+the iter-229 AI-vision sweep.
+
+**Design (minimal, post-process the markdown output — stays XSS-safe):** a `highlightMatches(node,
+query)` helper in `markdown.tsx` walks the React tree `renderMarkdown` already produced and, in each
+STRING text node, wraps case-insensitive occurrences of the (trimmed) query in `<mark
+class="search-match">`. It only re-wraps EXISTING text (no new markup from the message; the query is
+the viewer's own input, React-escaped), so the XSS invariant is untouched. Applied ONLY to the
+search-results body (blast radius = the search panel); custom components (EmojiImg) and childless nodes
+are passed through. Empty query → unchanged.
+
+**Verify:** vitest (a plain match → one `<mark>`; case-insensitive; a match INSIDE markdown like
+`**bold**` keeps the `<strong>` and wraps its text; empty query → no marks; a raw-HTML body still inert);
+browser QA (search → the result contains a `.search-match`); AI-vision. **Blast radius:** markdown.tsx,
+Chat.tsx (search-results render), styles.css, markdown.test.tsx, qa/browser.mjs.

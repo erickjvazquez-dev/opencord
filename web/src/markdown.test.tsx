@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isValidElement, type ReactNode } from 'react'
-import { renderMarkdown } from './markdown'
+import { renderMarkdown, highlightMatches } from './markdown'
 import { EmojiImg } from './components/EmojiImg'
 
 // renderMarkdown returns React elements (never an HTML string), so these tests walk
@@ -221,6 +221,42 @@ describe('renderMarkdown link & raw-HTML safety (Rule 15)', () => {
     const text = allText(out)
     expect(text).toContain('<script>')
     expect(text).toContain('<img src=x onerror=alert(2)>')
+  })
+})
+
+// Every <mark> element (the highlighted search term).
+function marks(node: ReactNode) {
+  return flatten(node).filter((n) => isValidElement(n) && n.type === 'mark')
+}
+
+describe('highlightMatches (search-term highlighting)', () => {
+  it('wraps a case-insensitive match in a single <mark>, preserving surrounding text', () => {
+    const out = highlightMatches(renderMarkdown('hello SerVer world'), 'server')
+    const ms = marks(out)
+    expect(ms).toHaveLength(1)
+    expect(allText(out)).toContain('hello ')
+    expect(allText(out)).toContain('world')
+    // the matched substring (original casing) is inside the mark
+    expect(allText(ms[0])).toBe('SerVer')
+  })
+  it('highlights a match INSIDE markdown (**bold**) and keeps the <strong>', () => {
+    const out = highlightMatches(renderMarkdown('a **boldword** b'), 'bold')
+    expect(marks(out)).toHaveLength(1)
+    expect(flatten(out).some((n) => isValidElement(n) && n.type === 'strong')).toBe(true)
+  })
+  it('highlights every occurrence', () => {
+    const out = highlightMatches(renderMarkdown('ab ab ab'), 'ab')
+    expect(marks(out)).toHaveLength(3)
+  })
+  it('an empty / whitespace query leaves the tree unchanged (no marks)', () => {
+    expect(marks(highlightMatches(renderMarkdown('anything here'), ''))).toHaveLength(0)
+    expect(marks(highlightMatches(renderMarkdown('anything here'), '   '))).toHaveLength(0)
+  })
+  it('a raw-HTML body still renders inert even with a matching query (no element injected)', () => {
+    const out = highlightMatches(renderMarkdown('<script>alert(1)</script>'), 'script')
+    expect(tags(out, 'script')).toHaveLength(0)
+    expect(allText(out)).toContain('<script>')
+    expect(marks(out).length).toBeGreaterThan(0) // the literal text "script" is highlighted, still inert
   })
 })
 

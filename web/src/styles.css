@@ -2210,6 +2210,15 @@ button:disabled {
 .search-results .message {
   margin-bottom: 14px;
 }
+/* The matched search term, bolded + highlighted inside each result (Discord parity). A
+   translucent amber reads well over the dark message background with the inherited light text. */
+.search-match {
+  background: rgba(250, 200, 60, 0.32);
+  color: inherit;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 0 1px;
+}
 
 /* Mobile menu toggle + drawer backdrop — hidden on desktop, shown ≤640px. */
 .menu-toggle {
