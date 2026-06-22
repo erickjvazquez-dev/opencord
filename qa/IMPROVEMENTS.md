@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 217) — finished the bidi class (all rendered names); security hardened → ROTATE next
+
+Security tick 2 (within the ~2-tick cap): extended iter-216's Trojan-Source defense from message bodies
+to EVERY other rendered display name — server/channel/global-channel/thread/category/group-DM names,
+custom status + emoji, and custom role names (9 store write paths, via `stripBidiControls` or the shared
+`validateRole`). Reproduced first (server name stored 9 controls verbatim) → fixed → re-attacked (clean) →
+proved no collateral (Arabic + emoji name preserved) → regression (`TestBidiControlStrippingNamesIntegration`)
+→ **live-probed the deploy** (created a server named "Guild‹RLO›HACK‹LRI›X" via REST → stored "GuildHACKX").
+A nice scoping win from reproduce-first: it revealed **usernames were already safe** (auth's
+`^[a-zA-Z0-9_]{3,32}$` regex), so I didn't waste a fix there — Rule 15's "reproduce before fixing" stopped
+a non-fix.
+
+**Component status — security is now in strong shape:** the Explore-agent coverage map (iter 216) showed
+JWT/oversize/injection/traversal/rate-limit/channel-escalation all already tested; the only open gap was
+bidi, now closed end-to-end. Per the rotation rule, **next tick must leave security** (2 ticks done).
+
+**Highest-value next target = AUDIO (the component furthest from its north star).** UI is polished,
+chat/realtime + security are solid, but audio's north star — *thousands* of participants — still needs the
+documented next steps: **self-hosted TURN (hostile NATs)** and **cascaded SFUs**. That's a >3-file, new-
+infra change → it must START with a SPEC (Rule 6) and run `stack-guardian` before adopting anything (Rule
+16), and stay free to self-host (Rule A). So the next tick's first move is a SPEC slice (e.g. an optional
+self-host coturn the one-command stack can point at), not code.
+
+**Loop-process note (small):** the bidi fix is spread across 9 call sites with no structural guarantee a
+FUTURE name-write path also sanitizes. Not worth a refactor now (over-engineering), but logged: if a 3rd
+rendered-text field type appears, consider funneling name writes through one `sanitizeName` chokepoint.
+
+**Component advanced:** security (hostile-input-proof — bidi class fully closed). **Cadence:** shipped a
+fix → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 216) — rotated to SECURITY; hardened Trojan-Source bidi spoofing (Rule 15, full cycle)
 
 Acted on iter-215's rotation flag — left the voice/UI surface and advanced **security** (the
