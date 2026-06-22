@@ -479,15 +479,21 @@ async function main() {
     check((await loadOlderBtn.count()) > 0, 'the "↑ Load older" fallback button appears in a channel with >50 messages')
     const before = await page.locator('.messages .message').count()
     // Auto-load: scroll the message list to the TOP and assert older history pages in with NO click.
-    // The scroll-anchor pushes the viewport back down after each prepend, so re-nudge to the top to
-    // page through more (it stops on its own when hasMoreHistory goes false at the channel start).
-    await page.locator('.messages').evaluate((el) => { el.scrollTop = 0 })
+    // Re-nudge to the top EVERY iteration (the scroll-anchor pushes the viewport back down after each
+    // prepend, so this both pages through more history AND retries a first nudge that raced the scroll
+    // listener being attached). Also dispatch a real `scroll` event each time so the lazy-load handler
+    // fires even when a bare programmatic scrollTop assignment doesn't emit one in headless. (iter 244
+    // flake fix: the old guard re-nudged only `if (scrollTop > 120)`, i.e. only AFTER a successful
+    // prepend — so a missed first nudge left scrollTop at 0 and stalled at `before → before` forever.)
     let after = before
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 80; i++) {
+      await page.locator('.messages').evaluate((el) => {
+        el.scrollTop = 0
+        el.dispatchEvent(new Event('scroll', { bubbles: true }))
+      })
+      await page.waitForTimeout(100)
       after = await page.locator('.messages .message').count()
       if (after > before) break
-      await page.locator('.messages').evaluate((el) => { if (el.scrollTop > 120) el.scrollTop = 0 })
-      await page.waitForTimeout(100)
     }
     check(after > before, `scrolling to the top auto-loads more history with no click (${before} → ${after})`)
     const notBottom = await page
