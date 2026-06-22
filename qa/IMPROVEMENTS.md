@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 219) — due browser QA (green + polished); encoded a manual verification as a guard
+
+The browser QA was due (iters 216–218 were backend/security/infra, no UI change → 3rd-tick cadence). Ran
+the full suite (browser=0 realtime=0 voice=0 search=0) and AI-vision-reviewed the screenshots across
+breadth (main chat, roles manager, mobile drawer, 3-way voice mesh). The product is mature + polished — no
+P0, and the one real parity gap (header action icons are colorful EMOJI, not Discord's monochrome line
+icons) is a whole-app visual decision the owner should steer, so I **logged it as a deferred P1 rather than
+autonomously redesigning** mid-loop. That restraint is the right call: a hasty icon swap could make the
+look worse and overrides an owner-owned design axis.
+
+**Shipped (no-churn, real value):** a `qa/compose-profile-check.sh` regression guard that encodes the
+iter-218 MANUAL coturn verification — asserts the optional TURN relay stays absent from the default
+`docker compose` stack yet present under `--profile turn` (Rule A / Rule 16). Proved it's not a no-op with
+a negative test (un-gating coturn → FAIL; restored → PASS), then wired it into `qa/run.sh` (RC5).
+
+**Loop-process playbook add — "encode manual verifications as guards":** iter-218's off-by-default check
+was a one-shot manual `docker compose config`. One-shot manual checks rot — the NEXT compose edit wouldn't
+re-run it. Generalize: whenever a tick verifies an invariant by hand (a profile gate, a header that
+shouldn't wrap, a default that must stay empty), leave behind a cheap automated guard so it can't silently
+regress. This tick did that for coturn; apply it to future manual verifications too.
+
+**Maturity-plateau note:** most remaining work is now either (a) owner-steered design (the header-icon
+pass) or (b) multi-tick infra epics (cascaded SFUs). In this phase the highest-value loop behavior is:
+keep QA green, harden/guard what's already shipped, and surface owner-decision P1s clearly — not invent
+churn. Next tick: continue incremental hardening/coverage rotation, or the header-icon design pass IF the
+owner greenlights it.
+
+**Component advanced:** infra/QA robustness (a durable guard on the self-host TURN invariant) + flagged a
+UI P1. **Cadence:** shipped a guard + an open P1 remains → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 218) — rotated to AUDIO; bundled optional coturn — and caught a STALE-GOAL premise
 
 Rotated off security (per iter-217's flag) to advance audio toward its thousands-scale north star. The
