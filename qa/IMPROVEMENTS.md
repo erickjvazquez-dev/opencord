@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 213) — shipped mute/deafen-in-panel; the apply-on-join QA proves the mute path but NOT the deafen path
+
+Implemented the queued SPEC end-to-end (slices 1–5): persisted `selfMute`/`selfDeafen` in
+`voiceSettings.ts` (vitest), 🎤/🎧 panel toggles with a red-slash active state, `setMuted(on)` on the
+VoiceTransport for a deterministic apply-on-join, and `joinVoice` seeding both from the persisted prefs.
+Browser QA (panel toggle + localStorage persist + reload-survival + struck visual) and the 2-client voice
+QA (B hears RMS 0.0000 on A's **pre-muted** join → 0.3043 after a panel un-mute) both went green; AI-vision
+confirmed the panel + the in-call "· muted" consistency. Shipped + railway + rollout-verified (live JS
+carries the aria-labels + `selfMute`; live CSS carries `sidebar-voice-btn`).
+
+**Highest-value coverage gap (logged for next tick):** slice 3 applies BOTH self-mute AND self-deafen on
+join, but the new voice QA only proves the **pre-call MUTE** path on the receiver's decoded RMS. The
+**pre-call DEAFEN** apply-on-join is unproven end-to-end — when A joins with persisted self-deafen, the
+session should (a) force A's mic off (B hears silence, like mute) AND (b) silence A's incoming audio
+(A hears nothing from B). The browser QA toggles deafen but never measures the join-time effect. Next
+tick: extend `qa/voice.mjs` with a 2-client pre-call-deafen scenario — set self-deafen in A's panel
+before joining, then on join assert (a) B's RMS for A's mic is ~0 (mic forced off) and (b) A's inbound
+`<audio>` for B is muted (deafen silenced incoming). This closes the apply-on-join matrix to both flags.
+
+**Loop-process note:** the SPEC's slice-4 QA ask said "2-client voice QA proving B hears silence on A's
+pre-muted join" — it scoped the *mute* proof but not the *deafen* proof, even though slice 3 ships both.
+Playbook add: when an apply-on-join (or apply-on-X) change seeds MULTIPLE persisted flags, the QA slice
+must cover EACH flag's runtime effect, not just the first/most-obvious one — one assertion per flag.
+
+**Cadence:** shipped a real feature + an open follow-up coverage item → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 212) — SPEC-first for mute/deafen-in-panel, then hand off to a fresh context (the right call after a long session)
 
 The user kept the loop running (8th tick), signalling "do real feature work." The natural next parity

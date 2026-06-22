@@ -252,6 +252,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   + struck visual; **2-client voice QA proves B hears ~silence on A's pre-muted join (RMS 0.0000) then
   hears A after a panel un-mute (0.3043)**. tsc + vitest 91/91 + full QA (browser=0 realtime=0 voice=0
   search=0) + AI-vision verified; shipped + railway + rollout-verified.
+- [ ] **QA: prove pre-call DEAFEN apply-on-join end-to-end (follow-up to iter 213).** `joinVoice` applies
+  BOTH persisted self-mute AND self-deafen on connect, but `qa/voice.mjs` only proves the pre-call MUTE
+  path via the receiver's RMS. Add a 2-client pre-call-deafen scenario: A sets self-deafen in the panel
+  before joining, then on join assert (a) B's RMS for A's mic is ~0 (deafen forces the mic off) AND (b)
+  A's inbound `<audio>` for B is muted (deafen silences incoming). Closes the apply-on-join matrix to
+  both flags. See qa/IMPROVEMENTS.md iter-213.
 
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->
