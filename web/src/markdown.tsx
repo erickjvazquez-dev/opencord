@@ -36,7 +36,7 @@ type InlineRule = {
   re: RegExp
   el?: string | React.ComponentType<{ children?: ReactNode }>
   literal?: boolean
-  kind?: 'mention' | 'link' | 'emoji'
+  kind?: 'mention' | 'link' | 'masklink' | 'emoji'
 }
 
 // Order matters: inline code first (its content is literal), then spoiler, then
@@ -45,6 +45,10 @@ type InlineRule = {
 // e.g. `@x` inside `` `@x` `` stays literal (the code match starts earlier).
 const INLINE_RULES: InlineRule[] = [
   { re: /`([^`\n]+)`/, el: 'code', literal: true },
+  // Masked link [text](url): the URL group is http(s):// IN THE REGEX, so a
+  // [x](javascript:…)/[x](data:…) simply doesn't match → renders as inert literal text
+  // (never a loosenable scheme check). Before the autolink so the inner URL isn't grabbed.
+  { re: /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/, kind: 'masklink' },
   // Autolink only http(s):// — never javascript:/data:, so the href is always safe.
   { re: /https?:\/\/[^\s<]+/, kind: 'link' },
   { re: /\|\|([^|\n]+)\|\|/, el: Spoiler },
@@ -89,6 +93,24 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
         'a',
         { key: `md${ctx.n++}`, href: url, target: '_blank', rel: 'noopener noreferrer' },
         url,
+      ),
+    )
+  } else if (rule.kind === 'masklink') {
+    // [text](url): url is guaranteed http(s) by the regex. title=the real URL is the
+    // anti-phishing tell (hover reveals the true destination when the text lies). The
+    // display text is inline-rendered so [**bold**](url) etc. work.
+    const url = m[2]
+    out.push(
+      React.createElement(
+        'a',
+        {
+          key: `md${ctx.n++}`,
+          href: url,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: url,
+        },
+        ...renderInline(m[1], ctx),
       ),
     )
   } else if (rule.kind === 'mention') {

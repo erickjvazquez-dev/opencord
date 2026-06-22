@@ -686,12 +686,14 @@ item from here as the structural milestones above land.
   bold; subtext small+muted), inline markdown still works inside a header, `#channel`/`####`/bare
   `# ` correctly NOT headers; XSS-safe (React elements, no innerHTML — header content flows through
   the same `renderInline`); vitest + browser QA + AI-vision verified.
-- [ ] **Markdown follow-ups (found iter 221): masked links `[text](url)` + underline `__`.** Masked
-  links are higher-usage than headers but carry a PHISHING surface (display text ≠ destination) — do it
-  with a Rule-15 pass: validate the URL to http(s)-only (reuse the autolink scheme guard, NEVER
-  javascript:/data:), add `title`=the real URL on hover (anti-spoof), target=_blank + rel=noopener. Add
-  the exact adversarial vitest cases the autolinker has (javascript:/data: in the `(url)` slot stays
-  inert). Underline `__text__` is lower-value and tricky (collides with `_italic_` parsing) — defer.
+- [x] **Masked links `[text](url)` — DONE (iter 222, Rule 15).** Discord-style `[label](url)` linkified,
+  secure by construction: the URL group is `https?://` IN THE REGEX, so `[x](javascript:…)`/`[x](data:…)`
+  never form an `<a>` (stay inert literal text); the `<a>` gets `target=_blank` + `rel=noopener noreferrer`
+  + **`title`=the real URL** (anti-phishing tell when the label lies); inline markdown works in the label.
+  Rule-15 vitest (valid http/https, the phishing shape href≠text with title=url, javascript:/data: stays
+  inert, no `on*` extracted from a quoted URL, `[**b**](url)` keeps `<strong>`) + browser QA (label/href/
+  title + the javascript: one does NOT link) + AI-vision + live rollout-verify. Underline `__text__`
+  deferred (low-value, collides with `_italic_` parsing).
 - [~] Mentions — `@user` chips (your own highlighted), plus `@everyone`/`@here`
   highlighted as all-mentions; **`@`-autocomplete** (typing `@`+partial offers
   channel-active usernames; ↑/↓ to move, Enter/Tab to accept, Esc to dismiss,

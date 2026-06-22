@@ -383,6 +383,28 @@ async function main() {
   check((await headMsg.locator('.body .md-h3').count()) === 1, '"### " renders as md-h3')
   check((await headMsg.locator('.body .md-subtext').count()) === 1, '"-# " renders as md-subtext')
 
+  // 3e3 — masked link [text](url) (iter 222, Discord parity + Rule 15): renders an <a> whose
+  // visible text is the label, href is the real URL, and title=url is the anti-phishing tell.
+  // A javascript:-scheme masked link must NOT form a link (stays inert literal text).
+  step('send a masked link [text](url) + a javascript: one → only the http(s) one links')
+  await page.waitForTimeout(3000) // rate-limit refill
+  await composer.click()
+  await composer.fill('[click me](http://example.com/safe)')
+  await composer.press('Shift+Enter')
+  await composer.pressSequentially('[evil](javascript:alert(1))')
+  await composer.press('Enter')
+  const maskMsg = page.locator('.message', { hasText: 'click me' }).last()
+  const maskLink = maskMsg.locator('.body a[href="http://example.com/safe"]')
+  await maskLink.waitFor({ timeout: 8000 })
+  await shot('03e3-masked-link.png')
+  check((await maskLink.textContent())?.trim() === 'click me', 'masked link shows the label text, not the URL')
+  check((await maskLink.getAttribute('title')) === 'http://example.com/safe', 'masked link title=the real URL (anti-phishing)')
+  check((await maskLink.getAttribute('rel')) === 'noopener noreferrer', 'masked link carries rel=noopener noreferrer')
+  check(
+    (await maskMsg.locator('.body a', { hasText: 'evil' }).count()) === 0,
+    'a [text](javascript:…) masked link does NOT form an <a> (stays inert)',
+  )
+
   // 3f — @mention: a mention of yourself is highlighted distinctly from others.
   step('send a message mentioning self + another → self-mention is highlighted')
   await page.waitForTimeout(3000) // let the rate-limit bucket refill before this send

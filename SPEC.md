@@ -2823,3 +2823,24 @@ the `<strong>`; raw HTML in a header stays inert); browser QA sends a `#`/`##`/`
 asserts the rendered classes + readable text; AI-vision the hierarchy. **Blast radius:** markdown.tsx,
 styles.css, markdown.test.tsx, qa/browser.mjs. No backend (bodies already store + broadcast verbatim,
 now bidi-sanitized).
+
+## Markdown masked links [text](url) (chat parity + Rule 15, iter 222)
+
+**Why:** Discord's `[text](url)` (show custom text for a link) is a high-usage markdown primitive
+Opencord lacked (it had only bare-URL autolinks). It carries a PHISHING surface (display text ≠
+destination), so it's a Rule-15 feature.
+
+**Design (secure by construction):** add ONE inline rule
+`/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/` — the URL group is `https?://` in the REGEX, so a
+`[x](javascript:…)` / `[x](data:…)` simply does NOT match and the whole token renders as inert
+literal text (same safety as the bare-URL autolinker; never a scheme check that could be loosened by
+accident). The `<a>` carries `target=_blank` + `rel=noopener noreferrer` (reverse-tabnabbing) and
+**`title`=the real URL** as a lightweight anti-spoof (hover reveals the true destination when the text
+lies). The display text is inline-rendered so `[**bold**](url)` works. Placed before the autolink rule
+(earliest-index would pick it anyway since `[` precedes the inner `http`).
+
+**Verify (Rule 15):** vitest — valid http/https → `<a href=url title=url target=_blank rel=…>text</a>`;
+`href !== text` (the phishing shape) with `title===url`; `[x](javascript:alert(1))` + `data:` → NO `<a>`,
+literal text; a quote inside the URL stays in `href` (no `on*` prop extracted); `[**b**](url)` keeps the
+`<strong>`. Browser QA sends a masked link and asserts the rendered `<a>` (href/text/title). AI-vision.
+**Blast radius:** markdown.tsx, markdown.test.tsx, qa/browser.mjs (the existing `.body a` CSS covers it).

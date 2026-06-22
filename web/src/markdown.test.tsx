@@ -223,3 +223,50 @@ describe('renderMarkdown link & raw-HTML safety (Rule 15)', () => {
     expect(text).toContain('<img src=x onerror=alert(2)>')
   })
 })
+
+// Masked links [text](url) are a second URL→<a> path, so they carry the SAME Rule-15
+// invariants as the autolinker PLUS an anti-phishing tell. The URL group is http(s) in the
+// regex, so a non-http scheme never forms an <a> at all.
+describe('renderMarkdown masked links [text](url) (Rule 15)', () => {
+  it('renders [text](http(s)://…) as an <a> whose href=url, text=text, title=url, _blank+noopener', () => {
+    for (const url of ['http://a.example', 'https://b.example/p?q=1']) {
+      const out = renderMarkdown(`see [click here](${url}) end`)
+      const ls = links(out)
+      expect(ls).toHaveLength(1)
+      expect(ls[0].props.href).toBe(url)
+      expect(ls[0].props.target).toBe('_blank')
+      expect(ls[0].props.rel).toBe('noopener noreferrer')
+      // title=the real URL is the anti-spoof: hover reveals the destination.
+      expect(ls[0].props.title).toBe(url)
+      expect(allText(out)).toContain('click here')
+      expect(allText(out)).not.toContain('](') // the raw syntax was consumed, not left literal
+    }
+  })
+  it('the phishing shape (text looks like another domain) still links to the REAL url + titles it', () => {
+    const out = renderMarkdown('[google.com](http://evil.example)')
+    const ls = links(out)
+    expect(ls).toHaveLength(1)
+    expect(ls[0].props.href).toBe('http://evil.example') // the real destination, not the text
+    expect(ls[0].props.title).toBe('http://evil.example') // surfaced on hover (anti-spoof)
+    expect(allText(out)).toContain('google.com') // the lying display text
+  })
+  it('does NOT form an <a> for a javascript:/data: URL — the whole token stays literal', () => {
+    for (const bad of ['[click](javascript:alert(1))', '[x](data:text/html,<b>hi</b>)']) {
+      const out = renderMarkdown(bad)
+      expect(links(out)).toHaveLength(0)
+      expect(allText(out)).toContain('[') // rendered as inert literal text, no link
+    }
+  })
+  it('never extracts an on* handler from a quote inside the masked URL', () => {
+    const out = renderMarkdown('[t](http://evil.example/"onmouseover="alert(1))')
+    const ls = links(out)
+    expect(ls).toHaveLength(1)
+    expect(String(ls[0].props.href).startsWith('http://evil.example/')).toBe(true)
+    expect(Object.keys(ls[0].props).some((k) => /^on/i.test(k))).toBe(false)
+  })
+  it('inline markdown works inside the link text ([**bold**](url) keeps the <strong>)', () => {
+    const out = renderMarkdown('[**bold**](https://x.example)')
+    expect(links(out)).toHaveLength(1)
+    expect(flatten(out).some((n) => isValidElement(n) && n.type === 'strong')).toBe(true)
+  })
+})
