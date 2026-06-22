@@ -686,6 +686,8 @@ item from here as the structural milestones above land.
   now complete end-to-end** (backend + render + manager). **Picker DONE (iter 153, slice 3b):** a
   composer 🙂 popover lists the server's emoji and inserts `:name:` at the caret (browser E2E +
   AI-vision; reaction palette untouched). **Custom emoji is FULLY complete (backend+render+manager+picker).**
+  · **`:`-autocomplete in the composer SPEC'd (iter 241** — mirror the `@`-mention system; see SPEC.md
+  "Emoji `:`-autocomplete"; deferred to a fresh-context tick for the delicate composer-keydown coordination)
   · stickers · GIF picker (later)
   **+ custom-emoji REACTIONS (iter 155):** react with a server's custom emoji (`custom:{id}` marker in
   the reactions emoji column; palette lists them; chips render the image). **+ P1 FIX (iter 155):** emoji

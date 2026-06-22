@@ -2888,3 +2888,52 @@ are passed through. Empty query → unchanged.
 `**bold**` keeps the `<strong>` and wraps its text; empty query → no marks; a raw-HTML body still inert);
 browser QA (search → the result contains a `.search-match`); AI-vision. **Blast radius:** markdown.tsx,
 Chat.tsx (search-results render), styles.css, markdown.test.tsx, qa/browser.mjs.
+
+## Emoji `:`-autocomplete in the composer (chat parity) — SPEC for a fresh-context tick
+
+**Why:** Discord pops an emoji suggestion list when you type `:partial` in the composer (e.g. `:smi`
+→ 🙂 suggestions, Enter inserts `:smile:`). Opencord already renders `:name:` custom emoji and has a
+click-to-insert 🙂 picker popover, plus a full `@`-mention autocomplete — but typing `:partial` offers
+nothing, so inserting an emoji always means opening the picker or knowing the exact `:name:`. This is a
+high-frequency UX gap and aligns with the standing TOP PRIORITY (UI/UX Discord parity).
+
+**Why spec-first / deferred (iter 241):** the change is medium-sized and the risky part is the composer
+keydown coordination — ArrowUp/ArrowDown/Enter/Tab/Esc are ALREADY shared between (a) the `@`-mention
+menu when open, (b) ArrowUp-edits-last-message when the draft is empty + no menu, and (c) Esc-closes-
+panel/modal precedence. Adding a second autocomplete menu into that shared keydown logic, context-deep,
+is exactly the self-inflicted-regression class — so it gets a spec and a fresh-context implementation
+tick, mirroring the proven `@`-mention system rather than inventing a new mechanism.
+
+**Design (mirror the `@`-mention system — same shape, emoji source instead of usernames):**
+1. **Caret detection** — a module-level `activeEmoji(text, caret)` next to `activeMention` in Chat.tsx:
+   regex `/(?:^|\s):([\w-]{2,})$/` on `text.slice(0, caret)` (require ≥2 chars after `:` so a lone `:`
+   or a `:)` doesn't trigger; only `[\w-]` so a completed `:name:` with its closing colon doesn't match).
+   Return `{ query, start }` like `activeMention`.
+2. **State** — `emojiMatches: string[]` (emoji NAMES), `emojiIndex: number`, `emojiRange: useRef<{start,len}>`.
+   Reuse the existing per-server emoji map already loaded for `:name:` rendering (the source of names —
+   custom server emoji only for v1; unicode-name table is a later enhancement). Recompute in the SAME
+   draft/caret effect that recomputes `mentionMatches`: if `activeEmoji` matches, filter the server emoji
+   names by `startsWith(query)` (cap ~8, stable order), set range; else clear. **Mutual exclusion:** only
+   ONE menu open at a time — if an `@`-mention is active, the emoji menu stays closed (and vice-versa);
+   pick whichever token the caret is actually inside.
+3. **Accept** — `acceptEmoji(name)` mirrors the mention accept: splice the draft replacing `:partial`
+   (from `emojiRange.start`, length `query+1`) with `:name: ` (note the trailing colon + space), restore
+   the caret after it, clear `emojiMatches`/`emojiRange`.
+4. **Keydown coordination (THE careful part)** — in the composer textarea onKeyDown, extend the existing
+   `mentionMatches.length > 0` guard block to ALSO handle `emojiMatches.length > 0` with IDENTICAL
+   semantics (ArrowDown/Up move `emojiIndex`, Enter/Tab accept + preventDefault, Esc closes the menu
+   only). Because the two menus are mutually exclusive (step 2), the branch is `if (mentionOpen) {…}
+   else if (emojiOpen) {…}` — neither can be open together, so ArrowUp-edits-last (draft empty, no menu)
+   and Esc-precedence are unaffected. Do NOT touch the @-mention branch's behavior; add a parallel one.
+5. **Render** — a suggestion popover identical in markup/CSS to the mention menu (`.mention-menu`
+   → reuse or a sibling `.emoji-menu`), each row = the `EmojiImg` (authed blob, like everywhere) + `:name:`;
+   click inserts (mousedown-preventDefault so the textarea keeps focus); active row highlighted by `emojiIndex`.
+
+**Verify (Rule 14):** vitest for `activeEmoji` (matches `:sm`, not `:` alone / `:)` / a closed `:name:`;
+respects whitespace boundary) and the accept splice (caret position, trailing `: `). Browser QA: type
+`:` + a known custom-emoji prefix → assert the menu lists it → ArrowDown/Enter → the draft now holds
+`:name: ` and (on send) the message renders the `img.emoji-inline` → AI-vision the popover. **Regression
+guard the coordination:** assert the EXISTING behaviors still hold with the new code — `@`-mention
+autocomplete still works, ArrowUp-still-edits-last on an empty draft, Esc still closes a panel — these are
+the breakage risk, so the QA must re-exercise them in the same run. **Blast radius:** Chat.tsx (composer),
+styles.css, a vitest file, qa/browser.mjs. No backend, no new endpoint (reuses the loaded emoji map).
