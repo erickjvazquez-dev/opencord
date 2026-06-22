@@ -750,6 +750,20 @@ async function main() {
   await shot('07-server.png')
   check(await page.getByText(srvBody).isVisible(), 'message posts in the server channel')
 
+  // Regression (iter 232 — desktop half of the iter-231 fix): the server list must not
+  // scroll horizontally at the 220px desktop sidebar either. The always-present 5-button
+  // server action row (~375px) overflows the desktop column even MORE than the 300px mobile
+  // drawer (step 8 covers mobile), so without .server-group-actions{flex-wrap:wrap} +
+  // .channel-list{overflow-x:hidden} the nav goes h-scrollable and clips the server/channel
+  // names. This locks the narrower, more-severe desktop case that was previously untested.
+  const desktopServerNavOverflow = await page
+    .locator('.channel-list.server-list')
+    .evaluate((n) => n.scrollWidth - n.clientWidth)
+  check(
+    desktopServerNavOverflow <= 1,
+    `desktop sidebar: server list has no horizontal overflow (got ${desktopServerNavOverflow}px)`,
+  )
+
   // 7-voice-presence (v0.9 slice 2): joining voice on the server channel surfaces a live 🔊
   // badge in the sidebar (cross-channel presence). Open a raw WS as the logged-in owner on
   // srvChan and send voice-join (kept open on window), then assert the badge.
