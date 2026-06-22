@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 235) — green tick; auth+WS-access coverage confirmed comprehensive, backlog is epics-only
+
+Health green. Followed iter-234's security thread to its end: checked whether the WS handshake rejects a
+non-member for a DM / group-DM channel (a different access path than the server-channel 403 that IS
+tested). It's already covered — `TestServeWSGroupDMFanoutIntegration` asserts a non-member group handshake
+is refused 403. So the auth + WS-access surface is now **comprehensive**: 401 (missing / garbage /
+expired-at-both-boundaries), 400 (malformed channel id), 403 (non-member server channel AND non-member
+group DM). The "least-probed surface" backlog item from iter-183 (JWT tamper/expiry, voice relay, search
+injection) is effectively closed — each was probed and is either hardened+tested or was a real gap now
+locked (iter-228 alg=none, iter-234 expiry).
+
+Also read the FULL GOAL.md parity backlog to confirm there's no clean single-tick slice left: the product
+is feature-complete for MVP+ Discord parity (servers/roles/moderation/DMs/groups/threads/voice+screen/
+reactions/custom-emoji/markdown/mentions/search/read-state/presence/notifications/PWA-slice-1/a11y-AA).
+Every remaining unchecked `[ ]` is an **epic or owner-gated**: cascaded-SFU thousands-scale, built-in
+secure tunneling, email accounts, the Cloud tier, bot/plugin API, federation, stage/forum channels, audit
+log, the header-icon design pass. None is a no-spec, ≤3-file, autonomous slice.
+
+**Honest conclusion — the loop has reached steady-state maintenance.** After a productive burst
+(231 UI fix → 232 UI guard → 233 sweep → 234 security lock), the genuine-gap rate has dropped to ~zero
+because the product is mature and the next advances are deliberate, owner-steered epics. The right behavior
+is to LEAN INTO the idle-backoff (widen toward the 3h cloud cadence), keep verifying green, and reserve
+active ticks for a real change or an owner-directed epic — not to manufacture micro-work to stay at 30 min.
+A substantive next feature should be started SPEC-first from a fresh context.
+
+**Component advanced:** none (verification only; coverage map updated). **Cadence:** green tick → WIDEN to
+2700s; trending toward the hourly/3h floor while the product stays in steady-state.
+
 ## 2026-06-22 (iter 234) — rotated off vision sweeps to security; locked the expired-token wiring
 
 After three UI-vision ticks (231 fix → 232 test → 233 clean), I deliberately ROTATED to a different
