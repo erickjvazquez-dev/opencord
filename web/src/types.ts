@@ -199,6 +199,9 @@ export interface ServerEvent {
     | 'dm-membership'
   message?: Message
   history?: Message[]
+  // On a "history" event: the viewer's read marker for this channel at connect time
+  // (absent = no read row), so the client can draw the "New messages" divider.
+  lastReadId?: number
   username?: string
   online?: number
   error?: string

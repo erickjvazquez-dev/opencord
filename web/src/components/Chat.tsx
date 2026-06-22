@@ -217,6 +217,11 @@ export function Chat({
   const [collapsedCats, setCollapsedCats] = useState<Set<number>>(new Set())
   const [channelId, setChannelId] = useState<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  // The viewer's read marker for the open channel, captured (frozen) from the history
+  // event at open — BEFORE we mark the channel read — so the "New messages" divider
+  // anchors at the pre-open boundary and stays put as you read (Discord behavior).
+  // null = no boundary (first visit / all read) → no divider.
+  const [readBoundaryId, setReadBoundaryId] = useState<number | null>(null)
   // Message id to briefly highlight after a jump (click a reply preview / pin / search hit).
   const [flashId, setFlashId] = useState<number | null>(null)
   // A jump target awaiting the message list to be on-screen (e.g. after closing a panel).
@@ -428,6 +433,7 @@ export function Chat({
   useEffect(() => {
     if (channelId == null) return
     setMessages([])
+    setReadBoundaryId(null) // re-anchored by the next channel's history event
     setEditingId(null)
     setReplyingTo(null)
     setTyping([])
@@ -473,6 +479,8 @@ export function Chat({
       if (data.type === 'history' && data.history) {
         const hist = data.history
         setMessages(hist)
+        // Freeze the read boundary for the "New messages" divider (absent = no divider).
+        setReadBoundaryId(typeof data.lastReadId === 'number' ? data.lastReadId : null)
         // A full initial window (the server caps at 50) means older history may exist → offer
         // "load older"; a partial window means we already have the whole channel.
         setHasMoreHistory(hist.length >= 50)
@@ -3662,11 +3670,20 @@ export function Chat({
               !prev.deleted &&
               prev.userId === m.userId &&
               new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000
+            // "New messages" divider: before the FIRST message newer than the frozen
+            // read boundary (and only when the previous message was read / there is none).
+            const isFirstUnread =
+              readBoundaryId != null && m.id > readBoundaryId && (!prev || prev.id <= readBoundaryId)
             return (
               <Fragment key={m.id}>
               {newDay && (
                 <div className="day-divider" role="separator" aria-label={dayLabel(new Date(m.createdAt))}>
                   <span>{dayLabel(new Date(m.createdAt))}</span>
+                </div>
+              )}
+              {isFirstUnread && (
+                <div className="new-divider" role="separator" aria-label="New messages">
+                  <span>New</span>
                 </div>
               )}
               <div

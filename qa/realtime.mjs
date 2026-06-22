@@ -212,6 +212,47 @@ async function main() {
     'A receives a live message sent after the reconnect (socket truly recovered)',
   )
 
+  // 1f — "New messages" divider (iter 223, Discord parity): B reads #general, leaves (marks
+  // it read on leave), A posts while B is away, B returns → a "New" line sits before what B
+  // missed; reading + returning again (all caught up) shows NO divider.
+  step('new-messages divider: B leaves #general → A posts → B returns sees a "New" line before the missed msgs')
+  await b.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await b.waitForTimeout(800) // ensure B is on #general and settled
+  await b.locator('.channel-item', { hasText: 'pgseed' }).first().click() // leave → marks #general read
+  await b.waitForTimeout(800) // let the async mark-read commit before A posts
+  const miss1 = 'missed one ' + sfx
+  const miss2 = 'missed two ' + sfx
+  await a.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await a.waitForTimeout(3500) // fresh-ish rate bucket for two quick sends
+  await a.getByPlaceholder(/Message #/).fill(miss1)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.waitForTimeout(700)
+  await a.getByPlaceholder(/Message #/).fill(miss2)
+  await a.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(miss2).waitFor({ timeout: 8000 })
+  // B returns → the history event carries B's pre-leave read boundary → divider before miss1.
+  await b.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await b.getByText(miss1).waitFor({ timeout: 10000 })
+  const divider = b.locator('.new-divider')
+  await divider.waitFor({ timeout: 8000 }).catch(() => {})
+  check((await divider.count()) === 1, 'B sees a "New messages" divider on return')
+  await divider.scrollIntoViewIfNeeded().catch(() => {})
+  await b.screenshot({ path: join(SHOTS, 'rt-17-new-divider.png') })
+  const dividerBeforeMiss = await b.evaluate((t) => {
+    const div = document.querySelector('.new-divider')
+    const msg = [...document.querySelectorAll('.message')].find((el) => el.textContent?.includes(t))
+    if (!div || !msg) return false
+    return !!(div.compareDocumentPosition(msg) & Node.DOCUMENT_POSITION_FOLLOWING)
+  }, miss1)
+  check(dividerBeforeMiss, 'the "New" divider sits before the first missed message')
+  // B is viewing now → leaving marks read; returning all-caught-up shows NO divider.
+  await b.locator('.channel-item', { hasText: 'pgseed' }).first().click()
+  await b.waitForTimeout(800)
+  await b.locator('.channel-list .channel-item', { hasText: 'general' }).first().click()
+  await b.getByText(miss2).waitFor({ timeout: 10000 })
+  await b.waitForTimeout(500)
+  check((await b.locator('.new-divider').count()) === 0, 'no "New" divider once everything is read')
+
   const aMsg = a.locator('.message', { hasText: body }).first()
   const bMsg = b.locator('.message', { hasText: body }).first()
 

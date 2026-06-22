@@ -12,12 +12,16 @@ import (
 
 // Event is the envelope every server→client frame uses.
 type Event struct {
-	Type     string         `json:"type"` // history|message|message-edited|message-deleted|message-pinned|typing|presence|error|voice-join|voice-leave|voice-signal|voice-screen
-	Message  *chat.Message  `json:"message,omitempty"`
-	History  []chat.Message `json:"history,omitempty"`
-	Username string         `json:"username,omitempty"` // who, for "typing" / voice
-	Online   int            `json:"online,omitempty"`
-	Error    string         `json:"error,omitempty"`
+	Type    string         `json:"type"` // history|message|message-edited|message-deleted|message-pinned|typing|presence|error|voice-join|voice-leave|voice-signal|voice-screen
+	Message *chat.Message  `json:"message,omitempty"`
+	History []chat.Message `json:"history,omitempty"`
+	// LastReadID rides the "history" event: the viewer's read marker for this channel at
+	// connect time (nil = no read row yet), so the client can draw the "New messages"
+	// divider at the pre-open boundary. omitempty → nil is omitted.
+	LastReadID *int64 `json:"lastReadId,omitempty"`
+	Username   string `json:"username,omitempty"` // who, for "typing" / voice
+	Online     int    `json:"online,omitempty"`
+	Error      string `json:"error,omitempty"`
 	// Voice signaling (mesh WebRTC): From is the sender; Target the intended peer
 	// (clients ignore a voice-signal unless Target is them); Signal is opaque
 	// WebRTC JSON (an SDP offer/answer or an ICE candidate).

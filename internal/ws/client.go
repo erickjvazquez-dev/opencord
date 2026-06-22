@@ -98,12 +98,15 @@ func ServeWS(hub *Hub, authsvc *auth.Service, store *chat.Store) http.HandlerFun
 			hub: hub, conn: conn, send: make(chan []byte, 32), user: user, channelID: channelID,
 			rateTokens: rateBurst, rateLast: time.Now(),
 			voiceTokens: voiceBurst, voiceLast: time.Now(),
-			done:        make(chan struct{}),
+			done: make(chan struct{}),
 		}
 		hub.register <- c
 
 		if msgs, err := store.Recent(r.Context(), channelID, user.ID, 50); err == nil {
-			if data, err := json.Marshal(Event{Type: "history", History: msgs}); err == nil {
+			// Capture the read marker BEFORE the client marks the channel read, so the
+			// "New messages" divider anchors at the pre-open boundary (nil on first visit).
+			lastRead, _ := store.LastReadID(r.Context(), channelID, user.ID)
+			if data, err := json.Marshal(Event{Type: "history", History: msgs, LastReadID: lastRead}); err == nil {
 				// Safe send: the hub may drop us (closing done) before the pumps
 				// drain; never a raw send, which could race a channel close.
 				c.sendSafe(data)

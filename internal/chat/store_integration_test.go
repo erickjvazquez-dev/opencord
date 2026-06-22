@@ -3238,3 +3238,44 @@ func TestBidiControlStrippingNamesIntegration(t *testing.T) {
 		t.Fatalf("legitimate Unicode name was altered: %q", intl.Name)
 	}
 }
+
+// TestLastReadIDIntegration covers the read-marker query that feeds the "New messages"
+// divider (iter 223): nil before any read, the latest id after MarkChannelRead, frozen
+// until the next read, then advancing — so the divider anchors at the pre-open boundary.
+func TestLastReadIDIntegration(t *testing.T) {
+	store, _, u := setup(t)
+	ctx := context.Background()
+	ch, _ := store.CreateChannel(ctx, uniqueChannel())
+	show := func(p *int64) string {
+		if p == nil {
+			return "nil"
+		}
+		return fmt.Sprintf("%d", *p)
+	}
+
+	// No read row yet → nil (a genuine first visit → the client draws no divider).
+	if got, err := store.LastReadID(ctx, ch.ID, u.ID); err != nil || got != nil {
+		t.Fatalf("LastReadID with no row = %s, %v; want nil, nil", show(got), err)
+	}
+
+	store.Save(ctx, ch.ID, u.ID, u.Username, "one")
+	m2, _ := store.Save(ctx, ch.ID, u.ID, u.Username, "two")
+	if err := store.MarkChannelRead(ctx, ch.ID, u.ID); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	if got, err := store.LastReadID(ctx, ch.ID, u.ID); err != nil || got == nil || *got != m2.ID {
+		t.Fatalf("LastReadID after read = %s, %v; want %d", show(got), err, m2.ID)
+	}
+
+	// A newer message does NOT move the marker until the next read (the boundary is frozen).
+	m3, _ := store.Save(ctx, ch.ID, u.ID, u.Username, "three")
+	if got, _ := store.LastReadID(ctx, ch.ID, u.ID); got == nil || *got != m2.ID {
+		t.Fatalf("marker should still be %d before re-read, got %s", m2.ID, show(got))
+	}
+	if err := store.MarkChannelRead(ctx, ch.ID, u.ID); err != nil {
+		t.Fatalf("re-read: %v", err)
+	}
+	if got, _ := store.LastReadID(ctx, ch.ID, u.ID); got == nil || *got != m3.ID {
+		t.Fatalf("marker should advance to %d after re-read, got %s", m3.ID, show(got))
+	}
+}

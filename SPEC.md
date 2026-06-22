@@ -2844,3 +2844,28 @@ lies). The display text is inline-rendered so `[**bold**](url)` works. Placed be
 literal text; a quote inside the URL stays in `href` (no `on*` prop extracted); `[**b**](url)` keeps the
 `<strong>`. Browser QA sends a masked link and asserts the rendered `<a>` (href/text/title). AI-vision.
 **Blast radius:** markdown.tsx, markdown.test.tsx, qa/browser.mjs (the existing `.body a` CSS covers it).
+
+## "New messages" unread divider (chat parity, iter 223)
+
+**Why:** Discord renders a "New" line in the message list at the read→unread boundary when you open
+a channel with unreads — the "where did I leave off" marker. Opencord tracks per-channel unread
+(`channel_reads.last_read_id`, sidebar dot/badge) but never showed the in-list divider.
+
+**Design (minimal; reuses the existing read marker + the day-divider render path):**
+- Server: a `Store.LastReadID(channelID, userID) (*int64, error)` — the user's `channel_reads.last_read_id`
+  for the channel, or nil when there's no row (a genuine first visit → no divider). The WS history event
+  (built at connect in `client.go`, BEFORE the client POSTs `/read`) carries it as `lastReadId` on the
+  `Event` (`*int64`, omitempty → nil omitted). So the boundary is the PRE-open read position.
+- Client: capture `lastReadId` from the history event into a frozen `readBoundaryId` (reset on channel
+  switch); the live `message` path never updates it, so the divider stays put as you read (Discord
+  behavior — it clears only when you leave + return). Before the first VISIBLE message whose `id >
+  readBoundaryId` (only when readBoundaryId != null and such a message exists), render a `.new-divider`
+  ("New", red line) — alongside the day-divider. All-read (boundary == latest) ⇒ no divider; first visit
+  (nil) ⇒ no divider.
+
+**Verify:** store test (nil with no row; the value after `MarkChannelRead`; advances on a later read);
+WS-serve test (history event includes `lastReadId` for a member with a read marker); two-client realtime
+E2E (B reads #general → switches away → A posts 2 → B returns → a "New" divider sits before A's 2
+messages); AI-vision. **Blast radius:** chat.go (+ store test), ws/hub.go (Event field), ws/client.go
+(history wiring + serve test), types.ts, Chat.tsx, styles.css, qa/realtime.mjs. No schema change
+(`channel_reads` already exists).

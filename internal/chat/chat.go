@@ -963,6 +963,25 @@ func (s *Store) MarkChannelRead(ctx context.Context, channelID, userID int64) er
 	return err
 }
 
+// LastReadID returns userID's read marker (channel_reads.last_read_id) for channelID, or
+// nil when there is no read row yet (a genuine first visit). The WS history event carries
+// this — captured at connect, BEFORE the client marks the channel read — so the client can
+// draw the "New messages" divider at the pre-open read boundary. The caller is responsible
+// for the access check (the WS gate already ran it).
+func (s *Store) LastReadID(ctx context.Context, channelID, userID int64) (*int64, error) {
+	var id int64
+	err := s.pool.QueryRow(ctx,
+		`SELECT last_read_id FROM channel_reads WHERE user_id = $1 AND channel_id = $2`,
+		userID, channelID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
+}
+
 // MuteChannel mutes channelID for userID — it stops surfacing as unread (Unreads excludes
 // it). Idempotent. The caller is responsible for the access check (you can only mute a
 // channel you can read).

@@ -324,7 +324,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
 - [x] Message edit/delete (owner-only, live WS, soft delete)
 - [x] Typing indicators · **read state DONE** — per-channel unread indicators (bold + pip
   on global/server/DM channels; `channel_reads` table, access-scoped `UnreadChannelIDs`,
-  mark-read on open/leave, ~10s poll; store+router+browser tested, AI-vision verified)
+  mark-read on open/leave, ~10s poll; store+router+browser tested, AI-vision verified). **Plus
+  the in-channel "New messages" divider (iter 223, Discord parity):** the WS history event carries
+  the viewer's pre-open read marker (`Store.LastReadID` → `Event.lastReadId`, captured BEFORE
+  mark-read); the client freezes it and renders a red "New" line before the first message newer than
+  it (absent on a first visit / when caught up). store test (`TestLastReadIDIntegration`) + two-client
+  realtime E2E (B leaves → A posts → B returns sees the line before the missed msgs; none once read) +
+  AI-vision. (Scroll-to-divider on open is a possible follow-up; currently lands at the bottom.)
 - [x] Profiles: initials avatars + **uploaded avatars** (local-disk, access-gated
   serve, Avatar component renders the image or falls back to initials everywhere;
   header click-to-upload; Rule-15 hardened + vision-verified). Banners/status TODO
