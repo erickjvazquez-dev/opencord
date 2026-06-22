@@ -394,6 +394,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   tooltip, so a long name never overflows the fixed 220px sidebar. Browser QA creates a
   long-named server and asserts the name element clips + stays within the sidebar; AI-vision
   verified (tick-114, closing the tick-113 finding).
+- [ ] **P1 (UI parity design pass, found iter 219 via AI-vision): header action icons are colorful
+  emoji, not monochrome line icons.** The chat-header controls (pin 📌, threads 🧵, notify 🔔, search 🔍,
+  plus the server row 🔒 read-only, 🐌 slowmode, 📝 topic, …) render as mismatched colorful emoji, which
+  reads less "native chat app" than Discord's clean monochrome line-icon row. A genuine parity gap, but a
+  whole-app visual decision (sourcing/creating ~10 consistent SVG line icons + a shared `<Icon>`) that the
+  owner should steer — NOT an autonomous mid-loop redesign. Deferred until owner-confirmed; if greenlit,
+  do it as one focused design pass with a shared icon set so the look stays consistent.
 
 ## Later
 

@@ -98,6 +98,11 @@ QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/voice.mjs"; RC3=$?
 echo "[qa] running search-operator smoke (read-only, local API :8080)…"
 OPENCORD_BASE_URL=http://localhost:8080 bash "$ROOT/qa/search-smoke.sh"; RC4=$?
 
-echo "[qa] browser=$RC1 realtime=$RC2 voice=$RC3 search=$RC4"
-[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$RC3" -eq 0 ] && [ "$RC4" -eq 0 ]
+# Compose-profile guard (iter 219): the optional coturn TURN relay must stay OFF by
+# default (Rule A / Rule 16). Cheap + docker-only; skips cleanly without docker.
+echo "[qa] running compose-profile guard (coturn stays off-by-default)…"
+bash "$ROOT/qa/compose-profile-check.sh"; RC5=$?
+
+echo "[qa] browser=$RC1 realtime=$RC2 voice=$RC3 search=$RC4 compose=$RC5"
+[ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$RC3" -eq 0 ] && [ "$RC4" -eq 0 ] && [ "$RC5" -eq 0 ]
 exit $?
