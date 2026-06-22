@@ -3,6 +3,28 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 228) — locked the alg=none JWT bypass (Rule 15); a no-bug invariant still worth a test
+
+Rather than repeat iter-227's broad sweep, picked ONE concrete security-critical invariant and checked it:
+`auth.Parse` rejects forged `alg=none` / non-HMAC tokens, but NO test encoded it — a gap, since alg=none is
+one of the most common auth bypasses. Added an adversarial test that forges an unsigned token with an
+attacker-chosen subject (any user id) + malformed tokens and asserts all are rejected.
+
+**Honest negative test (Rule 15 — prove the test isn't a no-op):** removed the keyfunc's HMAC method-check
+and the test STILL passed — jwt/v5 rejects alg=none by DEFAULT (it needs the `UnsafeAllowNoneSignatureType`
+sentinel key, never returned). So the explicit check is defense-in-depth and the test locks the invariant
+at the LIBRARY layer. That's the right place: a future regression here would be a JWT-lib swap or a
+parser-option mistake (`WithoutClaimsValidation`, allowing none), exactly what the test now catches.
+
+**Principle — lock critical security invariants with adversarial tests EVEN WHEN NO BUG EXISTS.** The test
+fixes nothing today; its value is (a) catching a future silent regression in a high-blast-radius area
+(auth bypass = full account takeover) and (b) documenting the posture. On a mature, secure codebase, "which
+security invariant is enforced-but-untested?" is a strong tick-selection heuristic — it produces genuine
+value without churn. (Pairs with iter-225 "encode manual verifications as guards" and iter-216 bidi.)
+
+**Component advanced:** security (auth-bypass invariant now regression-locked). **Cadence:** shipped a real
+test → ACTIVE (1800s; the green-tick widening resets since this tick shipped value).
+
 ## 2026-06-22 (iter 227) — green maintenance tick: investigated, found no actionable gap, NO churn
 
 First tick in a long productive run (213–226) where a genuine search turned up nothing worth shipping —
