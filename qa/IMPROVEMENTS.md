@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 216) — rotated to SECURITY; hardened Trojan-Source bidi spoofing (Rule 15, full cycle)
+
+Acted on iter-215's rotation flag — left the voice/UI surface and advanced **security** (the
+least-recently-touched component). Mapped the existing adversarial coverage with an Explore agent FIRST
+(JWT/oversize/injection/traversal/rate-limit/channel-escalation all already COVERED — strong suite), then
+targeted the one real GAP it surfaced: **Unicode bidi controls in message bodies** (Trojan Source,
+CVE-2021-42574). Ran the full Rule-15 cycle: reproduced (integration test failed pre-fix — 9 controls
+stored verbatim through `SaveReply`) → fixed at the store chokepoint (`stripBidiControls` on every write
+path incl. `EditMessage` so an edit can't re-inject) → re-attacked (clean) → proved no collateral (emoji
++ZWJ, Arabic, CJK, LRM/RLM marks preserved) → regress (unit + integration + real-WS-ingest). **Live-probed
+the deploy** (a Node WS client sent U+202E/U+2066 on the wire; the live server persisted "wire-live-clean")
+— the real Rule-14 backend verification a bundle-grep can't give.
+
+**Highest-value follow-up (GOAL.md):** the SAME spoofing class hits other rendered user text —
+**usernames especially** (a U+202E username visually impersonates another user — higher impact than a
+message body), plus channel/server names, custom status, thread/group-DM titles. Lift the sanitizer into a
+shared helper and apply at each ingest; usernames warrant a stricter reject (identity field). Next tick =
+security tick 2 (within the ~2-tick cap), then rotate.
+
+**Loop-process playbook adds (two):**
+1. **Map-before-probe for security ticks:** spawning an Explore agent to inventory existing adversarial
+   tests vs. attack surfaces BEFORE picking a target stopped me from re-testing already-covered surfaces
+   and pointed straight at the genuine gap. Codify: a security tick starts with a coverage map.
+2. **Backend rollout-verify needs a live behavioral probe, not a bundle grep.** The skill's rollout-verify
+   greps the SPA bundle for a shipped string — meaningless for a Go-only change. For backend ticks, hit
+   the live endpoint and observe the new behavior (here: a live WS bidi probe). Added to the playbook.
+
+**Component advanced:** security (hostile-input-proof — closed the bidi-spoofing gap). **Cadence:** shipped
+a fix + an open security follow-up → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 215) — shipped the deafen-mic-icon P1; flagging COMPONENT ROTATION (3 ticks on voice/UI)
 
 Closed iter-214's own AI-vision P1: the panel 🎤 now strikes when `muted || deafened` so a deafened user
