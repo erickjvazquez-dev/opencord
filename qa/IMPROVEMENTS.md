@@ -3,6 +3,39 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 218) — rotated to AUDIO; bundled optional coturn — and caught a STALE-GOAL premise
+
+Rotated off security (per iter-217's flag) to advance audio toward its thousands-scale north star. The
+plan was "self-host TURN for hostile NATs" — but reading the CODE first revealed TURN was already fully
+built (config + ephemeral HMAC creds + `ICEServersForUser`, unit-tested, iter 137). The real gap was that
+the credential scheme was never paired with an actual **relay**: a self-hoster still had to BYO coturn.
+So I shipped the relay itself — an optional `docker compose --profile turn up` coturn service (off by
+default, Rule A preserved; `stack-guardian` APPROVE; free self-hosted OSS) wired to the same
+`OPENCORD_TURN_SECRET`, plus the previously-missing README/.env docs for the ephemeral scheme. Verified at
+the config level (profile gating: coturn absent from the default stack) AND by booting coturn 4.6.2 with
+our exact flags (clean startup, no flag errors); a real symmetric-NAT relay needs a hostile-NAT client,
+stated not faked.
+
+**Loop-process playbook add (the real lesson):** the rotation target was set last tick from a STALE GOAL
+note ("Next: optional self-host TURN") that lagged the code by ~80 iterations. GOAL/SPEC "Next:" prose
+drifts behind what's actually built. **Codify: a component-rotation tick must `grep` the code for the
+supposedly-missing capability BEFORE committing to build it** — exactly the map-before-act discipline from
+the iter-216 security tick, now generalized to FEATURE ticks. It saved this tick from re-implementing TURN;
+without it I'd have wasted the tick. (Same family as iter-216's "map coverage before probing.")
+
+**Coverage note:** coturn relay behavior is config-verified + boots-clean, but there is NO end-to-end relay
+test (the SFU path has `qa/sfu-run.sh` against real LiveKit; there's no equivalent forcing media through
+coturn behind a simulated symmetric NAT). A future heavy QA slice could add one; logged, not built (needs
+a NAT-simulation harness — disproportionate now).
+
+**Next rotation:** audio is now mature (mesh + SFU + active-speaker + static/ephemeral TURN + bundled
+relay); the only remaining north-star item (cascaded SFUs) is a multi-node infra epic that is NOT
+loop-sized or loop-verifiable. So next tick should rotate to a **tick-sized** improvement — a chat/realtime
+or infra/UX polish, or a QA coverage gap — not force more audio.
+
+**Component advanced:** audio (free-to-self-host at scale — bundled the missing NAT-traversal relay).
+**Cadence:** shipped a feature → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 217) — finished the bidi class (all rendered names); security hardened → ROTATE next
 
 Security tick 2 (within the ~2-tick cap): extended iter-216's Trojan-Source defense from message bodies
