@@ -331,6 +331,12 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   it (absent on a first visit / when caught up). store test (`TestLastReadIDIntegration`) + two-client
   realtime E2E (B leaves → A posts → B returns sees the line before the missed msgs; none once read) +
   AI-vision. (Scroll-to-divider on open is a possible follow-up; currently lands at the bottom.)
+- [ ] **Follow-up (iter 223): scroll to the "New messages" divider on open.** Discord lands you AT the
+  New line when you open a channel with unreads (so you resume where you left off); Opencord renders the
+  divider but auto-scrolls to the bottom, so on a big backlog you don't see it without scrolling up. When
+  `readBoundaryId` yields a divider, scroll it into view (instead of to-bottom) on the initial history
+  render — guard so it only fires for the first paint of an unread channel, and the "↓ Jump to present"
+  pill still returns to the latest. Small frontend-only follow-up.
 - [x] Profiles: initials avatars + **uploaded avatars** (local-disk, access-gated
   serve, Avatar component renders the image or falls back to initials everywhere;
   header click-to-upload; Rule-15 hardened + vision-verified). Banners/status TODO

@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 223) — shipped the "New messages" divider end-to-end; reuse-existing-timing > new mechanism
+
+A full-stack Discord-parity feature in one tick (backend + client + CSS + store test + two-client E2E +
+AI-vision + deploy + rollout-verify): the red "New" line at the read→unread boundary. The key was reading
+the existing mark-read timing FIRST — `markChannelRead` fires on channel LEAVE — which is EXACTLY what
+makes the boundary work without any new mechanism: leaving freezes `last_read_id` at that point, and the
+next open's WS history event carries it (captured before the open marks read). So the whole feature is
+just `Store.LastReadID` + an `Event.lastReadId` field + a client divider — no schema change, no new
+read-tracking. **Playbook: before building a feature, map the EXISTING lifecycle/timing it can ride; a
+new mechanism is often unnecessary once you see when the data you need is already produced.**
+
+**Two QA lessons this tick:**
+1. **AI-vision screenshots must scroll the target into view.** The first divider screenshot auto-scrolled
+   to the message-list bottom and missed the divider entirely (it was mid-list); the assertions passed but
+   the vision frame was useless. Added `divider.scrollIntoViewIfNeeded()` before the shot. Generalize: a
+   QA screenshot of an element NOT pinned to a viewport edge must scroll it into view first, or AI-vision
+   reviews a frame that doesn't contain the thing under test.
+2. **A negative assertion makes a state-dependent feature trustworthy.** Besides "divider appears when
+   unread," the test also asserts "NO divider once caught up" — without it, a divider that ALWAYS rendered
+   would still pass. State-toggling features need both the present AND absent assertions.
+
+**Follow-up (GOAL):** scroll-to-divider on open (Discord lands you at the New line; Opencord lands at the
+bottom, so on a big backlog you must scroll up to find it). Small frontend-only next tick.
+
+**Component advanced:** chat (read-state parity — the in-channel unread divider). **Cadence:** shipped a
+feature + open follow-ups (scroll-to-divider, header-icon pass) → ACTIVE (1800s).
+
 ## 2026-06-22 (iter 222) — shipped masked links (Rule 15); "secure by construction" beats validate-and-reject
 
 Closed iter-221's queued follow-up: Discord-style `[text](url)`. The phishing surface (label ≠
