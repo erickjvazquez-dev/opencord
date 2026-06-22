@@ -252,12 +252,18 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   + struck visual; **2-client voice QA proves B hears ~silence on A's pre-muted join (RMS 0.0000) then
   hears A after a panel un-mute (0.3043)**. tsc + vitest 91/91 + full QA (browser=0 realtime=0 voice=0
   search=0) + AI-vision verified; shipped + railway + rollout-verified.
-- [ ] **QA: prove pre-call DEAFEN apply-on-join end-to-end (follow-up to iter 213).** `joinVoice` applies
-  BOTH persisted self-mute AND self-deafen on connect, but `qa/voice.mjs` only proves the pre-call MUTE
-  path via the receiver's RMS. Add a 2-client pre-call-deafen scenario: A sets self-deafen in the panel
-  before joining, then on join assert (a) B's RMS for A's mic is ~0 (deafen forces the mic off) AND (b)
-  A's inbound `<audio>` for B is muted (deafen silences incoming). Closes the apply-on-join matrix to
-  both flags. See qa/IMPROVEMENTS.md iter-213.
+- [x] **QA: prove pre-call DEAFEN apply-on-join end-to-end — DONE (iter 214).** Added a 2-client
+  pre-call-deafen scenario to `qa/voice.mjs`: A sets self-deafen in the panel BEFORE rejoining (B stays
+  in the call), then on join it asserts both effects deafen must have — (a) B's decoded RMS for A's mic
+  is ~0 (deafen forces the mic off, 0.0000) AND (b) A's inbound `<audio>` for B is `.muted` (deafen
+  silences incoming) — then un-deafen restores both (mic 0.0000→0.3143, incoming un-muted). Full QA green
+  (browser=0 realtime=0 voice=0 search=0) + AI-vision. The apply-on-join matrix now covers BOTH flags.
+- [ ] **P1 (UI parity, found iter 214): deafen should visually struck the mic icon too.** While deafened,
+  the panel 🎧 icon shows the red slash but the 🎤 mic icon does NOT — yet deafen also silences your mic.
+  Discord struck-marks BOTH icons when deafened. Make the panel (and ideally the voice-bar) reflect
+  "deafened ⇒ mic visually muted": derive the mic-struck state as `muted || deafened` for display only
+  (don't change the underlying `muted` flag, so un-deafen still restores your prior mute state). Small,
+  display-only; add a browser-QA assertion that the 🎤 icon carries `.active` while deafened.
 
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->

@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 214) — closed the pre-call-deafen QA gap; AI-vision surfaced a deafen-mic-icon parity P1
+
+Acted on iter-213's own logged gap (the loop fixing what it flagged): added a 2-client pre-call-DEAFEN
+scenario to `qa/voice.mjs` proving BOTH effects deafen-on-join must have — (a) B's decoded RMS for A's
+mic is ~0 (mic forced off) AND (b) A's inbound `<audio>` for B is `.muted` (incoming silenced) — then
+un-deafen restores both (mic 0.0000→0.3143; incoming un-muted). The apply-on-join matrix now covers BOTH
+persisted flags, not just mute. Full QA green (browser=0 realtime=0 voice=0 search=0).
+
+**Two-effect insight:** deafen is the rare control with a SEND effect (mic off) AND a RECEIVE effect
+(incoming muted). RMS only sees the send side (it reads the MediaStream, bypassing playback `.muted`), so
+the receive side needs a DOM `.muted` assertion. A single-RMS check would have "passed" while silently
+missing half the behavior. Playbook add (generalizing iter-213's note): **for a control with both a send
+and a receive effect, assert each on its own channel — RMS for send, the `<audio>.muted` DOM prop for
+receive.**
+
+**First-run bug the QA caught in itself:** my initial deafen scenario re-ran `joinCall(b)`, but the
+preceding mute scenario leaves B IN the call — so B has no "join voice" button and it timed out. Fixed to
+only rejoin A (B stays; mesh re-offers). Lesson: when chaining scenarios that share browser contexts,
+track the residual call state across scenario boundaries — each scenario inherits the previous one's
+roster, it doesn't start clean.
+
+**New P1 from AI-vision (GOAL.md, found this tick):** while deafened, the panel 🎧 icon shows the red
+slash but the 🎤 mic icon does NOT — yet deafen silences your mic too. Discord struck-marks BOTH. Fix is
+display-only: derive the mic-struck state as `muted || deafened` (don't touch the underlying `muted`
+flag). Logged, not fixed this tick (the mute/deafen SPEC scoped in-call semantics as unchanged).
+
+**Component advanced:** UI (Discord-parity polish) + the QA harness itself (coverage). No app code shipped
+— a QA-only change, so committed + pushed but NOT redeployed (the served bundle is byte-identical; Rule 10
+anti-churn). **Cadence:** shipped a real QA improvement + an open P1 remains → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 213) — shipped mute/deafen-in-panel; the apply-on-join QA proves the mute path but NOT the deafen path
 
 Implemented the queued SPEC end-to-end (slices 1–5): persisted `selfMute`/`selfDeafen` in

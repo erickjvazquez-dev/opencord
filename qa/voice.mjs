@@ -659,6 +659,65 @@ async function main() {
     `un-muting in the panel restores A's mic on B (muted ${rmsPreMuted.toFixed(4)} → ${rmsPreUnmuted.toFixed(4)})`,
   )
 
+  // ── Pre-call self-DEAFEN (apply-on-join — closes the iter-213 coverage gap) ────────
+  // joinVoice applies BOTH persisted self-mute AND self-deafen on connect; the scenario
+  // above proved only the MUTE path. Deafen on join must do TWO things: (a) force A's mic
+  // off so B hears silence (like mute) AND (b) silence A's INCOMING audio (A's <audio> for
+  // B is .muted). RMS reads the MediaStream directly (bypassing playback .muted), so (b) is
+  // asserted on the DOM .muted property, not via RMS. Then un-deafen restores both.
+  step('pre-call self-deafen: A leaves, then deafens in the user panel BEFORE rejoining')
+  await a.getByRole('button', { name: 'leave' }).click().catch(() => {})
+  await a.locator('.voice-bar').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
+  const aPanelDeafen = a.locator('.sidebar-user-voice button[aria-label="toggle deafen"]')
+  await aPanelDeafen.click() // set the persisted "join already deafened" intent (no call active)
+  check((await aPanelDeafen.getAttribute('aria-pressed')) === 'true', 'A: panel self-deafen is pressed before joining')
+  check(
+    (await a.evaluate(() => localStorage.getItem('opencord.voice.selfDeafen'))) === '1',
+    'A: self-deafen persisted before any call',
+  )
+
+  // B is still in the call from the mute scenario above (only A left), so just A rejoins —
+  // A↔B re-establish via the mesh offer to the existing member.
+  step('A rejoins (B still in the call) → A is deafened on connect (mic forced off + incoming silenced)')
+  await joinCall(a, 'A')
+  check(await waitForCount(connectedPeers(b), 1), 'B reconnects to A on the deafened rejoin (1 connected peer)')
+  check(
+    (await a.locator('[data-voice-self]').filter({ hasText: 'deafened' }).count()) > 0,
+    "A's chip shows deafened immediately on join (pre-call deafen applied)",
+  )
+  // (a) A's mic is forced off by deafen → B hears ~silence (re-discover A's track id on B).
+  const aVolB2 = b.locator(`[aria-label="volume for ${userA}"]`)
+  await aVolB2.waitFor({ timeout: 12000 }).catch(() => {})
+  const aIdOnB3 = await aVolB2.getAttribute('data-volume-for').catch(() => null)
+  check(aIdOnB3 != null, `found A's inbound track on B after the deafened rejoin (got ${aIdOnB3})`)
+  await new Promise((r) => setTimeout(r, 1500)) // let the (silent) frames reach B
+  const rmsDeafenedJoin = await measureRms(b, aIdOnB3)
+  check(rmsDeafenedJoin < 0.02, `(a) deafen forces A's mic off on join — B hears ~silence (RMS ${rmsDeafenedJoin.toFixed(4)})`)
+  // (b) A's INCOMING audio (B's track on A) is muted by deafen — assert the <audio>.muted prop.
+  const bIdOnA = await a.locator(`[aria-label="volume for ${userB}"]`).getAttribute('data-volume-for').catch(() => null)
+  check(bIdOnA != null, `found B's inbound track on A (got ${bIdOnA})`)
+  const incomingMutedOnJoin = await a.evaluate(
+    (id) => !!document.querySelector(`audio[data-voice-audio="${id}"]`)?.muted,
+    bIdOnA,
+  )
+  check(incomingMutedOnJoin, "(b) deafen silences A's incoming audio on join (B's <audio> on A is muted)")
+  await a.screenshot({ path: join(SHOTS, 'voice-14-precall-deafen.png') })
+
+  step('A un-deafens in the user panel → mic resumes (B hears A) + incoming audio restored')
+  await aPanelDeafen.click() // un-deafen via the panel (A is in the call → drives the live session)
+  check((await aPanelDeafen.getAttribute('aria-pressed')) === 'false', 'A: panel deafen toggles back off in-call')
+  await new Promise((r) => setTimeout(r, 1500)) // let live audio resume to B
+  const rmsUndeafenedJoin = await measureRms(b, aIdOnB3)
+  check(
+    rmsUndeafenedJoin - rmsDeafenedJoin > 0.003 && rmsUndeafenedJoin > 0.003,
+    `un-deafen restores A's mic on B (deafened ${rmsDeafenedJoin.toFixed(4)} → ${rmsUndeafenedJoin.toFixed(4)})`,
+  )
+  const incomingRestored = await a.evaluate(
+    (id) => document.querySelector(`audio[data-voice-audio="${id}"]`)?.muted === false,
+    bIdOnA,
+  )
+  check(incomingRestored, "un-deafen restores A's incoming audio (B's <audio> on A is un-muted)")
+
   await browser.close()
   console.log(failed === 0 ? '\nVOICE QA PASSED' : `\nVOICE QA FAILED (${failed} check(s))`)
   process.exit(failed === 0 ? 0 : 1)
