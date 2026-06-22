@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 230) — green maintenance tick: vision sweep of fresh surfaces, all polished, NO churn
+
+Continued iter-229's vision-sweep heuristic on surfaces not recently reviewed (emoji `:name:` picker,
+the rich-markdown/attachment message view, the group-DM header). All clean: the picker shows matching
+custom emoji compactly; the rich view renders headers/masked-links/blockquote/spoiler/lists/mentions
+correctly AND securely (the `<script>`/`[evil](javascript:…)` payloads render inert); the group-DM header
+(3 member names + actions) is a single row with no wrap/overflow. The only finding is the long-standing,
+owner-deferred header-emoji-icons P1 — nothing new + actionable.
+
+**Honest outcome — the sweep finding NOTHING is real signal, not a wasted tick.** After ~16 ticks of
+shipping (213–229), the product's surfaces are genuinely polished; a clean vision sweep CONFIRMS that
+rather than failing to find work. The discipline: don't down-rank "no gap found" into manufacturing a
+marginal change. Ship nothing (Rule 10), record the verification, widen cadence.
+
+**Heuristic refinement (from two sweeps):** the vision sweep is highest-yield on surfaces touched LONG ago
+or never re-reviewed; surfaces reviewed in the last few ticks rarely regress. So a sweep should rotate to
+the OLDEST-reviewed screenshots first. Most surfaces are now recently-covered → diminishing returns, which
+is itself the signal that the UI is mature.
+
+**Standing state (unchanged):** feature-complete MVP+ parity, broad E2E coverage. Substantive remaining
+work is owner-steered (header-icon design pass) or multi-tick epics (cascaded-SFU scale, tunneling, email,
+Cloud tier) — best started SPEC-first from a fresh context.
+
+**Component advanced:** none (verification only). **Cadence:** green tick, no loop-actionable open work →
+WIDEN to 2700s.
+
 ## 2026-06-22 (iter 229) — the AI-vision sweep found + I shipped search-match highlighting (Discord parity)
 
 The browser QA was due (every-3rd-tick); ran it green, then the AI-vision sweep over surfaces I hadn't
