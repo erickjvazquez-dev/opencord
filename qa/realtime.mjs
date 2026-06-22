@@ -152,6 +152,12 @@ async function main() {
   // closing an idle connection) must re-establish so chat keeps working — the gap
   // behind "chat stops working / screen share never reaches the other person".
   step('WS auto-reconnect: A drops offline → comes back → still receives live messages')
+  // Clean no-dupe anchor: a fresh pre-outage message A has in view, never quoted/replied-to
+  // (so a `.message hasText` match counts only real copies, not a reply-snippet of it).
+  const preOutage = 'pre-outage ' + sfx
+  await b.getByPlaceholder(/Message #/).fill(preOutage)
+  await b.getByRole('button', { name: 'Send' }).click()
+  await a.getByText(preOutage).waitFor({ timeout: 8000 }) // A has it BEFORE the drop
   await a.context().setOffline(true)
   await a.locator('.dot.online').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
   // A "Reconnecting…" banner appears once the drop persists past the grace window (iter 202).
@@ -161,6 +167,12 @@ async function main() {
     .then(() => true)
     .catch(() => false)
   check(bannerShown, 'a "Reconnecting…" banner appears while the socket stays down')
+  // Lossless-realtime setup: while A is offline, B posts a message INTO THE GAP. It must
+  // reach A once the socket recovers (history-on-reconnect catches A up) — not be dropped.
+  const duringOutage = 'during-outage ' + sfx
+  await b.getByPlaceholder(/Message #/).fill(duringOutage)
+  await b.getByRole('button', { name: 'Send' }).click()
+  await b.getByText(duringOutage).waitFor({ timeout: 8000 }) // B posted it while A is down
   await a.context().setOffline(false)
   const reconnected = await a
     .locator('.dot.online')
@@ -175,6 +187,23 @@ async function main() {
     .then(() => true)
     .catch(() => false)
   check(bannerGone, 'the reconnecting banner clears after the socket recovers')
+  // Lossless: the message B sent DURING the outage arrives once A is back (no message is
+  // dropped across a disconnect — the reconnect's history event catches A up).
+  check(
+    await a.getByText(duringOutage).waitFor({ timeout: 12000 }).then(() => true).catch(() => false),
+    'A receives the message B sent WHILE A was offline (no loss across the reconnect)',
+  )
+  // No duplicates: the reconnect REPLACES the list with fresh history, so a message A
+  // already had (preOutage) — and the gap message — each appear EXACTLY once, never doubled
+  // by history-replace + the earlier live echo.
+  check(
+    (await a.locator('.message', { hasText: preOutage }).count()) === 1,
+    'a pre-outage message is not duplicated after the reconnect (history-replace, no dupe)',
+  )
+  check(
+    (await a.locator('.message', { hasText: duringOutage }).count()) === 1,
+    'the during-outage message appears exactly once after reconnect (no dupe)',
+  )
   const afterReconnect = 'after-reconnect ' + sfx
   await b.getByPlaceholder(/Message #/).fill(afterReconnect)
   await b.getByRole('button', { name: 'Send' }).click()
