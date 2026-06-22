@@ -3,6 +3,34 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 243) — shipped the iter-241 spec from a fresh context; the blast-radius guard earned its keep
+
+Implemented emoji `:`-autocomplete in the composer — the item iter 241 spec'd and iter 242 cleared context
+for. The fresh-context bet paid off: built it cleanly by mirroring the `@`-mention system one-for-one
+(pure `emojiAutocomplete.ts` + 16 vitest, mutually-exclusive `refreshAutocomplete`, a parallel keydown
+branch that left the @-mention / ArrowUp-edits-last / Enter-sends paths untouched), with the shared-keydown
+regression re-exercised in browser QA. Spec-and-defer (iter 241) → clean-implement (iter 243) is now a
+proven two-tick pattern for medium/risky UI work.
+
+**Loop lesson #1 — the per-edit blast-radius guard caught a real bug tsc/vitest could not.** Mirroring an
+existing system means inheriting its CSS namespace too: I reused the obvious class name `.emoji-option` for
+the suggestion rows — not realizing the reaction palette ALREADY defines `.emoji-option`, *later* in
+styles.css, so its `inline-flex`/18px would silently override my menu (and my rule would leak onto the
+palette). tsc/vitest are blind to CSS cascade; the guard subagent grepped the class and flagged it. Fix:
+renamed to `.emoji-suggestion`. **Rule reinforced:** when you reuse a pattern's markup, `grep` the
+class/ID names before reusing them — a same-name rule defined later in the file wins regardless of intent.
+
+**Loop lesson #2 — QA-stability watch (auto-load-on-scroll flake, NOT yet acted).** The iter-205
+history auto-load test (`scrolling to the top auto-loads older history`) flaked to `✗ 50 → 50` on the
+first browser run, then PASSED `100 → 120` on an identical re-run — note even `before` differed (50 vs
+100), confirming a headless timing race in the scroll→loadOlder trigger, not a product bug (the feature
+works; my change doesn't touch it). Logged rather than "fixed" because it only failed 1-of-2 runs, so I
+can't reproduce it on demand to verify a fix (Rule 14 — an un-re-attackable fix is unverified).
+**Hypothesis for the fix tick:** a single programmatic `el.scrollTop = 0` doesn't reliably fire the
+scroll/IntersectionObserver handler in headless; harden by dispatching a real `scroll` event after the
+nudge + awaiting `page.waitForLoadState('networkidle')` (or the loadOlder response) between iterations,
+and widen the poll past 6s. See GOAL.md "Now" item. This is the highest-value loop-process item this tick.
+
 ## 2026-06-22 (iter 241) — spec-and-defer: the disciplined third option when context-deep
 
 (iters 238–240 were heartbeat-only green ticks — mature product, no low-risk gap, cadence widened to the

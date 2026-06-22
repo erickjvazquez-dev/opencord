@@ -37,14 +37,19 @@ then **browser QA + AI-vision verify** the rendered result before "done" (Rule 1
 account/voice controls are scattered in the 2604-LOC `Chat.tsx` header + voice bar; there is no
 settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settings + UI polish".
 
-- [ ] **NEXT UP — emoji `:`-autocomplete in the composer (SPEC READY, iter 241).** The highest-value
-  remaining UI-parity item; full implementable plan in `SPEC.md` "Emoji `:`-autocomplete in the composer"
-  (mirror the `@`-mention system: caret-detect helper, state, recompute, accept, a parallel
-  mutually-exclusive keydown branch). **Deferred from iter 241 to a fresh context** because the composer
-  keydown coordination is regression-delicate; iter 242 cleared context (12-tick session) so this gets a
-  clean implementation tick. **On resume: implement this spec** — build the minimal thing, then the
-  regression-guard QA (re-exercise @-mention autocomplete + ArrowUp-edits-last + Esc-close so the shared
-  keydown path didn't break) + AI-vision, then ship + railway + rollout-verify.
+- [x] **emoji `:`-autocomplete in the composer (DONE iter 243, Discord parity).** Typing `:partial`
+  (≥2 chars) in the composer pops a suggestion menu of this server's custom emoji; ArrowUp/Down moves the
+  highlight, Enter/Tab (or click) inserts the full `:name: ` shortcode, Esc closes. Built per the iter-241
+  spec by mirroring the `@`-mention system one-for-one: a pure `web/src/emojiAutocomplete.ts`
+  (`activeEmojiToken` caret-detect / `matchEmojiNames` / `spliceEmoji`) with 16 vitest cases, plus
+  `emojiMatches`/`emojiIndex`/`emojiRange` state, a `refreshAutocomplete` that drives BOTH menus mutually
+  exclusively (mention wins), `acceptEmoji`, a parallel `else if (emojiMatches.length>0)` keydown branch,
+  and an `.emoji-suggestion` popover reusing the mention-menu layout. The new CSS class was renamed off the
+  colliding reaction-palette `.emoji-option` (caught by the blast-radius guard). Verified: tsc + vitest
+  122/122 + go test green; browser QA `:qa_em`→menu→Enter→`:qa_emoji: `→sends+renders, plus regression
+  re-exercise of @-mention autocomplete (still works) + ArrowUp-edits-last + Esc-close (shared keydown
+  path intact); AI-vision confirmed the menu renders cleanly above the composer. Shipped + railway up +
+  rollout-verified.
 
 - [~] **Group DMs (Discord parity, highest-ROI per tick-159 plan)** — **slice 1 backend DONE (iter
   160):** generalized the 2-member DM model (`kind='dm'` channels) to N members with **no schema change**
@@ -880,6 +885,14 @@ item from here as the structural milestones above land.
   0.0000 (true silence at the peer), so "the UI says muted" is now "the peer provably hears nothing" —
   the most safety-critical voice guarantee. Also reconfirms slice-3d's capture gain node didn't break
   any of them. The receiver-RMS primitive is now reusable for future audio features (noise gate, per-peer input).
+- [ ] **Harden the history auto-load-on-scroll assertion against a headless timing flake** (iter 243).
+  `qa/browser.mjs` "scrolling to the top auto-loads older history" flaked `✗ 50 → 50` once then passed
+  `100 → 120` on an identical re-run (even `before` differed), i.e. a race in the programmatic
+  `el.scrollTop = 0` → scroll/IntersectionObserver → loadOlder trigger, NOT a product bug. Harden the poll:
+  dispatch a real `scroll` event after each nudge + await `page.waitForLoadState('networkidle')` (or the
+  loadOlder response) between iterations, and widen the window past the current 6s. Only failed 1-of-2 runs
+  so it can't be reproduced on demand — verify the hardening by running the browser QA several times and
+  confirming it's green every time. See `qa/IMPROVEMENTS.md` iter 243.
 
 ---
 
