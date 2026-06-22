@@ -2314,6 +2314,30 @@ async function main() {
   await page.waitForTimeout(350) // let the drawer finish sliding in
   await shot('08-mobile-open.png')
   check((await page.locator('.app.sidebar-open').count()) === 1, 'menu toggle opens the drawer')
+  // Regression (iter 231): the server-list nav must not scroll horizontally in the narrow
+  // drawer. A too-wide, non-wrapping server action row used to make it h-scrollable
+  // (overflow-y:auto forces overflow-x to compute to auto), which shifted + clipped the
+  // server name and channel names off the left edge (AI-vision found "qa server"→"#1",
+  // "srv782401"→"2401"). Pinned via .channel-list{overflow-x:hidden} + wrapping actions.
+  const serverNavOverflow = await page
+    .locator('.channel-list.server-list')
+    .evaluate((n) => n.scrollWidth - n.clientWidth)
+  check(
+    serverNavOverflow <= 1,
+    `mobile drawer: server list has no horizontal overflow (got ${serverNavOverflow}px)`,
+  )
+  // The server name must render from its start — its left edge inside the drawer, not
+  // shifted off to negative x (which is what made only the name's tail show).
+  const serverNameClip = await page.evaluate(() => {
+    const name = document.querySelector('.server-name-text')
+    const sidebar = document.querySelector('.sidebar')
+    if (!name || !sidebar) return -999
+    return Math.round(name.getBoundingClientRect().left - sidebar.getBoundingClientRect().left)
+  })
+  check(
+    serverNameClip >= 0,
+    `mobile drawer: server name renders from its start, not clipped off the left (got ${serverNameClip}px)`,
+  )
   await page.getByRole('button', { name: /general/ }).click()
   await page.locator('.app:not(.sidebar-open)').waitFor({ timeout: 4000 })
   check(

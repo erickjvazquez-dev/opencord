@@ -299,6 +299,11 @@ button:disabled {
 .channel-list {
   flex: 1;
   overflow-y: auto;
+  /* A vertical nav never scrolls sideways. overflow-y:auto otherwise forces
+     overflow-x to compute to `auto` (CSS spec), so a too-wide child (e.g. the
+     server action row on a narrow sidebar/mobile drawer) made the list
+     h-scrollable and shifted/clipped the server + channel names. Pin it. */
+  overflow-x: hidden;
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -550,6 +555,7 @@ button:disabled {
 
 .server-group-actions {
   display: flex;
+  flex-wrap: wrap; /* 5 actions reflow onto multiple rows on a narrow sidebar/drawer instead of overflowing */
   gap: 10px;
 }
 
