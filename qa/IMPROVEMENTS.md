@@ -3,6 +3,29 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 233) — green maintenance tick; steady-state confirmed, cadence widening
+
+Health green (build/vet/test + live /healthz). Vision-swept the last batch of surfaces I hadn't
+reviewed this session — group-DM intro (stacked avatars + member-list title), the moderation members
+panel (rename / manage-roles / delete-server, invites with copy+revoke, a BANNED section with reason +
+unban), and a rich-markdown/attachment message (headers, quote, spoiler, lists, mentions, image tile).
+All polished AND secure: the `<script>alert(1)</script>` and `[evil](javascript:…)` payloads render as
+inert literal text. No new actionable gap; only the long-known owner-deferred header-emoji-icons P1.
+
+**Steady-state is now confirmed across three consecutive ticks** (231 found+fixed a real mobile/desktop
+sidebar-overflow bug → 232 closed its untested desktop guard → 233 clean across the remaining surfaces).
+Nearly every user-facing surface has been vision-verified this run. The honest read: the MVP+ Discord-
+parity product is mature, and the substantive remaining work is either owner-steered (the header-icon
+monochrome-line-icon design pass) or a multi-tick epic best started SPEC-first from a fresh context
+(cascaded-SFU thousands-scale, built-in secure tunneling, email accounts, the paid Cloud tier).
+
+**Discipline applied:** a clean sweep is real signal, not a failed tick — log green, ship NOTHING (no
+manufactured marginal commit), and WIDEN the cadence (idle_streak 0→1 → 2700s) so a green product isn't
+hammered with 30-min ticks. The loop will snap back to the active pace the instant a real change lands.
+This is the anti-churn rule working as intended after a productive burst.
+
+**Component advanced:** none (verification only). **Cadence:** green tick → WIDEN to 2700s.
+
 ## 2026-06-22 (iter 232) — vision sweep clean; closed the desktop half of the iter-231 overflow guard
 
 Health green (build/vet/test + live /healthz). Rather than re-boot the full QA stack a third time
