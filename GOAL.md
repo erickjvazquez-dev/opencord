@@ -258,12 +258,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   is ~0 (deafen forces the mic off, 0.0000) AND (b) A's inbound `<audio>` for B is `.muted` (deafen
   silences incoming) — then un-deafen restores both (mic 0.0000→0.3143, incoming un-muted). Full QA green
   (browser=0 realtime=0 voice=0 search=0) + AI-vision. The apply-on-join matrix now covers BOTH flags.
-- [ ] **P1 (UI parity, found iter 214): deafen should visually struck the mic icon too.** While deafened,
-  the panel 🎧 icon shows the red slash but the 🎤 mic icon does NOT — yet deafen also silences your mic.
-  Discord struck-marks BOTH icons when deafened. Make the panel (and ideally the voice-bar) reflect
-  "deafened ⇒ mic visually muted": derive the mic-struck state as `muted || deafened` for display only
-  (don't change the underlying `muted` flag, so un-deafen still restores your prior mute state). Small,
-  display-only; add a browser-QA assertion that the 🎤 icon carries `.active` while deafened.
+- [x] **P1 (UI parity, found iter 214) — DONE (iter 215): deafen visually strikes the mic icon too.** The
+  panel 🎤 now shows the red slash when `muted || deafened` (deafen silences your mic), so a deafened user
+  sees BOTH icons struck — Discord parity. Display-only: `aria-pressed`/`data-muted` stay the real mute
+  toggle so the click still flips `muted` alone and un-deafen restores your prior mute state; a
+  `data-mic-silenced` attribute exposes the derived state. Browser QA asserts deafen-alone strikes the 🎤
+  (with `aria-pressed` still false) and clears on un-deafen; AI-vision confirmed both icons struck; shipped
+  + railway + rollout-verified.
 
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->

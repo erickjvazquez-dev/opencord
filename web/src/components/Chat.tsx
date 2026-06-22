@@ -2574,11 +2574,22 @@ export function Chat({
           <div className="sidebar-user-voice">
             <button
               type="button"
-              className={`sidebar-voice-btn${muted ? ' active' : ''}`}
+              // Struck when muted OR deafened — deafen silences your mic too, so the mic
+              // icon shows it (Discord strikes both icons when deafened). Display-only:
+              // aria-pressed/data-muted stay the real mute-toggle state so un-deafen
+              // restores your prior mute, and the toggle still flips `muted` alone.
+              className={`sidebar-voice-btn${muted || deafened ? ' active' : ''}`}
               aria-label="toggle mute"
               aria-pressed={muted}
               data-muted={muted}
-              title={muted ? 'Unmute microphone' : 'Mute microphone'}
+              data-mic-silenced={muted || deafened}
+              title={
+                deafened
+                  ? 'Mic off (deafened)'
+                  : muted
+                    ? 'Unmute microphone'
+                    : 'Mute microphone'
+              }
               onClick={toggleMute}
             >
               🎤

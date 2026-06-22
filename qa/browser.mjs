@@ -197,6 +197,21 @@ async function main() {
   check((await panelMute2.getAttribute('aria-pressed')) === 'false', 'panel: mute toggles back off')
   check((await panelDeafen2.getAttribute('aria-pressed')) === 'false', 'panel: deafen toggles back off')
 
+  // 2d — deafen-implies-mic-struck (iter 215 P1, Discord parity): deafen silences your mic
+  // too, so the 🎤 icon shows struck WHILE DEAFENED even with self-mute off. aria-pressed
+  // stays false (mute wasn't toggled — the strike is the derived "mic silenced" state).
+  step('user panel: deafen alone strikes the mic icon (deafen silences the mic — Discord parity)')
+  check((await panelMute2.evaluate((el) => el.classList.contains('active'))) === false, 'panel: 🎤 not struck when neither muted nor deafened')
+  await panelDeafen2.click() // deafen alone (self-mute still off)
+  check((await panelDeafen2.getAttribute('aria-pressed')) === 'true', 'panel: deafen alone is pressed')
+  check((await panelMute2.getAttribute('aria-pressed')) === 'false', 'panel: 🎤 mute NOT toggled by deafen (aria-pressed stays false)')
+  check((await panelMute2.evaluate((el) => el.classList.contains('active'))), 'panel: 🎤 shows struck while deafened (deafen silences the mic)')
+  check((await panelMute2.getAttribute('data-mic-silenced')) === 'true', 'panel: 🎤 data-mic-silenced=true while deafened')
+  await shot('02d-deafen-strikes-mic.png')
+  await panelDeafen2.click() // un-deafen → mic strike clears (mute was never on)
+  check((await panelMute2.evaluate((el) => el.classList.contains('active'))) === false, 'panel: 🎤 strike clears on un-deafen')
+  check((await panelDeafen2.getAttribute('aria-pressed')) === 'false', 'panel: deafen back off (clean state for later steps)')
+
   // 3 — Send a message; it renders with an avatar.
   const body = 'hello from the qa bot'
   step('type a message and Send')
