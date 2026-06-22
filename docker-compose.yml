@@ -29,6 +29,13 @@ services:
       DATABASE_URL: 'postgres://opencord:opencord@db:5432/opencord?sslmode=disable'
       JWT_SECRET: '${JWT_SECRET:-dev-insecure-change-me}'
       CORS_ORIGIN: '*'
+      # Mesh-WebRTC ICE. Defaults = today's behavior (public STUN, no TURN ⇒ STUN-only).
+      # To relay voice/video across hostile/symmetric NATs, set OPENCORD_TURN_URL +
+      # OPENCORD_TURN_SECRET and run `docker compose --profile turn up` (the bundled coturn
+      # below validates the SAME HMAC secret). Empty TURN_URL keeps the default stack TURN-free.
+      OPENCORD_STUN_URL: '${OPENCORD_STUN_URL:-stun:stun.l.google.com:19302}'
+      OPENCORD_TURN_URL: '${OPENCORD_TURN_URL:-}'
+      OPENCORD_TURN_SECRET: '${OPENCORD_TURN_SECRET:-}'
     ports:
       - '8080:8080' # exposed for debugging; the web container proxies internally
     depends_on:
@@ -44,6 +51,30 @@ services:
       - '3000:80'
     depends_on:
       - server
+    restart: unless-stopped
+
+  # Optional TURN relay for WebRTC voice/video across hostile/symmetric NATs. OFF by
+  # default via the "turn" profile, so `docker compose up` is byte-identical + TURN-free
+  # (Rule A). Enable with `docker compose --profile turn up` after setting OPENCORD_TURN_SECRET
+  # and pointing OPENCORD_TURN_URL at turn:<this-host>:3478. Free, self-hosted OSS (BSD) —
+  # stack-guardian APPROVE (iter 218). Never runs on the Railway/prod path. coturn validates the
+  # same use-auth-secret HMAC the server mints in ICEServersForUser, so one secret pairs both sides.
+  coturn:
+    image: coturn/coturn:4.6.2
+    profiles: ['turn']
+    network_mode: host # a TURN relay allocates many UDP ports; host networking is the reliable setup
+    command:
+      - -n # no config file — all flags here
+      - --use-auth-secret
+      - --static-auth-secret=${OPENCORD_TURN_SECRET:-}
+      - --realm=opencord
+      - --listening-port=3478
+      - --min-port=49160
+      - --max-port=49200
+      - --fingerprint
+      - --no-cli
+      - --no-tls
+      - --no-dtls
     restart: unless-stopped
 
 volumes:

@@ -2758,3 +2758,45 @@ the natural home for always-available mute/deafen.
 (B hears silence); in-call behavior + the voice-bar controls unchanged; full QA + AI-vision green.
 **Blast radius:** `joinVoice`, `muted`/`deafened`, `voiceSettings.ts`, the voice-bar buttons, the
 two-client voice tests. SPEC-first because it spans UI + state + the live voice session (>3 surfaces).
+
+## Bundled optional coturn (self-host TURN relay — audio/scale, iter 218)
+
+**Why:** the audio north star is thousands-scale, free to self-host, with no drops across real
+networks. Mesh + the opt-in LiveKit SFU + the HMAC ephemeral-TURN credential scheme
+(`OPENCORD_TURN_SECRET`, `ICEServersForUser`, iter 137) are all built — but the credential scheme
+was never paired with an actual relay: a self-hoster behind a symmetric/hostile NAT still had to
+*bring their own* coturn (the hard part). This slice ships the relay itself as an OPTIONAL bundled
+service so "self-host voice that works across NATs" is one command, not a research project.
+
+**stack-guardian: APPROVE (iter 218)** — coturn is BSD OSS, self-hosted on the operator's own box,
+zero recurring cost to the maintainer; it's a component of the OSS product, not a second host we run.
+Gated off-by-default so it can never silently start on the Railway/prod path (Rule 16) and the
+one-command `docker compose up` stays byte-identical + TURN-free (Rule A). Same opt-in pattern as the
+existing `OPENCORD_SFU_URL` LiveKit path.
+
+**Design (minimal):**
+- `docker-compose.yml`: a `coturn` service under `profiles: ["turn"]` (OFF by default — absent from
+  plain `docker compose up`/`config`; present only under `docker compose --profile turn up`).
+  `network_mode: host` (a TURN relay allocates many UDP ports; host networking is the reliable,
+  documented coturn setup). Configured via flags for the `use-auth-secret` REST scheme so it validates
+  the SAME HMAC credentials the server already mints: `--use-auth-secret`,
+  `--static-auth-secret=${OPENCORD_TURN_SECRET}`, `--realm=opencord`, a bounded relay port range,
+  `--fingerprint`, `--no-cli`, no TLS in the basic profile (TLS/turns is a later slice).
+- `server` service: surface `OPENCORD_STUN_URL` / `OPENCORD_TURN_URL` / `OPENCORD_TURN_SECRET` as env,
+  each defaulting to today's behavior (`OPENCORD_TURN_URL` empty ⇒ STUN-only mesh, unchanged). When the
+  operator sets the URL + secret AND enables the profile, the server hands out creds the bundled coturn
+  accepts — a matched pair from one `OPENCORD_TURN_SECRET`.
+- `.env.example` (new): documents `JWT_SECRET` + the full voice env set (STUN/TURN/SFU incl. the
+  previously-undocumented `OPENCORD_TURN_SECRET` + `OPENCORD_TURN_TTL`) with the `--profile turn` recipe.
+- `README.md`: a short "Voice across NATs (optional TURN)" note + the new env rows.
+
+**Verify (Rule 14, honest scope):** `docker compose config` parses; `docker compose config --services`
+(no profile) does NOT list `coturn` and the server still shows empty `OPENCORD_TURN_URL` (default stack
+unchanged); `docker compose --profile turn config --services` DOES list `coturn`. The server side
+(env → `iceServers` carries the TURN entry only when set) is already covered by `TestICEServers` /
+`TestEphemeralTurnCredentials`. **A real relay through a symmetric NAT can't be exercised in the loop
+(needs a hostile-NAT client + the host-net relay running) — stated, not faked;** the config-gating +
+credential-pairing are what this slice verifies.
+
+**Blast radius:** `docker-compose.yml`, `.env.example` (new), `README.md`. No Go code changes (the
+server already reads the env). The Railway deploy is untouched (it never runs the `turn` profile).

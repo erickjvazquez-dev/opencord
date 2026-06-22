@@ -86,11 +86,32 @@ All config is environment-driven (see [`.env.example`](./.env.example)):
 | `OPENCORD_SFU_URL`   | _(empty → mesh)_         | Optional LiveKit SFU URL for large voice calls (opt-in)      |
 | `OPENCORD_SFU_KEY`   | _(empty)_                | LiveKit API key (only with `OPENCORD_SFU_URL`)              |
 | `OPENCORD_SFU_SECRET`| _(empty)_                | LiveKit API secret (only with `OPENCORD_SFU_URL`)          |
-| `OPENCORD_STUN_URL`  | _(empty)_                | Optional STUN server for WebRTC NAT discovery (e.g. `stun:stun.l.google.com:19302`) |
-| `OPENCORD_TURN_URL`  | _(empty)_                | Optional self-hostable TURN relay for hostile NATs (free, Rule A) |
-| `OPENCORD_TURN_USERNAME` | _(empty)_            | TURN credential username (only with `OPENCORD_TURN_URL`)     |
-| `OPENCORD_TURN_PASSWORD` | _(empty)_            | TURN credential password (only with `OPENCORD_TURN_URL`)     |
+| `OPENCORD_STUN_URL`  | `stun:stun.l.google.com:19302` | STUN server for WebRTC NAT discovery (override with your own to depend on no third party) |
+| `OPENCORD_TURN_URL`  | _(empty → STUN-only)_    | Optional self-hostable TURN relay for hostile/symmetric NATs (free, Rule A) — e.g. the bundled coturn at `turn:<host>:3478` |
+| `OPENCORD_TURN_SECRET` | _(empty)_              | **Recommended** TURN auth: a shared secret → the server mints short-lived per-user HMAC creds (coturn `use-auth-secret`). Set the SAME value on the relay |
+| `OPENCORD_TURN_TTL`  | `12h`                    | How long each minted TURN credential is valid (with `OPENCORD_TURN_SECRET`) |
+| `OPENCORD_TURN_USERNAME` | _(empty)_            | Static TURN username — use only WITHOUT `OPENCORD_TURN_SECRET`               |
+| `OPENCORD_TURN_PASSWORD` | _(empty)_            | Static TURN password — use only WITHOUT `OPENCORD_TURN_SECRET`               |
 | `OPENCORD_UPLOAD_DIR`| `data/uploads`           | Where message attachments are stored on local disk (Rule A — no object store; mount a volume here to persist across restarts) |
+
+### Voice across NATs — optional bundled TURN relay
+
+Mesh/SFU voice connects directly between peers, which fails behind some hostile/symmetric
+NATs. A TURN relay fixes that. Opencord ships an **optional** coturn relay behind a Compose
+profile — `docker compose up` stays byte-identical and TURN-free (Rule A); turn it on only
+when you need it:
+
+```bash
+# 1. pick a shared secret (the server + relay must match)
+export OPENCORD_TURN_SECRET=$(openssl rand -hex 32)
+export OPENCORD_TURN_URL=turn:<this-host-ip>:3478
+# 2. start the stack WITH the relay (Linux + host networking)
+docker compose --profile turn up
+```
+
+The server mints short-lived per-user HMAC credentials from `OPENCORD_TURN_SECRET`; the
+bundled coturn validates them with the same secret (`use-auth-secret`). Everything is free
+OSS, self-hosted, and off by default. See `.env.example` for the full voice config.
 
 ## API surface
 

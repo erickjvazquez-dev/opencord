@@ -417,8 +417,15 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   server offers a token, else mesh; transport-agnostic voice-bar; two-browser SFU E2E
   via `qa/sfu-run.sh`). **Mesh ↔ SFU both work E2E.** ✅ **active-speaker selection**
   (`autoSubscribe:false` + top-N loudest audio subscription, `selectAudioSubscriptions`
-  pure fn, vitest-tested) so a huge room never mixes every stream. Next: optional
-  self-host TURN (hostile NATs), cascaded SFUs for true thousands-scale. Railway
+  pure fn, vitest-tested) so a huge room never mixes every stream. ✅ **self-host TURN
+  for hostile/symmetric NATs**: config + ephemeral HMAC creds (iter 137) NOW paired with a
+  **bundled coturn** (iter 218) — an optional `docker compose --profile turn up` service
+  (OFF by default, Rule A; `stack-guardian` APPROVE; free self-hosted OSS), validating the
+  same `OPENCORD_TURN_SECRET` the server mints. README + `.env.example` document the full
+  voice env (incl. the previously-undocumented `OPENCORD_TURN_SECRET`/`TTL`). Verified: profile
+  gating (coturn absent from the default stack) + coturn 4.6.2 boots with our flags; a real
+  symmetric-NAT relay needs a hostile-NAT client (not loop-testable, stated). Next: cascaded
+  SFUs for true thousands-scale. Railway
   demo instance DEFERRED (Railway is TCP-only + egress-unbounded). With
   **active-speaker selection** (forward only the top-N loudest) this reaches
   thousands-scale audio; (4) distributed/cascaded SFUs + optional self-hosted TURN.
