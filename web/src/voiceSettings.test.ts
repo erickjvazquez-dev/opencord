@@ -31,6 +31,10 @@ describe('voiceSettings defaults (nothing stored)', () => {
   it('DSP toggles default ON (same high-quality capture as before opt-out)', () => {
     expect(vs.getAudioProcessing()).toEqual({ ns: true, ec: true, agc: true })
   })
+  it('self-mute / self-deafen default OFF (a fresh user joins un-muted)', () => {
+    expect(vs.getSelfMute()).toBe(false)
+    expect(vs.getSelfDeafen()).toBe(false)
+  })
 })
 
 describe('voiceSettings round-trips', () => {
@@ -96,5 +100,29 @@ describe('voiceSettings DSP toggles (only "0" means off)', () => {
     vs.setAudioProcessing({ ec: false })
     const p = vs.getAudioProcessing()
     expect(p).toEqual({ ns: true, ec: false, agc: true })
+  })
+})
+
+describe('voiceSettings self-mute / self-deafen (opt-in, only "1" means on)', () => {
+  it('persists + reads back self-mute independently of self-deafen', () => {
+    vs.setSelfMute(true)
+    expect(vs.getSelfMute()).toBe(true)
+    expect(vs.getSelfDeafen()).toBe(false)
+    // The on value is the literal '1' (the readBoolOff sentinel).
+    expect(globalThis.localStorage.getItem('opencord.voice.selfMute')).toBe('1')
+  })
+  it('persists + reads back self-deafen independently of self-mute', () => {
+    vs.setSelfDeafen(true)
+    expect(vs.getSelfDeafen()).toBe(true)
+    expect(vs.getSelfMute()).toBe(false)
+  })
+  it('turning a flag back off restores the default', () => {
+    vs.setSelfMute(true)
+    vs.setSelfMute(false)
+    expect(vs.getSelfMute()).toBe(false)
+  })
+  it('a corrupt stored value reads as OFF (anything but "1")', () => {
+    globalThis.localStorage.setItem('opencord.voice.selfMute', 'yes')
+    expect(vs.getSelfMute()).toBe(false)
   })
 })

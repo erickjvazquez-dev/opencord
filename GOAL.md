@@ -241,12 +241,17 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   highest-blast-radius (core mesh), so flagged for a dedicated implementation tick OR deferral in favour
   of higher-ROI parity (custom-emoji reactions, role colors) — owner's call. SFU video: later.
 
-- [ ] **Voice mute/deafen in the user panel (Discord parity)** — always-available mic-mute + deafen
-  toggles in the bottom-left `.sidebar-user` panel, including a **pre-call "join already muted"** that
-  applies your persisted self-mute on the next join. SPEC written (iter 212): see SPEC.md "Voice
-  mute/deafen in the user panel" — 5 slices (persisted voiceSettings flags → panel toggles → apply-on-join
-  → 2-client voice QA proving B hears silence on A's pre-muted join → ship). **Queued as the next
-  substantive feature; implement from a FRESH context.**
+- [x] **Voice mute/deafen in the user panel (Discord parity)** — DONE (iter 213). Always-available 🎤
+  mic-mute + 🎧 deafen toggles in the bottom-left `.sidebar-user` panel (aria-labelled, with a red
+  diagonal slash + danger tint when active, mirroring the in-call voice-bar). Persisted self-mute/deafen
+  flags added to `voiceSettings.ts` (`getSelfMute`/`getSelfDeafen`, opt-in default OFF, vitest-covered);
+  `muted`/`deafened` now seed from them so the panel reflects the intent out of a call, and `joinVoice`
+  applies them on connect (an explicit `setMuted(on)` added to the VoiceTransport — mirrors `setDeafened`)
+  so **"join already muted"** works. `toggleMute`/`toggleDeafen` are shared by the panel + voice bar and
+  persist the new state. Browser QA asserts the panel toggles + localStorage persistence + reload-survival
+  + struck visual; **2-client voice QA proves B hears ~silence on A's pre-muted join (RMS 0.0000) then
+  hears A after a panel un-mute (0.3043)**. tsc + vitest 91/91 + full QA (browser=0 realtime=0 voice=0
+  search=0) + AI-vision verified; shipped + railway + rollout-verified.
 
 ## Blockers
 <!-- P0 items added here by /qa and /self-improve when critical bugs are found -->

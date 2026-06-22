@@ -320,9 +320,12 @@ export function Chat({
   // Voice call (mesh WebRTC over the channel WS). `inCall` gates the UI; the
   // VoiceSession in voiceRef owns the peer connections and emits the roster.
   const [inCall, setInCall] = useState(false)
-  const [muted, setMuted] = useState(false)
+  // muted/deafened double as the always-available "self-mute" intent shown in the
+  // bottom-left user panel: seeded from the persisted preference so the panel reflects
+  // it out of a call, and applied to the live session on join ("join already muted").
+  const [muted, setMuted] = useState(() => voiceSettings.getSelfMute())
   // Deafened: silences all incoming audio and forces your own mic off (Discord-style).
-  const [deafened, setDeafened] = useState(false)
+  const [deafened, setDeafened] = useState(() => voiceSettings.getSelfDeafen())
   const [voicePeers, setVoicePeers] = useState<VoicePeer[]>([])
   // Whether the local user is currently talking (drives their own speaking ring).
   const [speakingSelf, setSpeakingSelf] = useState(false)
@@ -983,7 +986,15 @@ export function Chat({
       await session.start(inputDevice || undefined)
       if (outputDevice) session.setOutputDevice(outputDevice)
       setInCall(true)
-      setMuted(false)
+      // Apply the persisted "join already muted/deafened" panel state to the new
+      // session (Discord parity). Deafen forces the mic off on its own; otherwise
+      // honor self-mute. State already mirrors these (seeded from voiceSettings).
+      const selfMute = voiceSettings.getSelfMute()
+      const selfDeafen = voiceSettings.getSelfDeafen()
+      setMuted(selfMute)
+      setDeafened(selfDeafen)
+      if (selfDeafen) session.setDeafened(true)
+      else if (selfMute) session.setMuted(true)
       void refreshDevices()
     } catch {
       voiceRef.current = null
@@ -996,8 +1007,10 @@ export function Chat({
     voiceRef.current = null
     setInCall(false)
     setVoicePeers([])
-    setMuted(false)
-    setDeafened(false)
+    // Fall back to the persisted self-mute/deafen intent (not unconditionally off) so
+    // the user panel keeps showing your "join already muted" preference after a call.
+    setMuted(voiceSettings.getSelfMute())
+    setDeafened(voiceSettings.getSelfDeafen())
     setSpeakingSelf(false)
     setPttOn(false)
     setTransmitting(false)
@@ -1005,8 +1018,14 @@ export function Chat({
     setLocalScreen(null)
   }
 
+  // Mute toggle shared by the in-call voice bar AND the always-available user panel.
+  // In a call it drives the live mic; out of one it sets the "join already muted"
+  // intent. Either way the new state persists (Discord parity — survives reload + seeds
+  // the next join).
   const toggleMute = () => {
-    if (voiceRef.current) setMuted(voiceRef.current.toggleMute())
+    const next = voiceRef.current ? voiceRef.current.toggleMute() : !muted
+    setMuted(next)
+    voiceSettings.setSelfMute(next)
   }
 
   // Screen share: start capture (the session prompts the OS picker), or stop. The
@@ -1074,6 +1093,7 @@ export function Chat({
     const next = !deafened
     setDeafened(next)
     voiceRef.current?.setDeafened(next)
+    voiceSettings.setSelfDeafen(next)
   }
 
   // Push-to-talk: toggling the mode resets transmission; holding the Talk control
@@ -2548,6 +2568,33 @@ export function Chat({
               ⚙
             </span>
           </button>
+          {/* Always-available self-mute + deafen (Discord parity): toggles the live mic when
+              in a call, otherwise sets the persisted "join already muted/deafened" intent that
+              applies on your next join. Shares toggleMute/toggleDeafen with the in-call bar. */}
+          <div className="sidebar-user-voice">
+            <button
+              type="button"
+              className={`sidebar-voice-btn${muted ? ' active' : ''}`}
+              aria-label="toggle mute"
+              aria-pressed={muted}
+              data-muted={muted}
+              title={muted ? 'Unmute microphone' : 'Mute microphone'}
+              onClick={toggleMute}
+            >
+              🎤
+            </button>
+            <button
+              type="button"
+              className={`sidebar-voice-btn${deafened ? ' active' : ''}`}
+              aria-label="toggle deafen"
+              aria-pressed={deafened}
+              data-deafened={deafened}
+              title={deafened ? 'Undeafen' : 'Deafen — silence everyone and mute your mic'}
+              onClick={toggleDeafen}
+            >
+              🎧
+            </button>
+          </div>
           <div className="sidebar-user-foot">
             <span className="sidebar-user-presence" title={`${online} online`}>
               <span className={connected ? 'dot online' : 'dot offline'} />

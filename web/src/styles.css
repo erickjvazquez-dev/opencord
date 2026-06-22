@@ -726,6 +726,55 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* Always-available mic-mute + deafen controls in the user panel (Discord parity). A red
+   diagonal slash over the icon + danger tint marks the active (muted / deafened) state,
+   matching the in-call voice-bar's danger highlight. */
+.sidebar-user-voice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+.sidebar-voice-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.12s ease;
+}
+.sidebar-voice-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sidebar-voice-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.sidebar-voice-btn.active {
+  color: var(--danger);
+}
+.sidebar-voice-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 2px;
+  background: var(--danger);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
 .dot {
   width: 9px;
   height: 9px;

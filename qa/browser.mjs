@@ -164,6 +164,39 @@ async function main() {
   await page.locator('.voice-bar').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
   check((await page.locator('.voice-bar').count()) === 0, 'voice: leaving removes the voice bar')
 
+  // 2c — User-panel self-mute / deafen (Discord parity): the bottom-left panel mute/deafen
+  // toggles are always available (no call needed), persist to localStorage, and survive a
+  // reload (they seed the next mount). Out of a call they set the "join already muted" intent.
+  step('user panel: mute + deafen toggle, persist to localStorage, struck active state')
+  const panelMute = page.locator('.sidebar-user-voice button[aria-label="toggle mute"]')
+  const panelDeafen = page.locator('.sidebar-user-voice button[aria-label="toggle deafen"]')
+  check((await panelMute.count()) === 1, 'panel: mic-mute button present in the user panel')
+  check((await panelDeafen.count()) === 1, 'panel: deafen button present in the user panel')
+  check((await panelMute.getAttribute('aria-pressed')) === 'false', 'panel: mute starts un-pressed')
+  await panelMute.click()
+  check((await panelMute.getAttribute('aria-pressed')) === 'true', 'panel: clicking mute presses it')
+  check((await panelMute.evaluate((el) => el.classList.contains('active'))), 'panel: muted button gets the .active (struck) class')
+  await panelDeafen.click()
+  check((await panelDeafen.getAttribute('aria-pressed')) === 'true', 'panel: clicking deafen presses it')
+  const persisted = await page.evaluate(() => ({
+    m: localStorage.getItem('opencord.voice.selfMute'),
+    d: localStorage.getItem('opencord.voice.selfDeafen'),
+  }))
+  check(persisted.m === '1' && persisted.d === '1', `panel: self-mute/deafen persisted to localStorage (m=${persisted.m} d=${persisted.d})`)
+  await shot('02c-panel-mute-deafen.png')
+  // Reload → the fresh mount must seed the panel from the persisted prefs (join-already-muted).
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByPlaceholder(/Message #/).waitFor({ timeout: 15000 })
+  const panelMute2 = page.locator('.sidebar-user-voice button[aria-label="toggle mute"]')
+  const panelDeafen2 = page.locator('.sidebar-user-voice button[aria-label="toggle deafen"]')
+  check((await panelMute2.getAttribute('aria-pressed')) === 'true', 'panel: mute state survives a reload (seeded from persisted)')
+  check((await panelDeafen2.getAttribute('aria-pressed')) === 'true', 'panel: deafen state survives a reload')
+  // Cleanup: toggle both back off so later steps (and a later voice join) aren't muted.
+  await panelDeafen2.click()
+  await panelMute2.click()
+  check((await panelMute2.getAttribute('aria-pressed')) === 'false', 'panel: mute toggles back off')
+  check((await panelDeafen2.getAttribute('aria-pressed')) === 'false', 'panel: deafen toggles back off')
+
   // 3 — Send a message; it renders with an avatar.
   const body = 'hello from the qa bot'
   step('type a message and Send')

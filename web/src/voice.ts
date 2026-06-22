@@ -51,6 +51,9 @@ export interface VoiceTransport {
   start(deviceId?: string): Promise<void>
   stop(): void
   toggleMute(): boolean
+  // Set the mic mute state to a known value (mirrors toggleMute but not a flip) —
+  // used to apply a persisted "join already muted" preference right after connect.
+  setMuted(on: boolean): void
   // Silence ALL incoming audio and force the local mic off (deafen). Un-deafening
   // restores incoming audio and returns the mic to its prior mute/PTT state.
   setDeafened(on: boolean): void
@@ -475,6 +478,13 @@ export class VoiceSession {
     this.muted = !this.muted
     this.applyMicState()
     return this.muted
+  }
+
+  // Set the mute state explicitly (vs. toggleMute's flip). Lets the app apply a
+  // persisted "join already muted" preference deterministically right after connect.
+  setMuted(on: boolean): void {
+    this.muted = on
+    this.applyMicState()
   }
 
   // Deafen / un-deafen: mute (or restore) every remote audio element and force the

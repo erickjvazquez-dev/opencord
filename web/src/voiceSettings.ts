@@ -12,6 +12,8 @@ const IVOL_KEY = 'opencord.voice.inputVolume'
 const NS_KEY = 'opencord.voice.noiseSuppression'
 const EC_KEY = 'opencord.voice.echoCancellation'
 const AGC_KEY = 'opencord.voice.autoGainControl'
+const SELF_MUTE_KEY = 'opencord.voice.selfMute'
+const SELF_DEAFEN_KEY = 'opencord.voice.selfDeafen'
 
 export interface AudioProcessing {
   ns: boolean // noise suppression
@@ -39,6 +41,12 @@ function write(key: string, val: string): void {
 // same high-quality DSP the app always applied — no behavior change until they opt out).
 function readBool(key: string): boolean {
   return read(key) !== '0'
+}
+
+// A toggle that defaults to OFF unless explicitly stored as '1' (the inverse of readBool).
+// Used for opt-in self-mute/self-deafen — a fresh user joins a call un-muted, as before.
+function readBoolOff(key: string): boolean {
+  return read(key) === '1'
 }
 
 export function getInputDeviceId(): string {
@@ -92,4 +100,20 @@ export function setAudioProcessing(partial: Partial<AudioProcessing>): void {
   if (partial.ns !== undefined) write(NS_KEY, partial.ns ? '1' : '0')
   if (partial.ec !== undefined) write(EC_KEY, partial.ec ? '1' : '0')
   if (partial.agc !== undefined) write(AGC_KEY, partial.agc ? '1' : '0')
+}
+
+// Persisted "join already muted/deafened" defaults (Discord parity — the bottom-left
+// user panel mute/deafen state survives reloads and seeds the NEXT call you join).
+// Default OFF: a fresh user joins un-muted, exactly as before.
+export function getSelfMute(): boolean {
+  return readBoolOff(SELF_MUTE_KEY)
+}
+export function setSelfMute(on: boolean): void {
+  write(SELF_MUTE_KEY, on ? '1' : '0')
+}
+export function getSelfDeafen(): boolean {
+  return readBoolOff(SELF_DEAFEN_KEY)
+}
+export function setSelfDeafen(on: boolean): void {
+  write(SELF_DEAFEN_KEY, on ? '1' : '0')
 }

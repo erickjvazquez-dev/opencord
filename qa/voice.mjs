@@ -615,6 +615,50 @@ async function main() {
   await c.getByRole('button', { name: 'leave' }).click()
   check(await waitForCount(a.locator('[data-voice-peer]'), 0), "A's voice roster empties after C leaves")
 
+  // ── Pre-call self-mute (user panel "join already muted", Discord parity) ──────────
+  // Slice-3 proof for the user-panel mute/deafen feature: A self-mutes via the bottom-left
+  // user panel BEFORE joining, then A and B join fresh. The persisted self-mute must apply
+  // on connect so B hears ~silence from A immediately on join (no in-call click) — then A
+  // un-mutes in the panel and B hears A. Reuses the inbound-RMS pattern above.
+  step('pre-call self-mute: A leaves, then mutes in the user panel BEFORE rejoining')
+  await a.getByRole('button', { name: 'leave' }).click().catch(() => {})
+  await a.locator('.voice-bar').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
+  const aPanelMute = a.locator('.sidebar-user-voice button[aria-label="toggle mute"]')
+  await aPanelMute.click() // set the persisted "join already muted" intent (no call active)
+  check((await aPanelMute.getAttribute('aria-pressed')) === 'true', 'A: panel self-mute is pressed before joining')
+  check(
+    (await a.evaluate(() => localStorage.getItem('opencord.voice.selfMute'))) === '1',
+    'A: self-mute persisted before any call',
+  )
+
+  step('A and B rejoin → A is muted on connect (B hears ~silence without an in-call click)')
+  await joinCall(b, 'B')
+  await joinCall(a, 'A')
+  check(await waitForCount(connectedPeers(b), 1), 'B reconnects to A (1 connected peer)')
+  check(
+    (await a.locator('[data-voice-self]').filter({ hasText: 'muted' }).count()) > 0,
+    "A's chip shows muted immediately on join (pre-call mute applied)",
+  )
+  // Re-discover A's inbound mic track id on B for this fresh connection.
+  const aVolB = b.locator(`[aria-label="volume for ${userA}"]`)
+  await aVolB.waitFor({ timeout: 12000 }).catch(() => {})
+  const aIdOnB2 = await aVolB.getAttribute('data-volume-for').catch(() => null)
+  check(aIdOnB2 != null, `found A's inbound track on B after rejoin (got ${aIdOnB2})`)
+  await new Promise((r) => setTimeout(r, 1500)) // let the (silent) muted frames reach B
+  const rmsPreMuted = await measureRms(b, aIdOnB2)
+  check(rmsPreMuted < 0.02, `B hears ~silence from A's pre-muted join (RMS ${rmsPreMuted.toFixed(4)})`)
+  await a.screenshot({ path: join(SHOTS, 'voice-13-precall-mute.png') })
+
+  step('A un-mutes in the user panel → B now hears A')
+  await aPanelMute.click() // un-mute via the panel (A is in the call → drives the live mic)
+  check((await aPanelMute.getAttribute('aria-pressed')) === 'false', 'A: panel mute toggles back off in-call')
+  await new Promise((r) => setTimeout(r, 1500)) // let live audio resume to B
+  const rmsPreUnmuted = await measureRms(b, aIdOnB2)
+  check(
+    rmsPreUnmuted - rmsPreMuted > 0.003 && rmsPreUnmuted > 0.003,
+    `un-muting in the panel restores A's mic on B (muted ${rmsPreMuted.toFixed(4)} → ${rmsPreUnmuted.toFixed(4)})`,
+  )
+
   await browser.close()
   console.log(failed === 0 ? '\nVOICE QA PASSED' : `\nVOICE QA FAILED (${failed} check(s))`)
   process.exit(failed === 0 ? 0 : 1)

@@ -139,6 +139,13 @@ export class SfuSession implements VoiceTransport {
     return this.muted
   }
 
+  // Set the mute state explicitly (vs. toggleMute's flip) — applies a persisted
+  // "join already muted" preference deterministically right after connect.
+  setMuted(on: boolean): void {
+    this.muted = on
+    void this.applyMicState()
+  }
+
   // Deafen / un-deafen: mute (or restore) every attached remote audio element and
   // force the mic off while deafened. Playback only — speaking rings still work.
   setDeafened(on: boolean): void {
