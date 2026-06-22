@@ -3,6 +3,38 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 232) — vision sweep clean; closed the desktop half of the iter-231 overflow guard
+
+Health green (build/vet/test + live /healthz). Rather than re-boot the full QA stack a third time
+(I ran it twice last tick, all green, and no product code had changed), I spent Track-0 on an AI-vision
+sweep of FIVE surfaces I hadn't reviewed last tick — roles manager modal, pins panel, read-only channel
+composer, screen-share view (size controls + per-share volume + fullscreen), thread panel. All polished;
+the custom-emoji rendering is correct (known `:name:` → image, unknown shortcode → literal text); the only
+standing finding is the long-known, owner-deferred header-emoji-icons P1. **A bonus signal: my iter-231
+sidebar fix renders correctly in every one of those screenshots** (full server/channel names + wrapped
+action row), free cross-surface confirmation that the fix holds.
+
+**The one concrete improvement (Step 2 "grow the QA covering what you shipped"): closed a real coverage
+gap in my OWN iter-231 fix.** That fix pinned `.channel-list{overflow-x:hidden}` +
+`.server-group-actions{flex-wrap:wrap}`, which fixes BOTH the mobile drawer AND the 220px desktop sidebar
+— but the regression assertion only covered the mobile drawer. The desktop sidebar is the MORE severe
+case (the ~375px 5-button action row overflows 220px by ~155px vs the 300px drawer), yet it was untested.
+Added a desktop-width assertion (browser.mjs step 7). Test-only → committed `test(qa)`, pushed, NO deploy
+(the app is unchanged; deploying would be churn).
+
+**Loop lesson (logged): a fix that spans two widths/states needs a guard for EACH.** I shipped the
+iter-231 fix with only one of its two paths guarded — the narrower, more-severe desktop path slipped
+through. Generalize: when a fix's mechanism applies across breakpoints/states (mobile + desktop, empty +
+full, member + admin), the regression test must assert each path the fix touches, not just the one that
+first exposed the bug. Cheap insurance against a future regression silently re-breaking the unguarded path.
+
+**Anti-churn honesty:** the vision sweep found no NEW product gap — a green outcome, recorded, not padded
+into a fake change. The only commit was genuine test coverage for an existing fix's untested path. No
+product change, no deploy.
+
+**Component advanced:** infra/QA (regression coverage — desktop sidebar overflow now guarded too).
+**Cadence:** shipped real test coverage → ACTIVE (1800s); if the next tick ships nothing, it widens.
+
 ## 2026-06-22 (iter 231) — AI-vision sweep found a real mobile-drawer layout bug (server names clipped)
 
 The browser QA was due; ran the full stack green, then the AI-vision sweep over the mobile drawer
