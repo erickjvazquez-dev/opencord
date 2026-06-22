@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 215) — shipped the deafen-mic-icon P1; flagging COMPONENT ROTATION (3 ticks on voice/UI)
+
+Closed iter-214's own AI-vision P1: the panel 🎤 now strikes when `muted || deafened` so a deafened user
+sees BOTH icons struck (Discord parity). Kept it display-only — `aria-pressed`/`data-muted` stay the real
+mute toggle, a derived `data-mic-silenced` exposes the display state — so the click still flips `muted`
+alone and un-deafen restores the prior mute. Browser QA proves deafen-ALONE strikes the 🎤 with
+`aria-pressed` still false (isolating the derived-vs-toggle distinction) + clears on un-deafen; AI-vision
+confirmed both icons struck. Shipped + railway + rollout-verified (live JS carries `data-mic-silenced`).
+
+**Loop-process flag — ROTATE COMPONENTS next tick (owner's per-component-excellence directive, 2026-06-14:
+"continuously and in rotation so no component stagnates").** Iters 213→214→215 were ALL voice-mute/deafen
+(UI). That surface is now polished + well-tested; continuing to micro-polish it while other components wait
+violates the rotation rule. Self-correction: next tick advance the component FURTHEST from its north star,
+not the one I've been in. Candidate = **security** (hostile-input-proof) — a Rule-15 adversarial probe is
+a listed Track-0 option and security is the least-recently-advanced surface (the loop has been on
+audio/UI/chat parity for many ticks). Concretely next tick: pick ONE attack surface (WS frame validation,
+JWT tampering/auth-bypass on a REST mutation, oversized/garbage body, or channel-access escalation),
+reproduce the probe, prove it's blocked, and add a regression test (Rule 15's reproduce→fix→re-attack→
+regress cycle). If already hardened, the probe becomes a permanent adversarial regression test — still net
+coverage. **Playbook add: cap consecutive ticks on one component at ~2; the 3rd tick on the same surface
+should trigger a deliberate rotation check.**
+
+**Component advanced this tick:** UI (Discord-parity polish — mute/deafen-in-panel now feature-complete:
+panel toggles → persist → apply-on-join (both flags) → deafen-strikes-mic). **Cadence:** shipped a fix →
+ACTIVE (1800s).
+
 ## 2026-06-21 (iter 214) — closed the pre-call-deafen QA gap; AI-vision surfaced a deafen-mic-icon parity P1
 
 Acted on iter-213's own logged gap (the loop fixing what it flagged): added a 2-client pre-call-DEAFEN
