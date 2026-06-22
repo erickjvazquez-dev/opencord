@@ -236,7 +236,14 @@ async function main() {
   const divider = b.locator('.new-divider')
   await divider.waitFor({ timeout: 8000 }).catch(() => {})
   check((await divider.count()) === 1, 'B sees a "New messages" divider on return')
-  await divider.scrollIntoViewIfNeeded().catch(() => {})
+  // The app auto-scrolls to the divider on open (Discord — land where you left off), so it's
+  // in the viewport WITHOUT the test scrolling. Give the initial scroll a beat to settle.
+  await b.waitForTimeout(600)
+  const dividerInView = await divider.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight
+  })
+  check(dividerInView, 'the app auto-scrolls to the "New" divider on open (lands where you left off)')
   await b.screenshot({ path: join(SHOTS, 'rt-17-new-divider.png') })
   const dividerBeforeMiss = await b.evaluate((t) => {
     const div = document.querySelector('.new-divider')

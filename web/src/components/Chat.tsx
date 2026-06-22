@@ -386,6 +386,10 @@ export function Chat({
   const loadingOlderRef = useRef(false)
   const prependAnchorRef = useRef<number | null>(null) // scrollHeight before a prepend, to restore position
   const justPrependedRef = useRef(false) // tells the auto-scroll effect to skip this messages change
+  // Set by the history handler when the opened channel has an unread divider; the dedicated
+  // effect below then lands the view on the "New messages" line (Discord — resume where you
+  // left off) instead of the bottom, and the auto-scroll effect stands down while it's set.
+  const pendingDividerScrollRef = useRef(false)
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const lastTypingSent = useRef(0)
   // Whether the active channel is a DM — kept fresh for the WS message handler, whose
@@ -434,6 +438,7 @@ export function Chat({
     if (channelId == null) return
     setMessages([])
     setReadBoundaryId(null) // re-anchored by the next channel's history event
+    pendingDividerScrollRef.current = false // the history handler re-sets it iff there's a divider
     setEditingId(null)
     setReplyingTo(null)
     setTyping([])
@@ -480,7 +485,10 @@ export function Chat({
         const hist = data.history
         setMessages(hist)
         // Freeze the read boundary for the "New messages" divider (absent = no divider).
-        setReadBoundaryId(typeof data.lastReadId === 'number' ? data.lastReadId : null)
+        const boundary = typeof data.lastReadId === 'number' ? data.lastReadId : null
+        setReadBoundaryId(boundary)
+        // If the channel opens with unreads, land on the divider (not the bottom) on first paint.
+        pendingDividerScrollRef.current = boundary != null && hist.some((m) => m.id > boundary)
         // A full initial window (the server caps at 50) means older history may exist → offer
         // "load older"; a partial window means we already have the whole channel.
         setHasMoreHistory(hist.length >= 50)
@@ -727,6 +735,9 @@ export function Chat({
     }
     const channelChanged = lastChannelRef.current !== channelId
     lastChannelRef.current = channelId
+    // A pending "scroll to the New divider" (set by the history handler when the channel
+    // opens with unreads) owns the scroll — the dedicated effect below performs + clears it.
+    if (pendingDividerScrollRef.current) return
     const mine = messages.length > 0 && messages[messages.length - 1].userId === user.id
     if (channelChanged || atBottomRef.current || mine) {
       scrollToBottom(channelChanged ? 'auto' : 'smooth')
@@ -734,6 +745,21 @@ export function Chat({
       setShowJump(true)
     }
   }, [messages, channelId, user.id, scrollToBottom])
+
+  // Land on the "New messages" divider once it has rendered (Discord — resume where you left
+  // off). Runs after the history paint; the boundary sits mid-list, so the scroll handler then
+  // flips on the jump-to-present pill.
+  useEffect(() => {
+    if (!pendingDividerScrollRef.current) return
+    const el = messagesElRef.current?.querySelector('.new-divider')
+    if (!el) return
+    pendingDividerScrollRef.current = false
+    // 'start' puts the "New" line near the top with the unread messages visible below it
+    // (read down to resume); clamps gracefully to the bottom when little content follows.
+    el.scrollIntoView({ block: 'start' })
+    atBottomRef.current = false
+    setShowJump(true)
+  }, [messages])
 
   // doJump scrolls the pending target message into view + briefly flashes it. No-op if the
   // message isn't in the rendered list yet (panel still open, or it's older than the loaded
