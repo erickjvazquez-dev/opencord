@@ -3,6 +3,37 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 237) — shipped a real parity feature instead of a 3rd green tick: "copy text"
+
+(iter 236 was a heartbeat-only green tick — confirmed chat-realtime lossless/reconnect coverage, no churn.)
+After two steady-state green ticks (235/236) I reconsidered: the owner keeps re-firing the loop, whose
+standing directive is "each tick advances Discord parity." Endless "nothing to do" under-delivers when a
+genuine small parity gap exists. Inspected the message hover-action row — reply/edit/delete/pin/thread/
+react but NO **copy**, a standard Discord action. Shipped it: a "copy" button writes the message's RAW
+body (markdown/code/links/`:emoji:` intact) to the clipboard with a brief "copied!" confirm, reusing the
+existing `copyInvite` best-effort+fallback pattern. Additive button + one transient state, low blast radius.
+
+**QA done right — assert the EFFECT, not the element.** The browser-QA grants clipboard permission, clicks
+copy, and reads `navigator.clipboard.readText()` back, asserting it equals the message body — proving the
+action WORKS end-to-end, not merely that a button renders (the iter-155 emoji-img lesson: element-existence
+checks miss broken behavior). The "copied!" confirmation is asserted too. AI-vision confirmed the button
+sits cleanly in the single-line action row (reply·edit·delete·pin·thread·react·copy).
+
+**Blast-radius caught up front:** a new "copy" button could collide with the invite "copy" button in QA
+selectors — grep showed no `name:'copy'` selector exists and the message-action selectors use distinct
+exact names, so no collision. (Also gave the button `aria-label="copy message text"` so its accessible
+name is unambiguous.) Built (tsc+vite) + vitest 106 + full QA + vision + railway + rollout-verified live
+(bundle carries "copy message text").
+
+**Loop lesson (logged):** "steady-state" is a reason to WIDEN cadence, not to stop advancing parity. When
+the big backlog is epics/owner-gated, a *small, genuinely-useful, low-risk* parity slice (≤2 files,
+additive, reuses existing patterns) is a better tick than a 3rd no-op — provided it clears the same bar
+(build+QA+vision+verify-live). The discipline is "no CHURN," not "no progress." Reserve the SPEC-first
+ceremony for the epics; ship the clean small wins.
+
+**Component advanced:** UI/messaging (copy-text parity). **Cadence:** shipped a feature → ACTIVE (1800s;
+idle_streak reset 2→0).
+
 ## 2026-06-22 (iter 235) — green tick; auth+WS-access coverage confirmed comprehensive, backlog is epics-only
 
 Health green. Followed iter-234's security thread to its end: checked whether the WS handshake rejects a
