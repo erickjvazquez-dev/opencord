@@ -3,6 +3,32 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 222) — shipped masked links (Rule 15); "secure by construction" beats validate-and-reject
+
+Closed iter-221's queued follow-up: Discord-style `[text](url)`. The phishing surface (label ≠
+destination) made it a Rule-15 feature, and the cleanest defense was to make the URL group `https?://`
+IN THE REGEX — so `[x](javascript:…)`/`[x](data:…)` never even match and render as inert literal text.
+Plus `title`=the real URL as an anti-spoof tell + target=_blank/rel=noopener. Adversarial vitest (incl.
+the phishing shape href≠text, javascript:/data: stays inert, no on* extracted from a quoted URL) + browser
+QA + AI-vision (the safe link shows the label; the javascript: one stays literal) + live rollout-verify.
+
+**Security pattern to codify — "secure by construction" > "validate-and-reject".** Baking the safe scheme
+into the matching regex (no link forms at all for a bad scheme) is stronger than matching any `(url)` then
+checking/rejecting the scheme: there's no separate validation step that a later refactor can loosen or
+bypass, and the adversarial tests lock the regex so broadening it (re-introducing javascript:) fails
+loudly. Both URL→`<a>` paths (autolink + masked link) now share this shape. Prefer it for any future
+"accept only X-shaped input" surface.
+
+**Maturity signal (honest):** the message markdown subset is now at Discord parity (bold/italic/strike/
+code/quote/lists/spoiler/autolink/emoji/headers/subtext/masked-links; only underline `__` deferred as
+low-value + parse-conflicting). The loop has shipped ~10 productive ticks this session; the remaining
+HIGH-value items increasingly need OWNER steering (the header-icon monochrome-line-icon design pass) or
+are multi-tick epics with product/biz decisions (cascaded SFU, built-in tunneling, email accounts, the
+Cloud tier). The loop can keep doing incremental coverage/parity polish, but the big moves want direction.
+
+**Component advanced:** chat/UI (markdown parity — masked links) + security (the secure-by-construction
+URL path). **Cadence:** shipped a feature + the header-icon P1 still open → ACTIVE (1800s).
+
 ## 2026-06-22 (iter 221) — shipped markdown headers (chat parity); grep-before-building killed a low-value chase
 
 Started by investigating iter-220's "many 404s in QA" finding — but reading the Avatar component first
