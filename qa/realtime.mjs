@@ -478,6 +478,49 @@ async function main() {
   )
   await a.screenshot({ path: join(SHOTS, 'rt-09-member-list.png') })
 
+  // 6c — Presence STATUS to OTHER users (iter 226): a member's chosen availability
+  // (idle/dnd/invisible) reaches others via the members panel, and "invisible" appears
+  // OFFLINE to others — the privacy invariant — proven through the real UI, two clients.
+  step('presence status: B sets DND → A sees B as dnd; B sets invisible → A sees B offline')
+  const setPresence = async (pg, value) => {
+    await pg.getByRole('button', { name: 'user settings' }).click()
+    await pg.locator('.settings-modal').waitFor({ timeout: 8000 })
+    const sel = pg.locator('.presence-select')
+    await sel.waitFor({ timeout: 8000 })
+    await sel.selectOption(value)
+    await pg.keyboard.press('Escape')
+    await pg.locator('.settings-modal').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
+  }
+  // Open A's members panel FRESH (close any open panel first; the panel refetches on open,
+  // so it reflects B's just-changed presence). Returns B's presence-dot class list.
+  const aSeesBDotHas = async (cls) => {
+    for (let i = 0; i < 12; i++) {
+      await a.keyboard.press('Escape')
+      await a.waitForTimeout(250)
+      await a
+        .locator('.server-group', { hasText: 'team ' + sfx })
+        .getByRole('button', { name: 'members' })
+        .click()
+      await a.locator('.member-row').first().waitFor({ timeout: 8000 }).catch(() => {})
+      const got = await a
+        .locator('.member-row', { hasText: userB })
+        .locator('.presence-dot')
+        .evaluate((el, c) => el.classList.contains(c), cls)
+        .catch(() => false)
+      if (got) return true
+      await a.waitForTimeout(400)
+    }
+    return false
+  }
+
+  await setPresence(b, 'dnd')
+  check(await aSeesBDotHas('dnd'), "A sees B's chosen DND presence in the members panel")
+  await a.screenshot({ path: join(SHOTS, 'rt-18-presence-dnd.png') })
+  await setPresence(b, 'invisible')
+  check(await aSeesBDotHas('offline'), "B's 'invisible' appears OFFLINE to A (privacy invariant, real UI)")
+  await setPresence(b, 'online') // cleanup: restore B before later tests
+  await a.keyboard.press('Escape') // close A's members panel before the unread tests
+
   // 7b — Unread: while B is away in #general, A posts to the server channel → B's
   // sidebar shows an unread dot on that channel (poll-driven); opening it clears the
   // dot. (B is still a member here — the kick comes after.)
