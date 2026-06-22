@@ -37,6 +37,15 @@ then **browser QA + AI-vision verify** the rendered result before "done" (Rule 1
 account/voice controls are scattered in the 2604-LOC `Chat.tsx` header + voice bar; there is no
 settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settings + UI polish".
 
+- [ ] **NEXT UP — emoji `:`-autocomplete in the composer (SPEC READY, iter 241).** The highest-value
+  remaining UI-parity item; full implementable plan in `SPEC.md` "Emoji `:`-autocomplete in the composer"
+  (mirror the `@`-mention system: caret-detect helper, state, recompute, accept, a parallel
+  mutually-exclusive keydown branch). **Deferred from iter 241 to a fresh context** because the composer
+  keydown coordination is regression-delicate; iter 242 cleared context (12-tick session) so this gets a
+  clean implementation tick. **On resume: implement this spec** — build the minimal thing, then the
+  regression-guard QA (re-exercise @-mention autocomplete + ArrowUp-edits-last + Esc-close so the shared
+  keydown path didn't break) + AI-vision, then ship + railway + rollout-verify.
+
 - [~] **Group DMs (Discord parity, highest-ROI per tick-159 plan)** — **slice 1 backend DONE (iter
   160):** generalized the 2-member DM model (`kind='dm'` channels) to N members with **no schema change**
   (the `channel_members` join table + per-channel WS hub are already N-member). `DMChannel` gains
