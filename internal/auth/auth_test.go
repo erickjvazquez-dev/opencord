@@ -3,6 +3,8 @@ package auth
 import (
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestIssueParseRoundTrip(t *testing.T) {
@@ -37,6 +39,38 @@ func TestParseRejectsExpired(t *testing.T) {
 	tok, _ := s.Issue(User{ID: 1, Username: "carol"})
 	if _, err := s.Parse(tok); err == nil {
 		t.Fatal("expected expired token to be rejected")
+	}
+}
+
+// TestParseRejectsAlgNone is the Rule-15 lock on the classic JWT bypass: an attacker
+// forges an UNSIGNED (alg=none) token with arbitrary claims (any user id), or one signed
+// with a non-HMAC method, hoping the verifier trusts the token's own alg header. Parse
+// MUST reject both — its keyfunc requires an HMAC signing method, so a future "simplify the
+// keyfunc" refactor that dropped that check would fail this test loudly instead of silently
+// minting an auth bypass.
+func TestParseRejectsAlgNone(t *testing.T) {
+	s := New(nil, []byte("secret"), time.Hour)
+	claims := Claims{
+		Username: "attacker",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   "999", // an arbitrary victim/admin id the attacker did not earn
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	// alg=none: a syntactically valid, UNSIGNED token. The lib requires the special
+	// UnsafeAllowNoneSignatureType key just to MINT it; the verifier must still refuse it.
+	none, err := jwt.NewWithClaims(jwt.SigningMethodNone, claims).SignedString(jwt.UnsafeAllowNoneSignatureType)
+	if err != nil {
+		t.Fatalf("forge alg=none token: %v", err)
+	}
+	if u, err := s.Parse(none); err == nil {
+		t.Fatalf("alg=none token MUST be rejected, but Parse accepted it as %+v", u)
+	}
+	// Malformed and empty tokens are also rejected (no panic, just an error).
+	for _, bad := range []string{"not.a.jwt", "", "a.b.c", "....."} {
+		if _, err := s.Parse(bad); err == nil {
+			t.Fatalf("malformed token %q must be rejected", bad)
+		}
 	}
 }
 
