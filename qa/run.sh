@@ -82,27 +82,49 @@ node "$ROOT/web/scripts/check-no-unsafe-sinks.mjs" || { echo "[qa] unsafe sink f
 echo "[qa] installing Playwright (first run only)…"
 ( cd qa && npm install --silent && npx --yes playwright install chromium >/dev/null 2>&1 )
 
+# Each suite tees to a per-suite log so the gate can re-surface the FAILURE lines (a
+# non-zero exit is otherwise buried under hundreds of lines incl. benign avatar-404 console
+# noise — iter 224 flake was hard to diagnose for exactly this reason). PIPESTATUS[0] keeps
+# the node/bash exit, not tee's.
 echo "[qa] running browser QA (single client)…"
-QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/browser.mjs"; RC1=$?
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/browser.mjs" 2>&1 | tee /tmp/oc-qa-browser.log; RC1=${PIPESTATUS[0]}
 
 echo "[qa] running realtime QA (two clients)…"
-QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/realtime.mjs"; RC2=$?
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/realtime.mjs" 2>&1 | tee /tmp/oc-qa-realtime.log; RC2=${PIPESTATUS[0]}
 
 echo "[qa] running voice QA (two clients, mesh WebRTC)…"
-QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/voice.mjs"; RC3=$?
+QA_BASE_URL=http://localhost:5173 node "$ROOT/qa/voice.mjs" 2>&1 | tee /tmp/oc-qa-voice.log; RC3=${PIPESTATUS[0]}
 
 # Search-operator discrimination smoke (read-only) against the local API directly.
 # By now browser/realtime QA have posted to #general, so it has history to
 # discriminate against; on an empty channel the smoke reports INCONCLUSIVE (exit 0),
 # so it never false-reds the gate.
 echo "[qa] running search-operator smoke (read-only, local API :8080)…"
-OPENCORD_BASE_URL=http://localhost:8080 bash "$ROOT/qa/search-smoke.sh"; RC4=$?
+OPENCORD_BASE_URL=http://localhost:8080 bash "$ROOT/qa/search-smoke.sh" 2>&1 | tee /tmp/oc-qa-search.log; RC4=${PIPESTATUS[0]}
 
 # Compose-profile guard (iter 219): the optional coturn TURN relay must stay OFF by
 # default (Rule A / Rule 16). Cheap + docker-only; skips cleanly without docker.
 echo "[qa] running compose-profile guard (coturn stays off-by-default)…"
-bash "$ROOT/qa/compose-profile-check.sh"; RC5=$?
+bash "$ROOT/qa/compose-profile-check.sh" 2>&1 | tee /tmp/oc-qa-compose.log; RC5=${PIPESTATUS[0]}
 
 echo "[qa] browser=$RC1 realtime=$RC2 voice=$RC3 search=$RC4 compose=$RC5"
+
+# Failure summary (iter 225): for each FAILED suite, re-print just the failure-relevant
+# lines (assertion fails, pageerrors, crashes, timeouts) — with the benign avatar-404
+# console noise filtered out — so a red gate explains itself without scrolling the log.
+summarize_failure() {
+  local name="$1" rc="$2" log="$3"
+  [ "$rc" -eq 0 ] && return 0
+  echo "[qa] ─── $name FAILED (rc=$rc) — failure lines ───"
+  grep -nE '✗|\[pageerror|QA crashed|QA[: ]+FAIL|TimeoutError|Uncaught|Error:' "$log" 2>/dev/null \
+    | grep -v '404 (Not Found)' | tail -25
+  echo "[qa] ─── (full log: $log) ───"
+}
+summarize_failure browser "$RC1" /tmp/oc-qa-browser.log
+summarize_failure realtime "$RC2" /tmp/oc-qa-realtime.log
+summarize_failure voice "$RC3" /tmp/oc-qa-voice.log
+summarize_failure search "$RC4" /tmp/oc-qa-search.log
+summarize_failure compose "$RC5" /tmp/oc-qa-compose.log
+
 [ "$RC1" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$RC3" -eq 0 ] && [ "$RC4" -eq 0 ] && [ "$RC5" -eq 0 ]
 exit $?
