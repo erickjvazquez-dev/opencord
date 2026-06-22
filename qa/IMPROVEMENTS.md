@@ -3,6 +3,33 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-21 (iter 220) — proved LOSSLESS realtime across a reconnect (chat north star); test-anchor lesson
+
+Advanced the chat north star's *verification*: the §1e reconnect QA checked connectivity recovery (banner
+appears/clears, a post-reconnect message lands) but NOT message INTEGRITY across the drop. grep-before-
+building confirmed the client's reconnect path is `setMessages(hist)` (replace) + live append — lossless
++ dupe-free *by construction* — so rather than a speculative fix I encoded the invariant: B posts a
+message WHILE A is offline (into the gap), and after A reconnects the test asserts (1) A receives it —
+**no loss** across the disconnect — and (2) the pre-outage + gap messages each appear EXACTLY once — **no
+dupe** from history-replace. Full QA green.
+
+**QA-process lesson (the real catch):** my first draft anchored the no-dupe count on `body` — a message
+that is QUOTED in a reply earlier in the test — so `.message hasText: body` matched the original AND the
+reply's snippet → count 2 → false-positive FAIL. The app was fine; the assertion was wrong. **Playbook
+add: a "appears exactly once" count-by-text assertion needs a UNIQUE anchor that is never quoted/embedded
+elsewhere (replies, search snippets, pins, jump-previews) — use a fresh dedicated marker message, or scope
+the locator to the message body excluding reply-context.** This is the count-by-substring trap; the loop
+hit it and should not again.
+
+**Minor finding (logged, not chased):** the realtime QA console shows many `404 Not Found` for both
+clients — almost certainly the Avatar component probing the image endpoint for users with no uploaded
+avatar before falling back to initials (by-design fallback, benign, non-failing). A possible micro-
+optimization (skip the fetch when there's no avatar) but low priority; noted for a future look.
+
+**Coverage advanced:** chat/realtime (lossless-realtime invariant now pinned end-to-end). Next least-
+tested realtime invariant to consider: message ORDERING after a reconnect, and presence-count correctness
+post-recovery. **Cadence:** shipped a test + the header-icon P1 still open → ACTIVE (1800s).
+
 ## 2026-06-21 (iter 219) — due browser QA (green + polished); encoded a manual verification as a guard
 
 The browser QA was due (iters 216–218 were backend/security/infra, no UI change → 3rd-tick cadence). Ran
