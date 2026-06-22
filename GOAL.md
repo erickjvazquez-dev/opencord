@@ -700,8 +700,10 @@ item from here as the structural milestones above land.
   now complete end-to-end** (backend + render + manager). **Picker DONE (iter 153, slice 3b):** a
   composer 🙂 popover lists the server's emoji and inserts `:name:` at the caret (browser E2E +
   AI-vision; reaction palette untouched). **Custom emoji is FULLY complete (backend+render+manager+picker).**
-  · **`:`-autocomplete in the composer SPEC'd (iter 241** — mirror the `@`-mention system; see SPEC.md
-  "Emoji `:`-autocomplete"; deferred to a fresh-context tick for the delicate composer-keydown coordination)
+  · **`:`-autocomplete in the composer DONE (iter 243)** — typing `:partial` (≥2 chars) pops a suggestion
+  menu of the server's custom emoji; ArrowUp/Down + Enter/Tab/click inserts `:name: `, Esc closes. Built
+  by mirroring the `@`-mention system (pure `emojiAutocomplete.ts` + 16 vitest, mutually-exclusive menus,
+  parallel keydown branch); browser QA + AI-vision verified, shipped + rollout-verified.
   · stickers · GIF picker (later)
   **+ custom-emoji REACTIONS (iter 155):** react with a server's custom emoji (`custom:{id}` marker in
   the reactions emoji column; palette lists them; chips render the image). **+ P1 FIX (iter 155):** emoji
@@ -885,14 +887,14 @@ item from here as the structural milestones above land.
   0.0000 (true silence at the peer), so "the UI says muted" is now "the peer provably hears nothing" —
   the most safety-critical voice guarantee. Also reconfirms slice-3d's capture gain node didn't break
   any of them. The receiver-RMS primitive is now reusable for future audio features (noise gate, per-peer input).
-- [ ] **Harden the history auto-load-on-scroll assertion against a headless timing flake** (iter 243).
-  `qa/browser.mjs` "scrolling to the top auto-loads older history" flaked `✗ 50 → 50` once then passed
-  `100 → 120` on an identical re-run (even `before` differed), i.e. a race in the programmatic
-  `el.scrollTop = 0` → scroll/IntersectionObserver → loadOlder trigger, NOT a product bug. Harden the poll:
-  dispatch a real `scroll` event after each nudge + await `page.waitForLoadState('networkidle')` (or the
-  loadOlder response) between iterations, and widen the window past the current 6s. Only failed 1-of-2 runs
-  so it can't be reproduced on demand — verify the hardening by running the browser QA several times and
-  confirming it's green every time. See `qa/IMPROVEMENTS.md` iter 243.
+- [x] **Harden the history auto-load-on-scroll assertion — ROOT-CAUSED + fixed (iter 244).** The flake
+  (`✗ 50 → 50` once, `100 → 120` on re-run) wasn't just timing: the poll re-nudged to the top only
+  `if (el.scrollTop > 120)`, which is true ONLY after a successful prepend (scroll-anchoring). So when the
+  *first* nudge raced the scroll listener and triggered no load, scrollTop stayed 0, the guard was false,
+  and the loop NEVER re-nudged → deterministic stall at `before → before`. Fix: re-nudge unconditionally
+  every iteration + dispatch a real `scroll` event each time (so the handler fires even when a bare
+  programmatic scrollTop assignment doesn't emit one in headless), window widened to 8s. Verified green.
+  See `qa/IMPROVEMENTS.md` iter 244.
 
 ---
 

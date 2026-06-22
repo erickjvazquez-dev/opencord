@@ -3,6 +3,25 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 244) — the "flake" was a real bug; root-cause a flaky test before widening its timeout
+
+Picked up iter-243's logged QA-stability watch (history auto-load `✗ 50 → 50` once, `100 → 120` on
+re-run). The tempting "fix" was the one I'd written into the GOAL item: dispatch a scroll event + widen
+the poll window — treat it as timing. But reading the test closely revealed a **real logic bug**, not
+mere timing: the poll re-nudged to the top only `if (el.scrollTop > 120)` — a condition that is true ONLY
+*after* a successful prepend (scroll-anchoring pushes the viewport down). So if the very first nudge raced
+the scroll listener and triggered no load, scrollTop stayed at 0, the guard stayed false, and the loop
+**never re-nudged** — a deterministic stall at `before → before`, dressed up as a flake by the 50/50
+intermittency. Fix: re-nudge unconditionally every iteration (+ a real `scroll` event for the headless
+no-emit case). The `100 → 120` passes were the runs where the first nudge happened to land.
+
+**Loop lesson (logged):** when a test flakes, READ it before you widen its timeout. An intermittent
+failure is often a conditional retry/wait whose precondition isn't always met — a real bug in the test
+(or the code) that a longer timeout only hides more often. "Root-cause the flake" beats "pad the flake";
+the diagnosis here turned a speculative timing-band-aid into a one-line guard removal that can't stall.
+Also: my own iter-243 GOAL note proposed the band-aid — a reminder that the queued-fix hypothesis is a
+starting point to verify, not a spec to implement blindly.
+
 ## 2026-06-22 (iter 243) — shipped the iter-241 spec from a fresh context; the blast-radius guard earned its keep
 
 Implemented emoji `:`-autocomplete in the composer — the item iter 241 spec'd and iter 242 cleared context
