@@ -3,6 +3,39 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 231) — AI-vision sweep found a real mobile-drawer layout bug (server names clipped)
+
+The browser QA was due; ran the full stack green, then the AI-vision sweep over the mobile drawer
+(08-mobile-open / 08b-mobile-header) caught a genuine bug the all-green functional tests were blind to:
+the **SERVERS section was clipping every name** — the server name showed only "▾ #1" and channel names
+only their tails ("srv782401" → "2401", "vc782648" → "32648"). The top CHANNELS section rendered fine,
+which localized it to the `.server-group` content inside the `.channel-list.server-list` nav.
+
+**Root cause (a subtle CSS-spec quirk):** `.channel-list` sets `overflow-y:auto`, and the CSS spec says
+when one axis is non-`visible` the other computes from `visible` to `auto` — so the nav was silently
+**horizontally scrollable**. The `.server-group-actions` row (5 non-wrapping buttons, ~375px) overflowed
+the narrow drawer (~299px) / 220px desktop sidebar, so the nav could scroll/shift sideways and clip the
+names off the left. **Fix (2 CSS rules):** `.channel-list{overflow-x:hidden}` (a vertical nav never
+scrolls sideways) + `.server-group-actions{flex-wrap:wrap}` (the 5 actions reflow onto 2 rows).
+
+**Reproduce-before-fix done cheaply + precisely (Rule 14/15):** instead of only re-running the 3-min full
+stack, I built an isolated `/tmp` HTML that links the REAL `styles.css` and measured via Playwright —
+`scrollWidth 375 > clientWidth 299`, `overflow-x:auto` confirmed. After the fix: `375→299` (==, no
+overflow). Then the full stack re-run + the regenerated screenshot gave the E2E proof, and live-rollout
+grepped the served CSS for both rules. **Technique to reuse: for a pure-CSS layout bug, an isolated HTML
+linking the real stylesheet is a seconds-fast, exact reproduction harness — confirm the mechanism + the
+fix there before paying for the full E2E boot.**
+
+**Lessons:** (1) the AI-vision sweep is again the primary gap-finder on a mature, all-green codebase —
+fourth time it earned its keep on a finished-looking product (iter-219 icons, 224 scroll, 229 search
+highlight, now this). (2) A "responsive layout" item being `[x]` done doesn't immunize it — a later
+feature (the 5-button server action row) silently broke it; **vision-sweep the OLDEST surfaces precisely
+because new features land near them.** (3) Regression encoded: browser.mjs now asserts the mobile drawer
+server-list has 0px horizontal overflow AND the server name renders from its start (not shifted off-left).
+
+**Component advanced:** UI (mobile/responsive — server list readable on narrow widths; also fixes desktop
+220px sidebar). **Cadence:** shipped a fix → ACTIVE (1800s; idle_streak reset to 0).
+
 ## 2026-06-22 (iter 230) — green maintenance tick: vision sweep of fresh surfaces, all polished, NO churn
 
 Continued iter-229's vision-sweep heuristic on surfaces not recently reviewed (emoji `:name:` picker,
