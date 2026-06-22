@@ -3,6 +3,31 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 229) — the AI-vision sweep found + I shipped search-match highlighting (Discord parity)
+
+The browser QA was due (every-3rd-tick); ran it green, then the AI-vision sweep over surfaces I hadn't
+recently scrutinized caught a real gap the GREEN functional tests couldn't: search results rendered the
+body but never highlighted the matched term, so a long list was hard to scan. Shipped it — a
+`highlightMatches(node, query)` helper that post-processes renderMarkdown's React tree, wrapping
+case-insensitive query matches in `<mark class="search-match">` (amber + bold). XSS-safe by construction
+(only re-wraps EXISTING text nodes; the query is the viewer's own React-escaped input), blast radius =
+the search panel. vitest +5 (incl. match-inside-**bold** keeps the <strong>, raw-HTML stays inert) +
+browser QA + AI-vision + live rollout-verify.
+
+**Lesson — on a mature, all-green codebase, the AI-vision sweep IS the primary gap-finder.** Functional
+tests confirmed search WORKS; only the visual review revealed it wasn't POLISHED. This is the third time
+the vision step earned its keep on a finished-looking product (iter-219 header icons, iter-224 scroll
+placement, now search highlight). Heuristic: when functional coverage is saturated, spend the tick's Track-0
+budget on a VISION sweep of un-recently-reviewed surfaces — it reliably surfaces the polish gaps green
+tests are blind to, which are the real remaining UI-north-star work.
+
+**Reusable pattern:** "highlight a substring inside already-rendered markdown" = walk the React-node tree
+and wrap matches in the OUTPUT (never re-parse the source) — keeps the XSS-safe render intact and composes
+with all markdown elements. Applicable to any future highlight need (e.g. jump-to-message context).
+
+**Component advanced:** UI (search polish — Discord-parity match highlighting). **Cadence:** shipped a
+feature → ACTIVE (1800s).
+
 ## 2026-06-22 (iter 228) — locked the alg=none JWT bypass (Rule 15); a no-bug invariant still worth a test
 
 Rather than repeat iter-227's broad sweep, picked ONE concrete security-critical invariant and checked it:
