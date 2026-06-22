@@ -3,6 +3,36 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 234) — rotated off vision sweeps to security; locked the expired-token wiring
+
+After three UI-vision ticks (231 fix → 232 test → 233 clean), I deliberately ROTATED to a different
+discipline rather than do a fourth diminishing-returns vision sweep: a Rule-15 audit of the auth boundary.
+Mapped the 110-test suite first, then probed the JWT path (flagged "least-probed" back in iter-183/228).
+
+**The gap (iter-226 class — unit proves logic, only E2E proves wiring):** `TestParseRejectsExpired` proves
+`auth.Parse` rejects an expired token, and the HTTP-middleware + WS-handshake tests reject MISSING and
+MALFORMED tokens — but NOTHING proved those two boundaries actually reject a validly-signed-but-EXPIRED
+token. Missing/malformed fail at *parsing*; expiry fails at *claims validation*, a different code path. A
+refactor passing `jwt.WithoutClaimsValidation` would keep the missing/malformed tests green while letting
+a replayed/expired session token through — a high-severity stale-credential bypass (access after
+expiry/logout). Added an expired-token guard to BOTH boundaries, using a token signed with the same secret
+but past its exp so it passes signature verification and fails only on expiry.
+
+**Rule-15 done properly — mutation-proved the tests aren't no-ops:** temporarily added
+`jwt.WithoutClaimsValidation()` to `Parse` and confirmed BOTH new tests FAIL (middleware 200, WS 400
+instead of 401), then reverted and re-ran the full suite green. A regression test you haven't watched fail
+is unverified; mutation testing is the cheap way to prove a security guard actually guards.
+
+**Loop lessons logged:** (1) **rotate disciplines, don't repeat one to exhaustion** — three vision ticks
+was the signal to switch lenses (security) where fresh gaps still exist; coverage breadth comes from
+varying the angle, not re-running the same sweep. (2) **For every security invariant proven at the
+library/unit layer, add an E2E guard at each BOUNDARY that depends on it** (HTTP middleware AND WS
+handshake here) — the unit test and the boundary wiring are independent regressions. (3) Mutation-test
+security guards as a habit.
+
+**Component advanced:** security (expired-token rejection now locked at both auth boundaries).
+**Cadence:** shipped real security coverage → ACTIVE (1800s; idle_streak reset from 1 to 0).
+
 ## 2026-06-22 (iter 233) — green maintenance tick; steady-state confirmed, cadence widening
 
 Health green (build/vet/test + live /healthz). Vision-swept the last batch of surfaces I hadn't
