@@ -1200,6 +1200,57 @@ async function main() {
   }
   check(emojiLoaded, 'the inline emoji image actually LOADS (naturalWidth>0, not a broken image)')
 
+  // 7j — Emoji `:`-autocomplete (Discord parity): typing `:qa_em` in the composer pops a
+  // suggestion menu listing :qa_emoji:; ArrowDown+Enter inserts the full `:qa_emoji: `
+  // shortcode and (on send) it renders inline. Then Esc-closes is re-exercised. This is
+  // the regression guard for the SHARED composer keydown path (the new emoji menu must
+  // own arrows/Enter/Esc without breaking @mention / ArrowUp-edits-last, both covered
+  // elsewhere). The qa_emoji uploaded above is the menu's data source.
+  step('emoji :-autocomplete: :qa_em opens the menu, ArrowDown+Enter inserts :qa_emoji:')
+  const srvComposer = page.getByPlaceholder(new RegExp('Message #' + srvChan))
+  await srvComposer.click()
+  await srvComposer.fill(':qa_em')
+  const emojiMenu = page.locator('.emoji-autocomplete')
+  await emojiMenu.waitFor({ timeout: 4000 })
+  await shot('03j-emoji-autocomplete.png')
+  check(await emojiMenu.isVisible(), 'typing :qa_em opens the emoji autocomplete menu')
+  check(
+    (await page.locator('.emoji-suggestion[data-emoji-option="qa_emoji"]').count()) === 1,
+    'the emoji autocomplete menu lists the :qa_emoji: custom emoji',
+  )
+  // The suggestion row shows the rendered emoji image, not just text.
+  check(
+    await page.locator('.emoji-suggestion[data-emoji-option="qa_emoji"] img.emoji-inline').isVisible(),
+    'the emoji suggestion row renders the emoji image inline',
+  )
+  // ArrowDown (cycles within the single match) then Enter accepts → full shortcode + space.
+  await srvComposer.press('ArrowDown')
+  await srvComposer.press('Enter')
+  await emojiMenu.waitFor({ state: 'detached', timeout: 4000 })
+  const draftAfterAccept = await srvComposer.inputValue()
+  check(
+    draftAfterAccept === ':qa_emoji: ',
+    `Enter inserts the full :qa_emoji: shortcode + trailing space (draft="${draftAfterAccept}")`,
+  )
+  // Send the autocompleted shortcode → it renders inline (proves a real emoji went out).
+  await page.getByRole('button', { name: 'Send' }).click()
+  await page.locator('.message .body img.emoji-inline').last().waitFor({ timeout: 8000 })
+  check(
+    (await srvComposer.inputValue()) === '',
+    'sending the autocompleted emoji clears the composer',
+  )
+  // Esc closes the menu WITHOUT clearing the draft (menu-only precedence, the new branch).
+  await srvComposer.click()
+  await srvComposer.fill(':qa_em')
+  await emojiMenu.waitFor({ timeout: 4000 })
+  await srvComposer.press('Escape')
+  await emojiMenu.waitFor({ state: 'detached', timeout: 4000 })
+  check(
+    (await srvComposer.inputValue()) === ':qa_em',
+    'Esc closes the emoji menu but keeps the typed text',
+  )
+  await srvComposer.fill('') // leave the composer clean for the next step
+
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')
   await page

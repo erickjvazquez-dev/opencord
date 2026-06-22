@@ -91,6 +91,7 @@ import { ProfileCard } from './ProfileCard'
 import { NewGroupModal } from './NewGroupModal'
 import { RolesManagerModal } from './RolesManagerModal'
 import { dmTitle, dmIsGroup, dmOthers, dmMembersLabel } from '../dm'
+import { activeEmojiToken, matchEmojiNames, spliceEmoji } from '../emojiAutocomplete'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -364,6 +365,13 @@ export function Chat({
   const [mentionIndex, setMentionIndex] = useState(0)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const mentionRange = useRef<{ start: number; len: number } | null>(null)
+  // Emoji `:`-autocomplete: candidate custom-emoji names matching the `:partial`
+  // being typed, the highlighted index, and the range of the `:token` to replace.
+  // Mutually exclusive with the @mention menu (only one is ever open) — see
+  // refreshAutocomplete. Mirrors the mention trio above.
+  const [emojiMatches, setEmojiMatches] = useState<string[]>([])
+  const [emojiIndex, setEmojiIndex] = useState(0)
+  const emojiRange = useRef<{ start: number; len: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // Wraps the composer emoji-picker button + popover so an outside click can close it.
   const emojiPickerRef = useRef<HTMLDivElement>(null)
@@ -856,28 +864,55 @@ export function Chat({
     submitDraft()
   }
 
-  // Recompute the @mention suggestions for the current draft + caret. Candidates are
-  // the distinct usernames active in this channel (message authors), minus yourself,
-  // that start with the partial — no extra fetch, works in every channel type.
-  const refreshMentions = (value: string, caret: number) => {
+  // Recompute the composer autocomplete menus for the current draft + caret. The
+  // @mention and emoji `:` menus are MUTUALLY EXCLUSIVE — only one is ever open —
+  // and the caret can only sit inside one token (`@…` xor `:…`) at a time, so we
+  // pick whichever it's in. @mention takes precedence; the emoji branch only runs
+  // when no mention is active. Mirrors the original refreshMentions, plus emoji.
+  const clearEmojiMenu = () => {
+    if (emojiMatches.length) setEmojiMatches([])
+    emojiRange.current = null
+  }
+  const clearMentionMenu = () => {
+    if (mentionMatches.length) setMentionMatches([])
+    mentionRange.current = null
+  }
+  const refreshAutocomplete = (value: string, caret: number) => {
+    // @mention: candidates are the distinct usernames active in this channel
+    // (message authors), minus yourself, starting with the partial — no fetch.
     const active = activeMention(value, caret)
-    if (!active) {
-      if (mentionMatches.length) setMentionMatches([])
-      mentionRange.current = null
+    if (active) {
+      clearEmojiMenu()
+      const q = active.query.toLowerCase()
+      const seen = new Set<string>()
+      const names: string[] = []
+      for (const m of messages) {
+        const u = m.username
+        if (!u || u === user.username || seen.has(u)) continue
+        seen.add(u)
+        if (u.toLowerCase().startsWith(q)) names.push(u)
+      }
+      mentionRange.current = { start: active.start, len: active.query.length + 1 }
+      setMentionMatches(names.slice(0, 6))
+      setMentionIndex(0)
       return
     }
-    const q = active.query.toLowerCase()
-    const seen = new Set<string>()
-    const names: string[] = []
-    for (const m of messages) {
-      const u = m.username
-      if (!u || u === user.username || seen.has(u)) continue
-      seen.add(u)
-      if (u.toLowerCase().startsWith(q)) names.push(u)
+    clearMentionMenu()
+    // emoji `:partial`: candidates are this server's custom-emoji names (the same
+    // map already loaded for `:name:` rendering) starting with the partial.
+    const emoji = activeEmojiToken(value, caret)
+    if (!emoji || !activeEmoji || activeEmoji.size === 0) {
+      clearEmojiMenu()
+      return
     }
-    mentionRange.current = { start: active.start, len: active.query.length + 1 }
-    setMentionMatches(names.slice(0, 6))
-    setMentionIndex(0)
+    const names = matchEmojiNames(activeEmoji.keys(), emoji.query, 8)
+    if (names.length === 0) {
+      clearEmojiMenu()
+      return
+    }
+    emojiRange.current = { start: emoji.start, len: emoji.query.length + 1 }
+    setEmojiMatches(names)
+    setEmojiIndex(0)
   }
 
   // Replace the `@partial` under the caret with `@name ` and restore the caret.
@@ -896,6 +931,27 @@ export function Chat({
       if (ta) {
         ta.focus()
         ta.setSelectionRange(caret, caret)
+      }
+    })
+  }
+
+  // Replace the `:partial` under the caret with `:name: ` and restore the caret.
+  // Mirrors acceptMention; also re-syncs the auto-grow height since `:name:` can be
+  // wider than the partial it replaces.
+  const acceptEmoji = (name: string) => {
+    const range = emojiRange.current
+    if (!range) return
+    const { next, caret } = spliceEmoji(draft, range, name)
+    setDraft(next)
+    setEmojiMatches([])
+    emojiRange.current = null
+    requestAnimationFrame(() => {
+      const ta = composerRef.current
+      if (ta) {
+        ta.focus()
+        ta.setSelectionRange(caret, caret)
+        ta.style.height = 'auto'
+        ta.style.height = `${ta.scrollHeight}px`
       }
     })
   }
@@ -3975,6 +4031,31 @@ export function Chat({
             ))}
           </div>
         )}
+        {emojiMatches.length > 0 && (
+          <div className="emoji-autocomplete" role="listbox" aria-label="emoji suggestions">
+            {emojiMatches.map((name, i) => {
+              const id = activeEmoji?.get(name)
+              return (
+                <button
+                  type="button"
+                  key={name}
+                  role="option"
+                  aria-selected={i === emojiIndex}
+                  className={`emoji-suggestion${i === emojiIndex ? ' active' : ''}`}
+                  data-emoji-option={name}
+                  // mousedown (not click) so the textarea doesn't blur before we insert.
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    acceptEmoji(name)
+                  }}
+                >
+                  {id != null && <EmojiImg token={token} id={id} alt={`:${name}:`} />}
+                  <span className="emoji-suggestion-name">:{name}:</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
         {pendingFiles.length > 0 && (
           <div className="pending-files" aria-label="files to send">
             {pendingFiles.map((f, i) => (
@@ -4073,7 +4154,7 @@ export function Chat({
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value)
-              refreshMentions(e.target.value, e.target.selectionStart ?? e.target.value.length)
+              refreshAutocomplete(e.target.value, e.target.selectionStart ?? e.target.value.length)
               // Auto-grow with the content, bounded by CSS max-height.
               e.target.style.height = 'auto'
               e.target.style.height = `${e.target.scrollHeight}px`
@@ -4104,6 +4185,32 @@ export function Chat({
                 if (e.key === 'Escape') {
                   e.preventDefault()
                   setMentionMatches([])
+                  return
+                }
+              } else if (emojiMatches.length > 0) {
+                // The emoji `:`-autocomplete menu owns the same keys with identical
+                // semantics. It is mutually exclusive with the mention menu (only one
+                // is ever open), so this is a parallel branch — the mention behavior
+                // above and the ArrowUp-edits-last / Enter-sends paths below are
+                // unaffected.
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setEmojiIndex((i) => (i + 1) % emojiMatches.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setEmojiIndex((i) => (i - 1 + emojiMatches.length) % emojiMatches.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  acceptEmoji(emojiMatches[emojiIndex])
+                  return
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setEmojiMatches([])
                   return
                 }
               }
