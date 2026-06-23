@@ -291,7 +291,56 @@ export function renderMarkdown(
   return nodes
 }
 
+// Discord renders a message that is ONLY emoji (no other text) at a larger "jumbo" size,
+// scaling back to normal once there are too many. emojiOnlyCount returns the emoji count
+// when the whole message is emoji — custom `:name:`, unicode `:name:`, or raw unicode
+// chars, separated only by whitespace — and within the jumbo cap; otherwise 0 (mixed
+// content / empty / over-cap → normal size). Pure + unit-tested so the caller just toggles
+// a `.jumbo-emoji` class on the message body.
+const JUMBO_CAP = 27
+// One emoji grapheme cluster: a regional-indicator pair (flag), or a pictographic base with
+// an optional VS16 / skin-tone modifier, optionally ZWJ-joined into a sequence (👨‍👩‍👧).
+const EMOJI_CLUSTER =
+  /^(?:\p{Regional_Indicator}\p{Regional_Indicator}|\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})?(?:\u{200D}\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})?)*)/u
+const SHORTCODE = /^:([a-z0-9_]{2,32}):/
+
+export function emojiOnlyCount(
+  text: string,
+  customEmoji?: ReadonlyMap<string, number>,
+): number {
+  let i = 0
+  let count = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r') {
+      i++
+      continue
+    }
+    const rest = text.slice(i)
+    // A `:name:` token counts only if it RESOLVES to an emoji (custom override or standard
+    // unicode) — an unresolved `:word:` is plain text, so the message isn't emoji-only.
+    const sc = SHORTCODE.exec(rest)
+    if (sc) {
+      if (!customEmoji?.has(sc[1]) && !unicodeEmoji(sc[1])) return 0
+      count++
+      if (count > JUMBO_CAP) return 0
+      i += sc[0].length
+      continue
+    }
+    const em = EMOJI_CLUSTER.exec(rest)
+    if (em && em[0].length > 0) {
+      count++
+      if (count > JUMBO_CAP) return 0
+      i += em[0].length
+      continue
+    }
+    return 0 // any other character → not an emoji-only message
+  }
+  return count >= 1 ? count : 0
+}
+
 // highlightMatches wraps case-insensitive occurrences of `query` in <mark class="search-match">
+
 // within the React tree renderMarkdown produced — used to bold the matched term in search results
 // (Discord parity). It only re-wraps EXISTING text nodes (never injects markup from the message;
 // the query is the viewer's own input, React-escaped inside the <mark>), so the XSS invariant is

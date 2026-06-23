@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isValidElement, type ReactNode } from 'react'
-import { renderMarkdown, highlightMatches } from './markdown'
+import { renderMarkdown, highlightMatches, emojiOnlyCount } from './markdown'
 import { EmojiImg } from './components/EmojiImg'
 
 // renderMarkdown returns React elements (never an HTML string), so these tests walk
@@ -184,6 +184,50 @@ describe('renderMarkdown unicode emoji shortcodes (:joy:→😂, Discord parity)
     expect(uni).toHaveLength(1)
     // children is a string node (React-escaped), not an element / innerHTML.
     expect(typeof (uni[0].props as { children?: unknown }).children).toBe('string')
+  })
+})
+
+describe('emojiOnlyCount (jumbo emoji detection, Discord parity)', () => {
+  const custom = new Map([['qa_emoji', 7]])
+
+  it('counts a single raw unicode emoji message', () => {
+    expect(emojiOnlyCount('😂')).toBe(1)
+  })
+  it('counts multiple raw unicode emoji separated by spaces', () => {
+    expect(emojiOnlyCount('😂 🎉 🔥')).toBe(3)
+  })
+  it('counts unicode :shortcode: emoji as emoji-only', () => {
+    expect(emojiOnlyCount(':joy: :fire:')).toBe(2)
+  })
+  it('counts a custom :name: emoji (resolved via the map) as emoji-only', () => {
+    expect(emojiOnlyCount(':qa_emoji:', custom)).toBe(1)
+  })
+  it('mixes custom + unicode shortcodes + raw chars', () => {
+    expect(emojiOnlyCount(':qa_emoji: :joy: 🔥', custom)).toBe(3)
+  })
+  it('returns 0 when there is any non-emoji text (not emoji-only)', () => {
+    expect(emojiOnlyCount('lol 😂')).toBe(0)
+    expect(emojiOnlyCount('😂 nice')).toBe(0)
+    expect(emojiOnlyCount('hi')).toBe(0)
+  })
+  it('returns 0 for an unresolved :word: (plain text, not an emoji)', () => {
+    expect(emojiOnlyCount(':definitelynotanemoji:')).toBe(0)
+    expect(emojiOnlyCount(':joy: :definitelynotanemoji:')).toBe(0)
+  })
+  it('returns 0 for empty / whitespace-only', () => {
+    expect(emojiOnlyCount('')).toBe(0)
+    expect(emojiOnlyCount('   \n ')).toBe(0)
+  })
+  it('handles VS16, skin-tone, ZWJ sequences, and flags as single emoji', () => {
+    expect(emojiOnlyCount('❤️')).toBe(1) // U+2764 + VS16
+    expect(emojiOnlyCount('👍🏽')).toBe(1) // thumbs up + skin-tone modifier
+    expect(emojiOnlyCount('👨‍👩‍👧')).toBe(1) // ZWJ family sequence
+    expect(emojiOnlyCount('🇺🇸')).toBe(1) // regional-indicator flag pair
+    expect(emojiOnlyCount('👍🏽 ❤️ 🇺🇸')).toBe(3)
+  })
+  it('returns 0 above the jumbo cap (28 emoji → normal size)', () => {
+    expect(emojiOnlyCount('😀'.repeat(27))).toBe(27)
+    expect(emojiOnlyCount('😀'.repeat(28))).toBe(0)
   })
 })
 

@@ -5504,3 +5504,33 @@ is identical — `activeEmoji` undefined → unicode-only — but no browser-QA 
 inside a DM specifically).
 
 **Cadence:** shipped a real feature → ACTIVE (1800s).
+
+---
+
+## 2026-06-22 (iter 250) — jumbo emoji shipped; QA screenshot-framing fix
+
+Shipped jumbo emoji (Discord parity): an emoji-only message renders ~2× larger. New pure
+`emojiOnlyCount` (vitest 10 cases incl. VS16/ZWJ/flag/skin-tone/over-cap) + `.jumbo-emoji` body
+class + CSS. Browser QA `7j3` added.
+
+**Loop-process win (logged + FIXED this tick):** the first jumbo screenshot was AMBIGUOUS — it
+captured the older messages (the `:joy: :tada: 🔥` message-under-test had landed just below the
+fold), so the AI-vision pass couldn't actually SEE the thing tested. The DOM assertions were
+green, but a screenshot that doesn't show the result undercuts Step 4b-i (Read the RESULT). Two
+fixes applied: (1) `await jumboBody.scrollIntoViewIfNeeded()` before the shot so the message-under-
+test is always in-frame; (2) hardened the assertion from "class present" to ALSO measure the
+rendered emoji's `boundingBox().height > 1.5× the inline emoji` — a size PROOF, not just a class
+check. **Playbook add:** when a browser-QA step screenshots a freshly-sent message for AI-vision,
+`scrollIntoViewIfNeeded()` the target first (chat auto-scroll + message grouping can push the
+newest just out of the captured viewport), and prefer a measured assertion (boundingBox / computed
+size) over a class/DOM-text check when the feature IS a visual size/layout change.
+
+**Highest-value follow-up (logged):** `emojiOnlyCount` recomputes per render call across 3 sites;
+fine at current message counts, but if profiling ever flags it, memoize per-message (the body is
+immutable once sent). Not worth doing speculatively (Rule 6).
+
+**QA-coverage note:** jumbo now has unit + browser + measured-size + AI-vision. Least-tested
+adjacent: jumbo emoji in a DM (render path identical — activeEmoji undefined → unicode-only — but
+no browser-QA step sends an emoji-only message inside a DM specifically). Candidate for next tick.
+
+**Cadence:** shipped a real feature → ACTIVE (1800s).

@@ -1313,6 +1313,48 @@ async function main() {
   check(await fireMsg.isVisible(), 'the autocompleted :fire: sends and renders as 🔥')
   await srvComposer.fill('') // clean composer for the next step
 
+  // 7j3 — Jumbo emoji (Discord parity, iter 250): a message that is ONLY emoji renders
+  // larger — the body wrapper gets a `.jumbo-emoji` class (emojiOnlyCount > 0). A message
+  // with any other text does NOT. This is the regression guard for emojiOnlyCount + the
+  // bodyClass wiring + the .jumbo-emoji CSS.
+  step('jumbo emoji: an emoji-only message gets .body.jumbo-emoji; a mixed message does not')
+  await srvComposer.click()
+  await srvComposer.fill(':joy: :tada: 🔥') // unicode shortcodes + a raw char, nothing else
+  await page.getByRole('button', { name: 'Send' }).click()
+  // Find the just-sent emoji-only message: a .body containing the 😂 unicode span.
+  const jumboBody = page
+    .locator('.message .body', { has: page.locator('.emoji-unicode', { hasText: '😂' }) })
+    .last()
+  await jumboBody.waitFor({ timeout: 8000 })
+  await jumboBody.scrollIntoViewIfNeeded() // put the message-under-test in the captured frame
+  await shot('03j4-jumbo-emoji.png')
+  check(
+    (await jumboBody.getAttribute('class'))?.includes('jumbo-emoji') ?? false,
+    'an emoji-only message (:joy: :tada: 🔥) gets the .jumbo-emoji body class',
+  )
+  // All THREE emoji actually rendered in that one message (not just the first) — :joy:→😂,
+  // :tada:→🎉 as unicode spans, plus the raw 🔥. Guards against a parse that drops the tail.
+  const jumboText = (await jumboBody.innerText()).replace(/\s+/g, '')
+  check(
+    jumboText.includes('😂') && jumboText.includes('🎉') && jumboText.includes('🔥'),
+    `the jumbo message renders all three emoji (got "${jumboText}")`,
+  )
+  // The jumbo emoji is VISIBLY larger than an inline emoji in a mixed message — measure the
+  // rendered 😂 box in the jumbo body vs the 😂 in "gg 😂 and 🎉". This is the size proof.
+  const mixedBody = page.locator('.message .body', { hasText: 'gg' }).last()
+  const jumboEmojiBox = await jumboBody.locator('.emoji-unicode', { hasText: '😂' }).boundingBox()
+  const inlineEmojiBox = await mixedBody.locator('.emoji-unicode', { hasText: '😂' }).boundingBox()
+  check(
+    !!jumboEmojiBox && !!inlineEmojiBox && jumboEmojiBox.height > inlineEmojiBox.height * 1.5,
+    `jumbo 😂 (${jumboEmojiBox?.height}px) renders >1.5x the inline 😂 (${inlineEmojiBox?.height}px)`,
+  )
+  // The mixed message ("gg 😂 and 🎉") must NOT be jumbo.
+  check(
+    !((await mixedBody.getAttribute('class'))?.includes('jumbo-emoji') ?? false),
+    'a message mixing text + emoji ("gg 😂 and 🎉") is NOT jumbo',
+  )
+  await srvComposer.fill('') // clean composer for the next step
+
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')
   await page

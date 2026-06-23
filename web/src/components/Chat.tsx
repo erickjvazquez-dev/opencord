@@ -79,7 +79,7 @@ import type {
   ServerMember,
   User,
 } from '../types'
-import { renderMarkdown, highlightMatches } from '../markdown'
+import { renderMarkdown, highlightMatches, emojiOnlyCount } from '../markdown'
 import { visibleMessages } from '../blocking'
 import { getDesktopNotify, mentionsMe, shouldNotify, showNotification } from '../notify'
 import { dayLabel, shortTime, messageTimestamp } from '../dates'
@@ -2198,6 +2198,12 @@ export function Chat({
   // Undefined for #general / DMs (no server) so `:name:` stays literal there.
   const activeEmoji = activeServerId ? serverEmoji[Number(activeServerId)] : undefined
 
+  // Discord parity: a message that is ONLY emoji renders "jumbo" (larger). Toggle the class
+  // on the body wrapper when emojiOnlyCount finds an emoji-only body (custom + unicode), not
+  // for deleted placeholders. activeEmoji is the same custom map used for `:name:` rendering.
+  const bodyClass = (m: { body: string; deleted?: boolean }) =>
+    !m.deleted && emojiOnlyCount(m.body, activeEmoji) > 0 ? 'body jumbo-emoji' : 'body'
+
   // Load the persistent member list when viewing a server channel (Discord shows it
   // for servers, not DMs / the global channel). Polls so a member who joins/leaves or
   // is promoted shows up without a manual refresh (we have no per-member presence
@@ -3566,7 +3572,7 @@ export function Chat({
                       </span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
-                    <div className="body">
+                    <div className={bodyClass(m)}>
                       {m.deleted
                         ? m.body
                         : highlightMatches(
@@ -3605,7 +3611,7 @@ export function Chat({
                       </span>
                       <span className="time">{messageTimestamp(new Date(m.createdAt))}</span>
                     </div>
-                    <div className="body">
+                    <div className={bodyClass(m)}>
                       {m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}
                     </div>
                   </div>
@@ -3895,7 +3901,7 @@ export function Chat({
                       </button>
                     </div>
                   ) : (
-                    <div className="body">{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}</div>
+                    <div className={bodyClass(m)}>{m.deleted ? m.body : renderMarkdown(m.body, { me: user.username, emoji: activeEmoji, token })}</div>
                   )}
                   {!m.deleted && (m.attachments?.length ?? 0) > 0 && (
                     <AttachmentList token={token} attachments={m.attachments!} />

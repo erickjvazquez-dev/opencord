@@ -67,6 +67,20 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   AI-vision of both render + menu screenshots. **Follow-up:** expand the curated ~300-name map toward the
   full ~1800 Unicode set via an offline generator (logged in `qa/IMPROVEMENTS.md`).
 
+- [x] **jumbo emoji — emoji-only messages render larger (DONE iter 250, Discord parity).** A message
+  that is ONLY emoji (custom `:name:`, unicode `:joy:`, and/or raw unicode chars, separated by
+  whitespace) now renders at ~2× size, like Discord. New pure `emojiOnlyCount(text, customEmoji)` in
+  `markdown.tsx` returns the emoji count when the whole body is emoji within a 27-cap (else 0) — it
+  tokenizes `:name:` shortcodes (counted only if they resolve to a custom or unicode emoji) and raw
+  emoji grapheme clusters via a `\p{Extended_Pictographic}`/`\p{Regional_Indicator}` regex that
+  handles VS16, skin-tone modifiers, ZWJ sequences (👨‍👩‍👧) and flags (🇺🇸). `Chat.tsx` toggles a
+  `.jumbo-emoji` class on the message body (all 3 render sites: main/search/pins) via a `bodyClass`
+  helper; `styles.css` scales both `img.emoji-inline` (22→44px) and `span.emoji-unicode` (→2.75em).
+  Verified: tsc + vitest 156/156 (10 new incl. VS16/ZWJ/flag/skin-tone/over-cap edges) + go test green;
+  browser QA 7j3 — emoji-only `:joy: :tada: 🔥` gets `.jumbo-emoji` AND all three render AND the jumbo
+  😂 measures >1.5× the inline 😂 (boundingBox proof), while mixed "gg 😂 and 🎉" stays inline; AI-vision
+  confirmed all three jumbo on one line, no clip/overlap. Shipped + railway + rollout-verified.
+
 - [~] **Group DMs (Discord parity, highest-ROI per tick-159 plan)** — **slice 1 backend DONE (iter
   160):** generalized the 2-member DM model (`kind='dm'` channels) to N members with **no schema change**
   (the `channel_members` join table + per-channel WS hub are already N-member). `DMChannel` gains
