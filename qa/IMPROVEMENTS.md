@@ -5660,3 +5660,32 @@ round-trip guarantees all prior async ops on that goroutine are done, and gives 
 and the per-user conn cap. Least-covered: serial-reconnect rate bypass (follow-up 1).
 
 **Cadence:** shipped a real backend security fix (deploys) → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 255) — presence accuracy: "N online" counts distinct users, not sockets
+
+Closed the presence-correctness follow-up flagged last tick. `countInChannel` (which powers the
+"{N} online" badge via the WS presence event) counted CONNECTIONS, so one person with multiple tabs
+showed inflated — newly impactful since iter-254's `MaxConnsPerUser=10` cap explicitly allows several
+sockets per user. Fixed to dedupe by user id (distinct users), matching Discord. Component: **chat /
+UI correctness**.
+
+Verified: white-box unit test `TestCountInChannelCountsDistinctUsers` (3 sockets of user 1 + 1 of user 2
+on a channel → 2; another channel → 1; empty → 0) — fast, deterministic, no DB. Full go suite green
+(no existing presence assertion regressed). Plus a live probe at deploy (below).
+
+**Loop-process note:** chose a white-box unit test (`package ws`, direct `countInChannel` call with
+constructed `*Client` keys) over an integration test because the reusable WS read helpers (`readUntil`)
+are local closures inside one test func, and reading the exact post-join presence frame is timing-fiddly.
+Playbook: for a pure count/logic fix on an actor-model type, a white-box unit test that constructs the
+internal state directly is more precise and less flaky than driving it through the socket layer — pair it
+with a live behavior probe for the end-to-end proof.
+
+**Highest-value follow-up (logged):** still-open from iter 254 — the serial-reconnect RATE bypass (a
+persistent per-user token bucket keyed in the hub, GC'd on the user's last disconnect) fully closes the
+reconnect-storm rate amplification the conn cap only bounds by concurrency. Medium effort; next security
+target. Also: presence "online" is per-CHANNEL (your active channel's distinct users); a server-wide
+online-member count (Discord's member-list "Online — N") is a separate, larger presence feature.
+
+**Cadence:** shipped a backend correctness fix (deploys) → ACTIVE (1800s).

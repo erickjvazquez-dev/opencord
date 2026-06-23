@@ -857,6 +857,10 @@ item from here as the structural milestones above land.
   manual change cancels auto-restore). No backend (reuses `PUT /me/presence`). The threshold is
   live-tunable via `window.__ocIdleMs` so browser QA `07d4` shortens it: quiet → the self pip turns
   amber (idle), activity → online; AI-vision verified the amber pip on the header chip + member list.
+  **"N online" badge counts DISTINCT USERS, not sockets (fix, iter 255):** `countInChannel` now
+  dedupes by user id, so one person with multiple tabs/devices (each a separate socket — up to the
+  iter-254 `MaxConnsPerUser` cap) counts once, matching Discord. White-box unit
+  (`TestCountInChannelCountsDistinctUsers`) + live-probed (2 sockets of user A + 1 of user B → "2 online").
 
 ### Roles & Permissions
 - [ ] Roles (hierarchy, colors, icons, mentionable)

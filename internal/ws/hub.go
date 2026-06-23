@@ -354,15 +354,19 @@ func (h *Hub) emitVoicePresence(channelID int64) {
 	h.emitToChannel(channelID, Event{Type: "voice-presence", VoiceMembers: ids})
 }
 
-// countInChannel returns how many connected clients are subscribed to channelID.
+// countInChannel returns how many DISTINCT users are subscribed to channelID — the
+// "N online" presence number. Counts users, not connections: one person with several
+// tabs/devices (each a separate socket, now up to MaxConnsPerUser) is one online user,
+// matching Discord. Counting sockets would inflate the badge, especially since the
+// per-user connection cap permits multiple concurrent sockets.
 func (h *Hub) countInChannel(channelID int64) int {
-	n := 0
+	users := make(map[int64]bool)
 	for c := range h.clients {
 		if c.channelID == channelID {
-			n++
+			users[c.user.ID] = true
 		}
 	}
-	return n
+	return len(users)
 }
 
 // emitToChannel serializes an event and pushes it to every client subscribed to
