@@ -59,6 +59,10 @@ Open **http://localhost:3000**, create an account, and start chatting. Open a
 second browser/incognito window, register another user, and watch messages and
 the online count update live.
 
+**Want friends on other computers to join?** Opencord is a single origin and works
+behind any reverse tunnel with zero config — see **[docs/TUNNELING.md](./docs/TUNNELING.md)**
+for free, no-port-forwarding setups (Cloudflare Tunnel, self-hosted `frp`, or Tailscale).
+
 ## Quick start (local dev, hot reload)
 
 Requires **Go ≥ 1.22** and **Node ≥ 20** on your `PATH`.

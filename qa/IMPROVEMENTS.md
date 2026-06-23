@@ -5925,3 +5925,32 @@ over-reaching into a cost/architecture commit it shouldn't make.
 copy-paste configs, invite-codes-are-tunnel-agnostic note). No code, no dependency, no cost.
 
 **Cadence:** opened a concrete ready slice (Slice 0) → ACTIVE (1800s) to implement it next.
+
+---
+
+## 2026-06-23 (iter 265) — shipped Slice 0: docs/TUNNELING.md (the free DIY tunneling paths, no code)
+
+Implemented the autonomous-safe Slice 0 from the iter-264 tunneling spec: `docs/TUNNELING.md` documenting
+three free, self-hostable ways to reach a self-hosted Opencord without port-forwarding — Cloudflare
+Tunnel (`cloudflared`), self-host `frp`, and Tailscale — all pointed at the single origin (`:3000`), plus
+a set-`JWT_SECRET`-before-exposing security note, the invite-codes-are-tunnel-agnostic note, and the
+WebRTC-needs-TURN caveat. Linked from the README quick-start. Component: **infra / North Star** (makes the
+"friends join, nothing behind a paywall" promise real + documented for the DIY paths, TODAY).
+
+**Verification (Rule 14, honest):** the docs rest on the single-origin model, which IS verified — nginx
+routes `/` + `/api/` + `/ws` (upgrade) to the backend (docker/nginx.conf), the client is tunnel-
+transparent (relative URLs + `location`-derived WS, confirmed iter 264), and the live HTTPS-fronted
+Railway deploy is itself a working single-origin instance (equivalent to a tunnel). The specific
+cloudflared/frp/Tailscale recipes are the standard documented configs — NOT CI-E2E-verified, since a real
+tunnel needs a per-machine public endpoint. Stated as such in the doc.
+
+**Loop-process note:** spec (iter 264) → autonomous-safe slice (iter 265) is the right rhythm for a
+blocked big-rock — extract the part that needs no owner cost/architecture decision and ship it, leaving
+the gated part (Slice 1 bundled relay) clearly flagged. The North-Star tunneling promise is now usable +
+documented for self-hosters without waiting on the owner's relay-infra call.
+
+**Next:** Slice 1 (bundled opt-in relay) is owner-blocked. Absent a greenlight, return to maintenance
+(health/QA watch + every-3rd-tick browser sweep) and widen the cadence; snap back on any real gap.
+
+**Cadence:** shipped a real user-facing doc/feature (the tunneling guide) → ACTIVE (1800s) this once,
+then widen if the next tick finds only owner-blocked/maintenance work.

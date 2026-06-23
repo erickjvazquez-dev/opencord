@@ -624,8 +624,13 @@ component north stars. (Spec history: `SPEC.md` "User Settings + UI polish".)
   cloudflared / self-host frp / Tailscale ($0)**. Verified the app is ALREADY tunnel-transparent
   (relative URLs + `location`-derived WS + CORS `*` + raw invite codes), so **Slice 0 = a
   `docs/TUNNELING.md` of the free DIY paths, NO code change** (autonomous-safe, loop-shippable now).
-  **Slice 1+ (bundled opt-in relay via `docker compose --profile tunnel`) is BLOCKED on owner-
-  decision #1 + `stack-guardian` (Rule 16).**
+  **✅ Slice 0 DONE (iter 265):** `docs/TUNNELING.md` written + linked from the README — Cloudflare
+  Tunnel / self-host `frp` / Tailscale recipes pointed at the single origin (`:3000`), with the
+  set-`JWT_SECRET`-first security note, invite-codes-are-tunnel-agnostic note, and the WebRTC-needs-TURN
+  caveat. Grounded in the verified single-origin model (nginx routes `/`+`/api/`+`/ws`; the live
+  HTTPS-fronted Railway deploy is itself proof the model works). So tunneling is **documented + usable
+  TODAY** on the free DIY paths. **Slice 1+ (bundled opt-in relay via `docker compose --profile tunnel`)
+  remains BLOCKED on owner-decision #1 + `stack-guardian` (Rule 16).**
 - [ ] **Real accounts with email** — add an email to accounts (register/login, unique,
   bcrypt unchanged). Unlocks **invite/DM by email** (the lookup is already identifier-based:
   username + user id work today; email is the one-line `WHERE email=$1` branch once stored)
