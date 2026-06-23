@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 247) — steady-state reached: spec the next feature, don't mine for churn
+
+5th consecutive tick this session (243 emoji-autocomplete → 244 QA-fix+CI → 245 underline → 246
+bold-italic → 247). Confirmed via a full GOAL.md survey that the SMALL-parity backlog is now closed:
+markdown emphasis set complete, unread/roles/group-DMs/login/settings/voice-video all DONE, and the
+remaining `[ ]` items are large owner-steerable epics (audio SFU — needs stack-guardian/Rule 16;
+tunneling; accounts/Cloud) or owner-gated (the header-icon redesign). No clean, low-risk, autonomous
+SHIP was available without either mining marginal markdown edge cases (churn) or starting an epic
+without owner direction (premature). **Chose to SPEC the highest-value remaining autonomous feature —
+unicode `:emoji:` shortcodes — rather than force a ship or log an empty green tick.** Wrote a full
+implementable plan (data-source/Rule-A, render+autocomplete integration, precedence) so a fresh-context
+tick (or the owner) builds it cleanly; queued NEXT UP.
+
+**Loop lesson (logged):** a mature product reaches a point where the disciplined output of a tick is a
+SPEC, not a ship. The three honest options when the small backlog is exhausted are: (a) spec the next
+real feature (forward progress, zero regression risk — chosen), (b) start an epic (needs owner steer —
+deferred), (c) green-tick + widen (valid, but a ready-to-build spec serves the re-firing owner better).
+Manufacturing a marginal change just to have a commit is the one WRONG option (Rule 10 anti-churn).
+
+**Process note:** flagged to the owner (in the tick report) that the loop has hit steady-state and the
+next high-value work needs their steer (pick an epic) — and that this is the 5th deep tick, so a `/clear`
+before the next `/loop` would refresh context (durable state survives). The loop honestly reporting
+"I've run out of clean autonomous work, here's what needs your decision" is better than inventing work.
+
 ## 2026-06-22 (iter 246) — ***bold italic***; make the impl match the test's observation model
 
 Continued closing the markdown emphasis set after underline (245): `***text***` was mis-rendering

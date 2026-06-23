@@ -51,6 +51,16 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   path intact); AI-vision confirmed the menu renders cleanly above the composer. Shipped + railway up +
   rollout-verified.
 
+- [ ] **NEXT UP — unicode `:emoji:` shortcodes (SPEC READY, iter 247).** Standard emoji from shortcodes
+  (`:joy:`→😂, `:fire:`→🔥) in every channel/DM + in the `:`-autocomplete — currently only CUSTOM server
+  emoji resolve; a plain `:joy:` renders as literal text. The natural completion of the custom-emoji +
+  `:`-autocomplete line. Full implementable plan in `SPEC.md` "Unicode `:emoji:` shortcodes": vendor a
+  static shortcode→char map (Rule A, no runtime dep, lazy-loaded), render in markdown.tsx (custom emoji
+  take precedence), merge into the iter-243 autocomplete. Medium + a data dependency → spec'd for a
+  fresh-context tick. **On resume: implement this spec** (build → vitest + browser QA + AI-vision → ship
+  + railway + rollout-verify), OR the owner may instead steer the loop at a larger epic (audio SFU /
+  tunneling / accounts — see "Platform & hosting" + the component north stars).
+
 - [~] **Group DMs (Discord parity, highest-ROI per tick-159 plan)** — **slice 1 backend DONE (iter
   160):** generalized the 2-member DM model (`kind='dm'` channels) to N members with **no schema change**
   (the `channel_members` join table + per-channel WS hub are already N-member). `DMChannel` gains

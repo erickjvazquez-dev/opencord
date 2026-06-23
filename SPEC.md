@@ -2937,3 +2937,49 @@ guard the coordination:** assert the EXISTING behaviors still hold with the new 
 autocomplete still works, ArrowUp-still-edits-last on an empty draft, Esc still closes a panel — these are
 the breakage risk, so the QA must re-exercise them in the same run. **Blast radius:** Chat.tsx (composer),
 styles.css, a vitest file, qa/browser.mjs. No backend, no new endpoint (reuses the loaded emoji map).
+
+## Unicode `:emoji:` shortcodes (chat parity) — SPEC for a fresh-context tick (iter 247)
+
+**Why:** Discord renders STANDARD unicode emoji from shortcodes — `:joy:` → 😂, `:fire:` → 🔥,
+`:thumbsup:` → 👍 — in every channel/DM, and offers them in the `:`-autocomplete. Opencord renders
+`:name:` as an image ONLY for CUSTOM server-uploaded emoji (the per-server map); a standard shortcode
+like `:joy:` in `#general` or a DM renders as literal `:joy:` text, and the iter-243 `:`-autocomplete
+only suggests custom server emoji. This is the most-noticed remaining emoji-parity gap — the natural
+completion of the custom-emoji (iters 150–155) + `:`-autocomplete (iter 243) line of work.
+
+**Why spec-first (Rule 6):** the change has a DATA dependency (a complete shortcode→unicode map, ~1800
+entries) and touches two integration points (the markdown `:slug:` render + the composer autocomplete)
+plus a precedence rule and a bundle-size decision — more than a one-rule add. Deferred to a fresh-context
+tick (the session that spec'd this had already shipped 4 items and was context-deep).
+
+**Data source (Rule A / Rule 16 — zero required external service, no heavyweight runtime dep):**
+- Vendor a STATIC map `web/src/emojiData.ts` mapping shortcode → unicode char, generated ONCE (offline)
+  from a known open dataset (the gemoji / Unicode CLDR short-name list that GitHub & Discord use) and
+  COMMITTED to the repo. NO runtime npm dependency (Rule A: must work offline / self-hosted). If a
+  generator script is used, it runs offline and only its vendored output ships.
+- Bundle size: a full name→char map is ~40–60 KB raw / ~15–20 KB gzipped. Prefer **lazy-loading** it via
+  a dynamic `import()` on the first `:` typed (or first render needing it), so the initial SPA bundle
+  isn't bloated — the autocomplete already only needs the map once a `:` token is active.
+
+**Design:**
+1. **Render (`markdown.tsx` `:slug:` rule):** when a `:name:` token is NOT in the active server's
+   custom-emoji map, look it up in the unicode map; if found, render the unicode CHARACTER (a plain text
+   node, or a `<span class="emoji-unicode">` only if sizing is wanted) instead of leaving it literal.
+   **Custom server emoji take PRECEDENCE** (a server may override `:fire:` with its own image — matches
+   Discord). XSS-safe (a unicode string, React-escaped). Works in EVERY channel/DM (not server-scoped),
+   unlike custom emoji. Unknown names stay literal (current behavior).
+2. **Autocomplete (`Chat.tsx` `refreshAutocomplete` + the `.emoji-suggestion` menu):** extend the
+   candidate source to MERGE unicode shortcode names with custom server emoji (custom first, then unicode
+   `startsWith` matches, deduped by name, capped ~8). Menu row: the unicode char (or `EmojiImg` for
+   custom) + `:name:`. `acceptEmoji` is unchanged (it already inserts `:name: `).
+3. **Precedence/collision:** a custom server emoji shadows a unicode shortcode of the same name (server
+   override), in BOTH render and autocomplete.
+
+**Verify (Rule 14):** vitest — unicode lookup (`:joy:`→😂, unknown→literal, custom shadows unicode); the
+markdown render; the merged autocomplete candidate list. Browser QA — send `:joy:` in `#general` (a
+channel with NO custom emoji) → renders 😂; type `:fir` → menu lists `:fire:` → accept → renders 🔥;
+re-confirm a CUSTOM `:qa_emoji:` still renders/precedes. AI-vision the rendered unicode emoji + the menu.
+**Blast radius:** `web/src/markdown.tsx`, `web/src/components/Chat.tsx` (refreshAutocomplete + menu),
+NEW `web/src/emojiData.ts` (the vendored map), `markdown.test.tsx`, `emojiAutocomplete.test.ts`,
+`qa/browser.mjs`, maybe `styles.css`. No backend. Reuses the iter-243 autocomplete + iters-150–155
+custom-emoji render infra.
