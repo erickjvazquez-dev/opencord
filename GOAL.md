@@ -439,6 +439,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   ArrowUp otherwise moves the caret, and the @mention dropdown still owns ArrowUp while open.
   Browser-QA `4b` (send → ArrowUp → edit input pre-filled → Escape) + AI-vision verified; shipped +
   rollout-verified.
+- [x] **Per-channel composer drafts DONE (iter 257, Discord parity)** — an unsent draft is now kept
+  PER channel/DM/thread instead of one shared `draft` string leaking across channels. A channelId-change
+  effect stashes the leaving channel's still-live draft (via a `draftRef` mirror, since switching never
+  reset `draft`) and restores the target's, resyncing the auto-grow height; covers EVERY switch path
+  (sidebar, DM, thread, fallbacks) since it keys off `channelId`. tsc + vitest 163/163; browser-QA `3f1b`
+  (type in #general → switch to #pgseed shows empty composer → back to #general restores the draft) +
+  AI-vision; shipped + railway + rollout-verified.
 - [x] Reconnecting banner + faster offline detection DONE (iter 202) — a debounced "Reconnecting…"
   amber bar (under the header, Discord-style) shows only when the socket stays down past a 1.5s grace
   window (a channel-switch reconnect never flashes it); clears on recovery. Plus: the browser `offline`

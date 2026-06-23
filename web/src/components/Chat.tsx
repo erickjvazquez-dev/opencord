@@ -242,6 +242,13 @@ export function Chat({
   // NOT flash a banner; only a disconnect that persists past the grace window surfaces one.
   const [reconnecting, setReconnecting] = useState(false)
   const [draft, setDraft] = useState('')
+  // Per-channel composer drafts (Discord parity): unsent text is kept per channel/DM/thread and
+  // restored on return, instead of one shared draft leaking across channels. Keyed by channel id.
+  // draftRef mirrors the live draft so the channel-switch effect can stash the LEAVING channel's
+  // text (still in `draft` at switch time, since switching doesn't reset it).
+  const draftsRef = useRef<Map<number, string>>(new Map())
+  const draftRef = useRef('')
+  draftRef.current = draft
   // Attachments staged in the composer (sent over HTTP multipart, not the WS).
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
@@ -435,6 +442,28 @@ export function Chat({
       /* leave servers as-is on failure */
     }
   }
+
+  // Per-channel drafts (Discord parity): on ANY channel switch (sidebar, DM, thread, or a
+  // fallback that changes channelId), stash the leaving channel's still-live draft and load the
+  // target's saved draft. Runs on channelId change; at that point `draftRef` still holds the
+  // leaving channel's text (switching doesn't reset `draft`), so we save it, then restore.
+  const prevChannelRef = useRef<number | null>(null)
+  useEffect(() => {
+    const prev = prevChannelRef.current
+    prevChannelRef.current = channelId
+    if (prev == null || prev === channelId) return
+    draftsRef.current.set(prev, draftRef.current)
+    setDraft(draftsRef.current.get(channelId ?? -1) ?? '')
+    // Resync the auto-grow textarea height to the restored value (a multi-line draft needs
+    // its taller height; an empty one collapses back).
+    requestAnimationFrame(() => {
+      const ta = composerRef.current
+      if (ta) {
+        ta.style.height = 'auto'
+        ta.style.height = `${ta.scrollHeight}px`
+      }
+    })
+  }, [channelId])
 
   useEffect(() => {
     fetchChannels(token)

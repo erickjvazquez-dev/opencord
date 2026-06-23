@@ -5717,3 +5717,33 @@ transition race. Next browser-QA tick: if it recurs, harden it (z-index/await th
 panel detached before waiting for the composer). Do NOT add an unverified fix while it's unreproducible.
 
 **Cadence:** shipped a real UI fix (deploys) → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 257) — per-channel composer drafts (Discord parity); covered the flaky-step from iter 256 incidentally
+
+Closed a real parity gap + minor bug: the composer used ONE shared `draft` string, so unsent text leaked
+across channels (type in #general, switch away → it followed you; switch back → not restored). Discord
+keeps drafts per channel. Component: **UI / chat parity**.
+
+Fix approach worth noting: instead of hooking the ~7 `setChannelId` call sites (sidebar, DM, thread,
+fallbacks), used a single `channelId`-change EFFECT that covers them all. The trick: when the effect
+fires, the leaving channel's text is still in `draft` (switching never resets it), captured via a
+`draftRef` mirror — so the effect stashes `draftRef.current` under the previous channel id, then restores
+the target's. Self-correcting on send (no explicit delete needed: the next switch saves the now-empty
+live draft). **Playbook: to react to a state transition where you need the OLD value, mirror the value in
+a ref and read it in the [newValue] effect — the ref still holds the pre-transition value when the effect
+runs.** Far less error-prone than patching every transition call site.
+
+**Loop-process note:** this tick's browser QA also passed the iter-256 flaky composer-after-close step
+(browser=0 clean) — so the z-index toolbar fix + general settling may have reduced that flakiness, or it
+was a one-off. Still watching it; not yet hardened (unreproduced).
+
+**Highest-value follow-up (logged):** drafts are in-memory only (lost on page reload). Discord persists
+them to localStorage so a refresh keeps them. A small enhancement: mirror `draftsRef` to localStorage
+(keyed by user+channel), rehydrate on mount. Frontend-only, ~localStorage round-trip; next polish slice.
+
+**QA-coverage note:** composer now covered for multi-line, emoji insert, autocomplete, and per-channel
+drafts. Least-covered composer behavior: draft survival across a page RELOAD (the localStorage follow-up).
+
+**Cadence:** shipped a real UI feature (deploys) → ACTIVE (1800s).

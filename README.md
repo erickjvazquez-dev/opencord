@@ -21,7 +21,8 @@ run one command, and you have your own real-time chat server.
 > server `:name:`, with a `:`-autocomplete and a searchable composer picker;
 > emoji-only messages render jumbo) ·
 > **file & image attachments** (local-disk, access-gated,
-> inline images) · **grouped messages** (consecutive same-author) · **pinned messages** ·
+> inline images) · **per-channel drafts** (unsent text kept per channel/DM/thread) ·
+> **grouped messages** (consecutive same-author) · **pinned messages** ·
 > **message search** (in-channel, with `from:` / `has:` / `before:` / `after:`
 > operators) · **typing indicators** · **unread indicators + @mention badges** ·
 > **presence** (online / idle / DnD / invisible) + **custom status** (text + emoji) ·

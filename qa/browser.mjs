@@ -512,6 +512,35 @@ async function main() {
   await page.setViewportSize({ width: 1100, height: 820 }) // restore the desktop viewport
   await page.waitForTimeout(250)
 
+  // 3f1b — Per-channel composer drafts (Discord parity, iter 257): an unsent draft is kept PER
+  // channel. Type in #general, switch to #pgseed (its composer must be EMPTY — no shared-draft
+  // leak), switch back → the #general draft is restored. Regression guard for the channel-switch
+  // draft save/restore effect.
+  step('per-channel drafts: a #general draft survives switching to #pgseed and back')
+  const draftGenComposer = page.getByPlaceholder(/Message #general/)
+  await draftGenComposer.fill('draft kept in general')
+  const draftPgChan = page.locator('.channel-item', { hasText: 'pgseed' }).first()
+  if ((await draftPgChan.count()) > 0) {
+    await draftPgChan.click()
+    const draftPgComposer = page.getByPlaceholder(/Message #pgseed/)
+    await draftPgComposer.waitFor({ timeout: 8000 })
+    check(
+      (await draftPgComposer.inputValue()) === '',
+      'switching to #pgseed shows an empty composer (the #general draft did NOT leak across)',
+    )
+    await page.locator('.channel-item', { hasText: 'general' }).first().click()
+    const draftGenAgain = page.getByPlaceholder(/Message #general/)
+    await draftGenAgain.waitFor({ timeout: 8000 })
+    await shot('03f1-draft-restored.png')
+    check(
+      (await draftGenAgain.inputValue()) === 'draft kept in general',
+      'returning to #general restores its per-channel draft',
+    )
+    await draftGenAgain.fill('') // leave the composer clean for later steps
+  } else {
+    check(false, 'pgseed channel present for the draft-persistence switch')
+  }
+
   // 3f2b — History pagination (iter 204/205): the seeded `pgseed` channel has 120 messages, so
   // opening it loads the newest 50 and shows the "↑ Load older" button. Discord-style, scrolling near
   // the TOP auto-loads the next page (iter 205) with NO click — the button is a visible fallback, the
