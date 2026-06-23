@@ -5,7 +5,7 @@ import {
   mergeEmojiCandidates,
   spliceEmoji,
 } from './emojiAutocomplete'
-import { UNICODE_EMOJI, unicodeEmoji } from './emojiData'
+import { UNICODE_EMOJI, unicodeEmoji, searchUnicodeEmoji } from './emojiData'
 
 describe('activeEmojiToken', () => {
   it('matches a :partial of >=2 chars at the start of the text', () => {
@@ -110,5 +110,38 @@ describe('mergeEmojiCandidates (custom precedence + unicode fill)', () => {
   })
   it('returns empty when nothing matches the query', () => {
     expect(mergeEmojiCandidates([], UNICODE_EMOJI.keys(), 'zzzznope', 8)).toEqual([])
+  })
+})
+
+describe('searchUnicodeEmoji (reaction picker search)', () => {
+  it('returns [name, char] pairs whose name CONTAINS the query (substring)', () => {
+    const res = searchUnicodeEmoji('heart')
+    const names = res.map(([n]) => n)
+    // substring match surfaces broken_heart / heartpulse, not just a prefix
+    expect(names).toContain('heart')
+    expect(names).toContain('broken_heart')
+    expect(res.every(([n]) => n.includes('heart'))).toBe(true)
+  })
+  it('returns the unicode char alongside each name', () => {
+    const res = searchUnicodeEmoji('joy')
+    expect(res).toContainEqual(['joy', '😂'])
+  })
+  it('is case-insensitive', () => {
+    expect(searchUnicodeEmoji('FIRE').some(([n]) => n === 'fire')).toBe(true)
+  })
+  it('respects the cap', () => {
+    expect(searchUnicodeEmoji('e', 5)).toHaveLength(5)
+  })
+  it('an empty query returns a default grid (first cap emoji)', () => {
+    expect(searchUnicodeEmoji('', 10)).toHaveLength(10)
+  })
+  it('returns [] when nothing matches', () => {
+    expect(searchUnicodeEmoji('zzzznope')).toEqual([])
+  })
+  it('every returned char is within the 16-byte reaction cap (validEmoji parity)', () => {
+    const enc = new TextEncoder()
+    for (const [, char] of searchUnicodeEmoji('', 9999)) {
+      expect(enc.encode(char).length).toBeLessThanOrEqual(16)
+    }
   })
 })

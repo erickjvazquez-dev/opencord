@@ -5534,3 +5534,31 @@ adjacent: jumbo emoji in a DM (render path identical — activeEmoji undefined �
 no browser-QA step sends an emoji-only message inside a DM specifically). Candidate for next tick.
 
 **Cadence:** shipped a real feature → ACTIVE (1800s).
+
+---
+
+## 2026-06-22 (iter 251) — searchable any-emoji reaction picker; blast-radius caught a shared-fixture break
+
+Shipped the searchable reaction picker (Discord parity): react with ANY of ~416 standard emoji via a
+search box, not just the 6 quick ones. Frontend-only — confirmed every map emoji ≤7 bytes (within the
+backend's 16-byte `validEmoji` cap) BEFORE building on that assumption, and encoded it as a vitest
+guard so a future map expansion can't silently offer an over-cap reaction. Component advanced: **chat/UI**.
+
+**Loop-process win (caught + FIXED this tick):** the first browser-QA run of the new step PASSED its own
+4 checks but CRASHED a downstream step — the new 🔥 reaction persisted on the shared `msg` fixture, so the
+later edit step's `.reaction.mine` locator matched 2 chips (strict-mode violation). The browser QA's
+shared-message fixture is stateful across steps; a step that ADDS state must restore it. Fixed by toggling
+the 🔥 off at the end of the step (which also added reaction-removal coverage). **Playbook add: when a new
+browser-QA step mutates a fixture reused by later steps (reactions/pins/edits on the shared `msg`, channel
+membership, draft state), leave the fixture as you found it — assert the mutation, then undo it — or use a
+dedicated throwaway message. A step that's green in isolation can still break the suite via shared state;
+always run the FULL `qa/run.sh`, never just the new step.**
+
+**Highest-value follow-up (logged):** the composer's 🙂 emoji button (`.emoji-picker-popover`) still shows
+ONLY custom server emoji — the same searchable-unicode treatment should be applied there next (insert the
+char / `:name:` into the composer). Now that `searchUnicodeEmoji` exists, it's a small, parallel slice.
+
+**QA-coverage note:** reactions now cover quick + custom + searched-unicode + removal. Least-tested
+adjacent: the composer emoji-picker popover has no unicode path yet (the follow-up above).
+
+**Cadence:** shipped a real feature → ACTIVE (1800s).

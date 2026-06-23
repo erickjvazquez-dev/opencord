@@ -92,7 +92,7 @@ import { NewGroupModal } from './NewGroupModal'
 import { RolesManagerModal } from './RolesManagerModal'
 import { dmTitle, dmIsGroup, dmOthers, dmMembersLabel } from '../dm'
 import { activeEmojiToken, matchEmojiNames, mergeEmojiCandidates, spliceEmoji } from '../emojiAutocomplete'
-import { UNICODE_EMOJI } from '../emojiData'
+import { UNICODE_EMOJI, searchUnicodeEmoji } from '../emojiData'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -256,6 +256,9 @@ export function Chat({
   // broadcast is count-only (mine=false), so we own this locally; seeded from history.
   const [myReactions, setMyReactions] = useState<Set<string>>(new Set())
   const [pickerFor, setPickerFor] = useState<number | null>(null)
+  // The reaction picker's emoji-search query (Discord parity: react with ANY standard
+  // emoji). Empty → show the quick set + custom; non-empty → filter the unicode map.
+  const [reactionQuery, setReactionQuery] = useState('')
   // Brief "copied!" confirmation on the message "copy text" hover action (clears after ~1.2s).
   const [copiedMsgId, setCopiedMsgId] = useState<number | null>(null)
   // Composer custom-emoji picker: open state for the popover above the textarea that
@@ -3857,7 +3860,12 @@ export function Chat({
                           {m.threadId != null ? 'open thread' : 'thread'}
                         </button>
                       )}
-                      <button onClick={() => setPickerFor((p) => (p === m.id ? null : m.id))}>
+                      <button
+                        onClick={() => {
+                          setReactionQuery('') // fresh search each open
+                          setPickerFor((p) => (p === m.id ? null : m.id))
+                        }}
+                      >
                         react
                       </button>
                       <button
@@ -3908,35 +3916,76 @@ export function Chat({
                   )}
                   {pickerFor === m.id && !m.deleted && (
                     <div className="emoji-picker">
-                      {QUICK_EMOJIS.map((e) => (
-                        <button
-                          key={e}
-                          className="emoji-option"
-                          onClick={() => {
-                            void toggleReaction(m, e)
+                      {/* Discord parity: search to react with ANY standard emoji. */}
+                      <input
+                        className="emoji-picker-search"
+                        autoFocus
+                        placeholder="Search emoji…"
+                        aria-label="search emoji"
+                        value={reactionQuery}
+                        onChange={(e) => setReactionQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            e.stopPropagation()
                             setPickerFor(null)
-                          }}
-                        >
-                          {e}
-                        </button>
-                      ))}
-                      {/* The active server's custom emoji — react with one as `custom:{id}`. */}
-                      {activeEmoji &&
-                        activeEmoji.size > 0 &&
-                        [...activeEmoji.entries()].map(([name, id]) => (
-                          <button
-                            key={`custom:${id}`}
-                            className="emoji-option"
-                            title={`:${name}:`}
-                            data-emoji-name={name}
-                            onClick={() => {
-                              void toggleReaction(m, `custom:${id}`)
-                              setPickerFor(null)
-                            }}
-                          >
-                            <EmojiImg token={token} id={id} alt={`:${name}:`} />
-                          </button>
-                        ))}
+                          }
+                        }}
+                      />
+                      <div className="emoji-picker-grid">
+                        {reactionQuery.trim() === '' ? (
+                          <>
+                            {QUICK_EMOJIS.map((e) => (
+                              <button
+                                key={e}
+                                className="emoji-option"
+                                onClick={() => {
+                                  void toggleReaction(m, e)
+                                  setPickerFor(null)
+                                }}
+                              >
+                                {e}
+                              </button>
+                            ))}
+                            {/* The active server's custom emoji — react as `custom:{id}`. */}
+                            {activeEmoji &&
+                              activeEmoji.size > 0 &&
+                              [...activeEmoji.entries()].map(([name, id]) => (
+                                <button
+                                  key={`custom:${id}`}
+                                  className="emoji-option"
+                                  title={`:${name}:`}
+                                  data-emoji-name={name}
+                                  onClick={() => {
+                                    void toggleReaction(m, `custom:${id}`)
+                                    setPickerFor(null)
+                                  }}
+                                >
+                                  <EmojiImg token={token} id={id} alt={`:${name}:`} />
+                                </button>
+                              ))}
+                          </>
+                        ) : (
+                          (() => {
+                            const results = searchUnicodeEmoji(reactionQuery, 48)
+                            if (results.length === 0)
+                              return <div className="emoji-picker-empty">No emoji found</div>
+                            return results.map(([name, char]) => (
+                              <button
+                                key={name}
+                                className="emoji-option"
+                                title={`:${name}:`}
+                                data-emoji-name={name}
+                                onClick={() => {
+                                  void toggleReaction(m, char)
+                                  setPickerFor(null)
+                                }}
+                              >
+                                {char}
+                              </button>
+                            ))
+                          })()
+                        )}
+                      </div>
                     </div>
                   )}
                   {!m.deleted && m.threadId != null && (

@@ -592,6 +592,40 @@ async function main() {
     'reaction count shows 1',
   )
 
+  // 3b1b — Searchable emoji reaction (Discord parity, iter 251): the reaction picker now has
+  // a search box; typing filters the full unicode emoji set so you can react with ANY emoji,
+  // not just the 6 quick ones. Regression guard for searchUnicodeEmoji + the picker search UI.
+  step('react → search "fire" → pick 🔥 → a 🔥 reaction chip appears')
+  await page.waitForTimeout(1500) // let the WS token bucket refill before another reaction
+  await msg.hover()
+  await msg.getByRole('button', { name: 'react' }).click()
+  const reactSearch = page.locator('.emoji-picker-search')
+  await reactSearch.waitFor({ timeout: 4000 })
+  check(await reactSearch.isVisible(), 'the reaction picker has a search box')
+  await reactSearch.fill('fire')
+  const fireOption = page.locator('.emoji-picker-grid .emoji-option', { hasText: '🔥' }).first()
+  await fireOption.waitFor({ timeout: 4000 })
+  await shot('03b1b-reaction-search.png')
+  check(await fireOption.isVisible(), 'typing "fire" surfaces the 🔥 emoji to react with')
+  // Only emoji whose name contains "fire" show — the quick 👍 is filtered out while searching.
+  check(
+    (await page.locator('.emoji-picker-grid .emoji-option', { hasText: '👍' }).count()) === 0,
+    'the quick 👍 is hidden while a search query is active (results are filtered)',
+  )
+  await fireOption.click()
+  const fireReaction = msg.locator('.reaction', { hasText: '🔥' })
+  await fireReaction.waitFor({ timeout: 8000 })
+  check(await fireReaction.isVisible(), 'reacting with the searched 🔥 adds a 🔥 reaction chip')
+  // Toggle it back off (also tests reaction removal) so the message keeps its single 👍 for
+  // the downstream edit/realtime steps (a stray second .reaction.mine breaks their locators).
+  await page.waitForTimeout(1500)
+  await fireReaction.click()
+  await fireReaction.waitFor({ state: 'detached', timeout: 8000 })
+  check(
+    (await msg.locator('.reaction', { hasText: '🔥' }).count()) === 0,
+    'clicking the 🔥 chip again removes the reaction (back to a single 👍)',
+  )
+
   // 3b2 — Copy text (Discord parity, iter 237): hover a message → "copy" writes the RAW
   // body to the clipboard and the button briefly confirms "copied!". Proves the action
   // works end-to-end (clipboard contents), not just that the button renders.

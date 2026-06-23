@@ -145,3 +145,20 @@ export const UNICODE_EMOJI: ReadonlyMap<string, string> = new Map(Object.entries
 export function unicodeEmoji(name: string): string | undefined {
   return UNICODE_EMOJI.get(name.toLowerCase())
 }
+
+// Substring search over shortcode names for the emoji picker (Discord-style "react with
+// any emoji" search box). Returns [name, char] pairs whose name CONTAINS the query
+// (case-insensitive), stable insertion order, capped. Substring (not startsWith) so
+// "heart" surfaces broken_heart / heartpulse too — more useful in a search field than the
+// autocomplete's prefix match. An empty query returns the first `cap` emoji (a default grid).
+export function searchUnicodeEmoji(query: string, cap = 40): [string, string][] {
+  const q = query.trim().toLowerCase()
+  const out: [string, string][] = []
+  for (const [name, char] of UNICODE_EMOJI) {
+    if (q === '' || name.includes(q)) {
+      out.push([name, char])
+      if (out.length >= cap) break
+    }
+  }
+  return out
+}

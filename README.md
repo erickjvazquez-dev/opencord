@@ -15,7 +15,8 @@ run one command, and you have your own real-time chat server.
 > channels under a members-only server; rename, delete, leave, transfer ownership) ·
 > **channel categories** (collapsible groups) · **direct messages** (private,
 > members-only) · live messaging with **edit & delete** (owner-only) · **emoji
-> reactions** (live counts) · **replies** + **jump-to-message** · **@mentions** with
+> reactions** (react with any standard emoji via a searchable picker + custom server
+> emoji, live counts) · **replies** + **jump-to-message** · **@mentions** with
 > autocomplete · **markdown** · **emoji shortcodes** (`:joy:`→😂 unicode + custom
 > server `:name:`, with `:`-autocomplete; emoji-only messages render jumbo) ·
 > **file & image attachments** (local-disk, access-gated,

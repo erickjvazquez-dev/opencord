@@ -703,7 +703,14 @@ item from here as the structural milestones above land.
 
 ### Messaging
 - [x] Send / receive in real time · edit / delete (owner-only) · typing indicators
-- [x] Reactions (emoji) — add/remove, per-viewer counts, live WS, client UI (quick palette + chips)
+- [x] Reactions (emoji) — add/remove, per-viewer counts, live WS, client UI (quick palette + chips).
+  **+ searchable any-emoji picker (DONE iter 251, Discord parity):** the per-message reaction picker now
+  has a search box — empty shows the 6 quick + custom server emoji; typing filters the full ~416-name
+  unicode map (`searchUnicodeEmoji`, substring match) so you can react with ANY standard emoji, not just
+  the quick set. Frontend-only (every map emoji ≤7 bytes, within the existing 16-byte `validEmoji` cap —
+  no backend change; a vitest guard asserts the byte invariant so a future map expansion can't silently
+  offer a reaction the server rejects). vitest 163/163 (+7), browser QA `3b1b` (search "fire"→🔥→react→
+  chip→toggle off) + AI-vision; shipped + railway + rollout-verified.
 - [x] Date dividers — Discord-style "Today" / "Yesterday" / full-date separators between calendar
   days in the message list (iter 146): client-only `dayLabel` (unit-tested incl. month boundary), a
   new day breaks same-author grouping; browser QA + AI-vision verified ("Today" divider renders).

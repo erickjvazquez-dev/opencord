@@ -1509,19 +1509,43 @@ button:disabled {
 }
 
 .emoji-picker {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 6px;
-  padding: 4px;
-  max-width: 320px; /* wraps to rows when a server has many custom emoji */
-  max-height: 160px;
-  overflow-y: auto;
-  width: fit-content;
+  padding: 6px;
+  width: 280px;
   background: var(--bg-elevated);
   border: 1px solid var(--bg-input);
   border-radius: var(--radius);
+}
+/* Discord-style "react with any emoji" search box. */
+.emoji-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.emoji-picker-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.emoji-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.emoji-picker-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 4px;
 }
 
 .emoji-option {
