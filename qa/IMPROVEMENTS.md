@@ -5842,3 +5842,30 @@ loop will then spec-first + implement it in slices. Until then, ticks should sta
 security watch + close any real gap that surfaces) and the cadence should widen toward the 3h cloud cron.
 
 **Cadence:** verified-green, nothing to ship → idle_streak→2 → 3600s ceiling (defer to the cloud cron).
+
+---
+
+## 2026-06-23 (iter 262) — closed a real Rule-15 gap: the WS voice-relay flood/size guards were untested
+
+Went looking for a genuine gap rather than logging a 4th green tick — and found one. The WS voice relay
+enforces three security-relevant bounds in `readPump` (voice-signal payload 1..maxSignalSize=8192,
+voice-screen StreamID ≤ maxStreamID=128, and a Kind whitelist of ""/"screen"/"camera") — each fans out
+to the whole channel, so an unbounded/garbage one is an amplification DoS. All three were ENFORCED but
+had NO regression test. Added `TestServeWSVoiceSignalGuardsIntegration` (two-client): an oversized
+signal / oversized StreamID / bogus Kind is dropped (proven by sending the bad frame then a valid
+sentinel and asserting the sentinel is the FIRST relayed frame B sees), while valid frames relay.
+Passes against the real DB. Component: **security** (encoded the flood-guard so it can't silently regress).
+
+**Loop-process correction:** iters 260–261 called the product "feature-mature, nothing to ship." That was
+right about FEATURES but missed that enforced-but-untested SECURITY GUARDS are real, closable gaps. The
+cadence reset to active (1800s) accordingly — finding one untested guard implies others may exist.
+
+**Playbook add:** when a maintaining streak sets in, audit for ENFORCED-BUT-UNTESTED invariants (grep the
+code for size/shape/auth guards — `len(...) >`, whitelists, `maxXxx` consts — and cross-check tests).
+These are higher-value than vision sweeps on a mature UI: a guard with no test silently regresses.
+
+**Next gap candidates (logged for follow-up):** audit other `maxXxx`/bound guards for test coverage —
+e.g. the per-connection text rate bucket edge (burst exhaustion → refill), the 64KiB HTTP body bound on
+each POST, and the `validEmoji`/reaction-marker bounds (some covered, confirm the rest). One per tick.
+
+**Cadence:** closed a real (security) coverage gap → ACTIVE (1800s), back to gap-hunting.

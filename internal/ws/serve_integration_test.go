@@ -1034,3 +1034,78 @@ func TestServeWSConnCapIntegration(t *testing.T) {
 			got, ws.MaxConnsPerUser, n)
 	}
 }
+
+// TestServeWSVoiceSignalGuardsIntegration is the Rule-15 regression guard for the voice
+// relay's size/shape bounds (enforced in readPump but previously untested): a voice-signal
+// payload must be 1..maxSignalSize bytes, a voice-screen StreamID ≤ maxStreamID, and a
+// voice-screen Kind must be ""/"screen"/"camera". A hostile/oversized/garbage frame is
+// DROPPED (never fanned out to the channel — each frame is amplified to every peer, so an
+// unbounded one is a DoS). Each case proves the drop by sending the bad frame, then a VALID
+// sentinel, and asserting the sentinel is the FIRST relayed frame B sees (the bad one never
+// arrived). SKIPS without DATABASE_URL.
+func TestServeWSVoiceSignalGuardsIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	_, aTok := h.user(t)
+	_, bTok := h.user(t)
+
+	connA, sA := h.dial(t, "?token="+aTok)
+	if connA == nil {
+		t.Fatalf("dial A failed (status %d)", sA)
+	}
+	defer connA.Close()
+	connB, sB := h.dial(t, "?token="+bTok)
+	if connB == nil {
+		t.Fatalf("dial B failed (status %d)", sB)
+	}
+	defer connB.Close()
+
+	type vframe struct {
+		Type     string          `json:"type"`
+		Signal   json.RawMessage `json:"signal"`
+		StreamID string          `json:"streamId"`
+		Kind     string          `json:"kind"`
+	}
+	readVoice := func(typ string) vframe {
+		t.Helper()
+		_ = connB.SetReadDeadline(time.Now().Add(4 * time.Second))
+		for {
+			_, data, err := connB.ReadMessage()
+			if err != nil {
+				t.Fatalf("waiting for %q on B: %v", typ, err)
+			}
+			var f vframe
+			if json.Unmarshal(data, &f) == nil && f.Type == typ {
+				return f
+			}
+		}
+	}
+	send := func(msg string) {
+		t.Helper()
+		if err := connA.WriteMessage(gws.TextMessage, []byte(msg)); err != nil {
+			t.Fatalf("A write %.30s: %v", msg, err)
+		}
+	}
+
+	// (1) voice-signal size guard: an oversized (>maxSignalSize) signal is dropped; a valid
+	// one that follows IS relayed → the first voice-signal B sees must be the sentinel.
+	send(`{"type":"voice-signal","signal":"` + strings.Repeat("x", 9000) + `"}`) // > maxSignalSize (8192)
+	send(`{"type":"voice-signal","signal":"OK_SENTINEL"}`)
+	if got := readVoice("voice-signal"); !strings.Contains(string(got.Signal), "OK_SENTINEL") {
+		t.Fatalf("expected the sentinel signal first (oversized signal must be dropped), got %s", got.Signal)
+	}
+
+	// (2) voice-screen StreamID guard: an oversized StreamID (>maxStreamID) is dropped; a
+	// valid voice-screen that follows IS relayed.
+	send(`{"type":"voice-screen","on":true,"streamId":"` + strings.Repeat("s", 200) + `","kind":"screen"}`) // > maxStreamID (128)
+	send(`{"type":"voice-screen","on":true,"streamId":"ok-stream","kind":"camera"}`)
+	if scr := readVoice("voice-screen"); scr.StreamID != "ok-stream" || scr.Kind != "camera" {
+		t.Fatalf("expected the valid voice-screen (oversized streamId dropped), got streamId=%q kind=%q", scr.StreamID, scr.Kind)
+	}
+
+	// (3) voice-screen Kind whitelist: a bogus kind is dropped; the next valid-kind frame IS relayed.
+	send(`{"type":"voice-screen","on":true,"streamId":"x","kind":"evil-injection"}`)
+	send(`{"type":"voice-screen","on":true,"streamId":"ok2","kind":"screen"}`)
+	if scr := readVoice("voice-screen"); scr.StreamID != "ok2" {
+		t.Fatalf("expected the valid-kind voice-screen (bogus kind dropped), got streamId=%q kind=%q", scr.StreamID, scr.Kind)
+	}
+}
