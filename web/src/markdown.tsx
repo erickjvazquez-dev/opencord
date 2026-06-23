@@ -6,6 +6,7 @@ import { EmojiImg } from './components/EmojiImg'
 // escapes all text and only a fixed set of safe tags/components is ever emitted:
 //
 //   ```fenced code```   `inline code`   **bold**   *italic*  _italic_  __underline__
+//   ***bold italic***
 //   ~~strike~~   ||spoiler||   @mention   :custom_emoji:   and  > blockquote  lines
 //
 // Anything else — including raw HTML like <script>…</script> — renders as literal
@@ -32,11 +33,12 @@ function Spoiler({ children }: { children?: ReactNode }): React.ReactElement {
   )
 }
 
+
 type InlineRule = {
   re: RegExp
   el?: string | React.ComponentType<{ children?: ReactNode }>
   literal?: boolean
-  kind?: 'mention' | 'link' | 'masklink' | 'emoji'
+  kind?: 'mention' | 'link' | 'masklink' | 'emoji' | 'bolditalic'
 }
 
 // Order matters: inline code first (its content is literal), then spoiler, then
@@ -52,6 +54,9 @@ const INLINE_RULES: InlineRule[] = [
   // Autolink only http(s):// — never javascript:/data:, so the href is always safe.
   { re: /https?:\/\/[^\s<]+/, kind: 'link' },
   { re: /\|\|([^|\n]+)\|\|/, el: Spoiler },
+  // Bold+italic `***x***` BEFORE bold so the triple delimiter wins (otherwise `**`
+  // matches at index 1 and `***x***` mis-renders as `*<strong>x</strong>*`).
+  { re: /\*\*\*([^*\n]+)\*\*\*/, kind: 'bolditalic' },
   { re: /\*\*([^*\n]+)\*\*/, el: 'strong' },
   { re: /~~([^~\n]+)~~/, el: 'del' },
   { re: /\*([^*\n]+)\*/, el: 'em' },
@@ -147,6 +152,16 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
         }),
       )
     }
+  } else if (rule.kind === 'bolditalic') {
+    // ***x*** → <strong><em>x</em></strong>. Emitted as nested elements (not a wrapper
+    // component) so the rendered tree literally carries both tags.
+    out.push(
+      React.createElement(
+        'strong',
+        { key: `md${ctx.n++}` },
+        React.createElement('em', null, ...renderInline(m[1], ctx)),
+      ),
+    )
   } else {
     const children = rule.literal ? [m[1]] : renderInline(m[1], ctx)
     out.push(React.createElement(rule.el as string, { key: `md${ctx.n++}` }, ...children))

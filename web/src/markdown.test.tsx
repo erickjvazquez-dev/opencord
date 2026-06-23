@@ -159,6 +159,32 @@ describe('renderMarkdown underline (__text__, Discord parity)', () => {
   })
 })
 
+describe('renderMarkdown bold+italic (***text***, Discord parity)', () => {
+  it('renders ***text*** as <strong><em>, with no literal asterisks', () => {
+    const out = renderMarkdown('***wow***')
+    expect(hasTag(out, 'strong')).toBe(true)
+    expect(hasTag(out, 'em')).toBe(true)
+    expect(tagText(out, 'strong')).toBe('wow')
+    expect(allText(out)).not.toContain('*')
+  })
+  it('keeps **bold** as <strong> only (no <em>)', () => {
+    const out = renderMarkdown('**justbold**')
+    expect(hasTag(out, 'strong')).toBe(true)
+    expect(hasTag(out, 'em')).toBe(false)
+  })
+  it('keeps *italic* as <em> only (no <strong>)', () => {
+    const out = renderMarkdown('*justitalic*')
+    expect(hasTag(out, 'em')).toBe(true)
+    expect(hasTag(out, 'strong')).toBe(false)
+  })
+  it('renders ***text*** inline among words', () => {
+    const out = renderMarkdown('a ***mid*** b')
+    expect(tagText(out, 'strong')).toBe('mid')
+    expect(allText(out)).toContain('a ')
+    expect(allText(out)).toContain(' b')
+  })
+})
+
 // Every <div> whose className contains `cls` (headers/subtext render as styled divs).
 function divsWithClass(node: ReactNode, cls: string) {
   return flatten(node).filter(
