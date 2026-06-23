@@ -5780,3 +5780,34 @@ priority; only if it ever looks janky in an AI-vision pass.
 persistence. The localStorage parse is unit-tested adversarially. Well-covered now.
 
 **Cadence:** shipped a real UI feature (deploys) → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 259) — closed the DM composer-feature coverage gap; corrected the stale TOP PRIORITY intro
+
+Track-0 coverage tick (the feature/parity backlog is largely done or big-epic/owner-gated, so the
+highest-value move was closing a real QA gap, not forcing a speculative feature). The recent composer
+features — unicode `:emoji:` render, the 🙂 picker, per-channel drafts — were only ever exercised in
+#general / server channels; a DM has NO server (activeEmoji undefined), an untested context. Added
+browser-QA `7j4`: open a 1:1 DM → `:joy:`→😂 renders, the 🙂 picker offers unicode `:fire:`, and a DM
+draft stays isolated from #general. All passed (no DM-context bug — the features are context-agnostic,
+as the code implied) + AI-vision. DMs (a primary surface) now have composer regression coverage.
+
+**Decision note (anti-speculation, Rule 6/Karpathy):** considered "Real accounts with email" (a roadmap
+`[ ]`) but DECLINED it this tick — there is no consumer yet (no password-reset / email-notify / Cloud
+tier), so adding an email column now would be speculative infra. Deferred until a feature needs it.
+Also REASSESSED the long-queued WS serial-reconnect per-user rate bucket as LOW-ROI: the iter-254 conn
+cap (≤10 sockets) + the per-reconnect cost (handshake + 2 DB queries for +5 burst) already bound the
+amplification, and a per-user bucket would break the lock-free per-connection design for a self-
+throttling threat. Dropping it from the queue rather than re-deferring.
+
+**Docs-sync:** corrected the TOP PRIORITY intro — it still claimed "no settings surface and the login
+page is a bare card," both DONE (verified by AI-vision this tick: Settings.tsx + a polished Auth.tsx).
+Stale priority intros make future ticks chase non-gaps; keep them current.
+
+**Highest-value follow-up (logged):** the product is feature-mature; the next frontier is the **component
+north stars** (audio: the opt-in LiveKit SFU path exists — exercise/verify the mesh→SFU transition; or
+infra: one-command scale). These need specs + likely multi-tick plans. Next substantive feature tick
+should spec one rather than continue small polish.
+
+**Cadence:** QA-coverage + doc fix (test-only, no deploy) but a real repo change → ACTIVE (1800s).

@@ -2444,6 +2444,62 @@ async function main() {
     'deleting a server removes it from the sidebar',
   )
 
+  // 7j4 — Composer feature-set inside a 1:1 DM (coverage gap, iter 259): the recent composer
+  // features (unicode `:emoji:` render, the 🙂 picker, per-channel drafts) were only ever
+  // exercised in #general / server channels. A DM has NO server, so `activeEmoji` is undefined
+  // — exercise them here to prove they're context-agnostic (unicode renders, the picker offers
+  // unicode-only, and drafts stay isolated between the DM and a channel).
+  step('DM composer: unicode :joy:→😂, the 🙂 picker (unicode), and per-channel drafts all work in a 1:1 DM')
+  const dmPeer = 'qadm' + String(Date.now()).slice(-6)
+  await page.evaluate(async (n) => {
+    await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: n, password: 'hunter2' }),
+    })
+  }, dmPeer)
+  await page.locator('.add-channel', { hasText: 'New DM' }).click()
+  await page.locator('.group-modal').waitFor({ timeout: 4000 })
+  const dmChip = page.locator('.group-chip-input')
+  await dmChip.click()
+  await dmChip.fill(dmPeer)
+  await dmChip.press('Enter')
+  await page.locator('.group-modal').getByRole('button', { name: /Create DM/ }).click()
+  await page.locator('.group-modal').waitFor({ state: 'detached', timeout: 8000 })
+  const dmComposer = page.getByPlaceholder('Message @' + dmPeer)
+  await dmComposer.waitFor({ timeout: 8000 })
+  // (a) a unicode shortcode renders the char in a DM (markdown emoji=undefined → unicode path)
+  await dmComposer.fill(':joy: hi from a dm')
+  await page.getByRole('button', { name: 'Send' }).click()
+  const dmJoyMsg = page.locator('.message .body', { hasText: 'hi from a dm' }).last()
+  await dmJoyMsg.locator('.emoji-unicode', { hasText: '😂' }).waitFor({ timeout: 8000 })
+  check(true, 'unicode :joy: renders 😂 inside a 1:1 DM (no custom-emoji map present)')
+  // (b) the 🙂 composer picker is present + offers unicode emoji in a DM (no custom server emoji)
+  await page.getByRole('button', { name: 'insert emoji' }).click()
+  const dmPickSearch = page.locator('.emoji-picker-popover .emoji-picker-search')
+  await dmPickSearch.waitFor({ timeout: 4000 })
+  await dmPickSearch.fill('fire')
+  const dmFireOpt = page.locator('.emoji-picker-popover-grid .emoji-picker-item[data-emoji-name="fire"]')
+  await dmFireOpt.waitFor({ timeout: 4000 })
+  check(await dmFireOpt.isVisible(), 'the composer 🙂 picker offers unicode :fire: in a DM')
+  await dmFireOpt.click()
+  await dmComposer.click() // outside-click closes the picker
+  // (c) per-channel draft isolation across a DM↔channel switch: the DM draft must NOT leak to #general
+  await dmComposer.fill('draft only in this dm')
+  await shot('07j4-dm-composer.png')
+  await page.locator('.channel-item', { hasText: 'general' }).first().click()
+  const dmGenComposer = page.getByPlaceholder(/Message #general/)
+  await dmGenComposer.waitFor({ timeout: 8000 })
+  let dmGenEmpty = false
+  for (let i = 0; i < 20; i++) {
+    if ((await dmGenComposer.inputValue()) === '') {
+      dmGenEmpty = true
+      break
+    }
+    await page.waitForTimeout(100)
+  }
+  check(dmGenEmpty, '#general composer is empty after the DM — the DM draft did not leak into the channel')
+
   // 7k — Group DMs (v0.6 slice 2): create a group from the "+ New DM" modal and see it
   // rendered in the DM list titled by its members (groups are unnamed). Register two extra
   // users first so there are real people to add.

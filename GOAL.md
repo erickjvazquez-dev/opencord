@@ -33,9 +33,14 @@ tunnel, paid cloud only for 24/7 hosting.**
 highest unchecked item BELOW before pulling from `## Now` / `## Next` / the parity backlog — but
 keep doing the loop's normal health/QA/security work *alongside* it (don't drop the gates). Every
 UI slice ships the usual way: spec-first (`SPEC.md`), build the minimal Discord-faithful thing,
-then **browser QA + AI-vision verify** the rendered result before "done" (Rule 14). Today the
-account/voice controls are scattered in the 2604-LOC `Chat.tsx` header + voice bar; there is no
-settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settings + UI polish".
+then **browser QA + AI-vision verify** the rendered result before "done" (Rule 14).
+**STATUS (verified iter 259):** the original triggers are DONE — the **Settings surface exists**
+(`Settings.tsx`: avatar/status/presence/voice), the **login page is polished** (`Auth.tsx`:
+branded card, tagline, password reveal, spinner — AI-vision-confirmed, NOT a bare card), and the
+emoji/composer parity line is complete (custom+unicode emoji, autocomplete, jumbo, reaction +
+composer pickers, per-channel drafts incl. reload-persistence). The remaining flagged UI-parity
+item is the owner-gated header-icon redesign below; otherwise pull from the parity backlog / the
+component north stars. (Spec history: `SPEC.md` "User Settings + UI polish".)
 
 - [x] **emoji `:`-autocomplete in the composer (DONE iter 243, Discord parity).** Typing `:partial`
   (≥2 chars) in the composer pops a suggestion menu of this server's custom emoji; ArrowUp/Down moves the
