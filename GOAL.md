@@ -390,7 +390,13 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
 
 ## Next (v0.3 — Roles & Polish)
 
-- [x] Rate limiting + abuse protection — per-connection WS token bucket (Rule 15)
+- [x] Rate limiting + abuse protection — per-connection WS token bucket (Rule 15); **+ per-user
+  connection cap (iter 254):** the hub bounds one user to `MaxConnsPerUser=10` concurrent sockets,
+  evicting their OLDEST beyond the cap — closes the resource-exhaustion DoS (unbounded sockets, each =
+  2 goroutines + send buffer + history fetch) and the reconnect-storm rate-bucket-churn that the
+  per-connection bucket alone couldn't stop. Reproduced (13 sockets all registered, uncapped) → fixed →
+  re-verified (capped at 10, oldest evicted, newest survive so a legit reconnect always connects);
+  `TestServeWSConnCapIntegration` is the regression guard.
 - [x] **Trojan-Source / bidi-spoofing hardening (Rule 15, iter 216).** Message bodies could carry
   Unicode bidirectional override/embedding/isolate controls (U+202A–U+202E, U+2066–U+2069 — CVE-2021-42574),
   which reorder how a message renders vs. its logical content (spoofing a URL/quoted line). The server now

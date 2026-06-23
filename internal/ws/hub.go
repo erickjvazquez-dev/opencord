@@ -69,6 +69,13 @@ type onlineReq struct {
 	reply chan map[int64]bool
 }
 
+// connCountReq asks the hub how many live sockets a user currently holds — introspection
+// for the per-user connection cap (MaxConnsPerUser). Answered on the hub goroutine.
+type connCountReq struct {
+	userID int64
+	reply  chan int
+}
+
 // voiceReq asks the hub for the in-voice user ids of each of the given channels (presence
 // across channels — used by the sidebar, since a client's WS only covers its active channel).
 type voiceReq struct {
@@ -96,9 +103,13 @@ type Hub struct {
 	online     chan onlineReq
 	voice      chan voiceReq
 	toUser     chan userMessage
+	connCount  chan connCountReq
 	// voiceMembers tracks who is in the voice call per channel (channelID → {userID}).
 	// Mutated ONLY on the Run goroutine (like clients), so it needs no lock.
 	voiceMembers map[int64]map[int64]bool
+	// connSeq is a monotonic counter stamped onto each client at register time (oldest =
+	// smallest seq), so the per-user cap evicts the oldest first. Hub-goroutine only.
+	connSeq int64
 }
 
 func NewHub(store *chat.Store) *Hub {
@@ -113,6 +124,7 @@ func NewHub(store *chat.Store) *Hub {
 		online:       make(chan onlineReq),
 		voice:        make(chan voiceReq),
 		toUser:       make(chan userMessage),
+		connCount:    make(chan connCountReq),
 		voiceMembers: make(map[int64]map[int64]bool),
 	}
 }
@@ -179,7 +191,12 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case c := <-h.register:
+			h.connSeq++
+			c.seq = h.connSeq
 			h.clients[c] = true
+			// Bound this user's concurrent sockets (Rule B/15): evict their oldest beyond
+			// the cap. The just-registered client has the highest seq, so it always survives.
+			h.enforceConnCap(c.user.ID)
 			h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
 			// Tell the new client about any call already in progress on this channel.
 			if len(h.voiceMembers[c.channelID]) > 0 {
@@ -229,6 +246,14 @@ func (h *Hub) Run() {
 				set[c.user.ID] = true
 			}
 			req.reply <- set
+		case req := <-h.connCount:
+			n := 0
+			for c := range h.clients {
+				if c.user.ID == req.userID {
+					n++
+				}
+			}
+			req.reply <- n
 		case req := <-h.voice:
 			out := make(map[int64][]int64)
 			for _, cid := range req.channelIDs {
@@ -257,6 +282,40 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// enforceConnCap drops a user's OLDEST sockets until at most MaxConnsPerUser remain
+// (Rule B/15 — bound one user's concurrent connections against resource-exhaustion and
+// reconnect-storm rate-bucket churn). Runs on the hub goroutine. Mirrors the unregister/
+// evict drop (delete + close done): writePump then sends a Close frame and the dropped
+// client's deferred unregister becomes a safe no-op. Emits presence for each affected channel.
+func (h *Hub) enforceConnCap(userID int64) {
+	var conns []*Client
+	for c := range h.clients {
+		if c.user.ID == userID {
+			conns = append(conns, c)
+		}
+	}
+	if len(conns) <= MaxConnsPerUser {
+		return
+	}
+	sort.Slice(conns, func(i, j int) bool { return conns[i].seq < conns[j].seq }) // oldest first
+	for _, c := range conns[:len(conns)-MaxConnsPerUser] {
+		if _, ok := h.clients[c]; ok {
+			delete(h.clients, c)
+			close(c.done)
+			h.emitToChannel(c.channelID, Event{Type: "presence", Online: h.countInChannel(c.channelID)})
+			h.setVoiceMember(c.channelID, c.user.ID, false) // a dropped socket leaves voice
+		}
+	}
+}
+
+// ConnCountForUser returns how many live WS connections userID currently holds. Built on
+// the hub goroutine (no lock) — introspection for the per-user connection cap.
+func (h *Hub) ConnCountForUser(userID int64) int {
+	reply := make(chan int, 1)
+	h.connCount <- connCountReq{userID: userID, reply: reply}
+	return <-reply
 }
 
 // setVoiceMember adds/removes userID to channelID's voice set and broadcasts the new

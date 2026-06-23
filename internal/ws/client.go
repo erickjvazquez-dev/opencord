@@ -39,6 +39,16 @@ const (
 	voiceRefillPerSec = 50.0
 )
 
+// MaxConnsPerUser bounds how many concurrent WebSocket connections ONE user may hold
+// (Rule B/15). The per-connection token bucket above throttles a single socket, but it's
+// per-connection: without this cap a single authenticated user could open unbounded
+// sockets — each costs 2 goroutines + a 32-slot send buffer + a history fetch — to
+// exhaust the server, OR churn reconnects to keep getting a fresh rate-limit bucket. The
+// hub evicts a user's OLDEST socket past this cap (so a legitimate reconnect after a
+// network blip still connects; only stale/abusive excess is dropped). Generous enough for
+// real multi-tab / multi-device use (each tab is ~1 socket) while bounding abuse.
+const MaxConnsPerUser = 10
+
 // CheckOrigin is permissive because in production the browser talks to the
 // gateway through the same-origin nginx proxy; tighten this if you expose the
 // gateway cross-origin.
@@ -54,6 +64,9 @@ type Client struct {
 	send       chan []byte
 	user       auth.User
 	channelID  int64
+	// seq is a hub-assigned monotonic registration order, used to evict a user's OLDEST
+	// socket first when they exceed MaxConnsPerUser. Set + read only on the hub goroutine.
+	seq        int64
 	rateTokens float64
 	rateLast   time.Time
 	// Separate token bucket for voice signaling frames (see voiceBurst).

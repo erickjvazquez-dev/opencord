@@ -993,3 +993,44 @@ func TestServeWSThreadFanoutIntegration(t *testing.T) {
 		t.Fatal("member C should receive A's thread message")
 	}
 }
+
+// TestServeWSConnCapIntegration is the per-user connection-cap guard (Rule B/15). A single
+// authenticated user opening more than MaxConnsPerUser sockets must NOT accumulate them
+// unbounded — the hub evicts their oldest so the live count stays capped. This bounds a
+// resource-exhaustion DoS (each socket = 2 goroutines + a send buffer + a history fetch)
+// and a reconnect-storm that would otherwise keep earning a fresh per-connection rate
+// bucket. The newest MaxConnsPerUser survive (a legitimate reconnect always connects); only
+// the stale/abusive excess is dropped.
+func TestServeWSConnCapIntegration(t *testing.T) {
+	h := newWSHarness(t)
+	u, tok := h.user(t)
+	q := "?token=" + tok
+
+	// Open the cap + 3 connections for the SAME user, reading each history frame first so
+	// we know the hub processed that register (and any eviction it triggered) in order.
+	n := ws.MaxConnsPerUser + 3
+	conns := make([]*gws.Conn, 0, n)
+	for i := 0; i < n; i++ {
+		conn, status := h.dial(t, q)
+		if conn == nil {
+			t.Fatalf("dial %d failed (status %d)", i, status)
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		if _, _, err := conn.ReadMessage(); err != nil { // history frame ⇒ registered
+			t.Fatalf("conn %d read history: %v", i, err)
+		}
+		conns = append(conns, conn)
+	}
+	defer func() {
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	}()
+
+	// ConnCountForUser round-trips the hub goroutine, so by the time it returns every
+	// register — and the cap eviction each one triggered — has been processed.
+	if got := h.hub.ConnCountForUser(u.ID); got != ws.MaxConnsPerUser {
+		t.Fatalf("live conn count = %d, want it capped at MaxConnsPerUser=%d (opened %d)",
+			got, ws.MaxConnsPerUser, n)
+	}
+}

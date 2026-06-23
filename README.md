@@ -207,7 +207,9 @@ upgrade and REST history requests are refused with `403`. Client→server:
 `{ "body": "hello", "replyTo"?: <id> }` to send, `{ "type": "typing" }` to signal
 typing, or a `voice-*` frame for WebRTC signaling. Inbound frames are size-bounded
 (Rule B) and rate-limited per connection (a text bucket, burst 5 @ 2/s, plus a
-separate, more generous bucket for bursty voice signaling).
+separate, more generous bucket for bursty voice signaling). Each user is also capped
+at 10 concurrent connections (the hub evicts their oldest beyond that), bounding
+resource exhaustion and reconnect-storm abuse.
 
 ## Project layout
 

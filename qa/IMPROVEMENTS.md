@@ -5625,3 +5625,38 @@ client spamming oversized/garbage frames across reconnects). `TestServeWSHostile
 single-frame cases; a reconnect-storm + token-bucket-exhaustion probe is the next Rule-15 target.
 
 **Cadence:** shipped real regression coverage (a change, not a no-op) → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 254) — security: per-user WS connection cap (closes a reconnect-storm/DoS gap)
+
+Pursued the Rule-15 target queued last tick (WS reconnect-storm + token-bucket exhaustion). Found a real
+gap: the hub's `register` added every client unconditionally — no per-user connection cap. A single
+authenticated user could open unbounded concurrent sockets (each = 2 goroutines + a 32-slot send buffer +
+a history fetch → resource-exhaustion DoS), and the per-connection rate bucket was trivially bypassed by
+churning reconnects (each new socket gets a fresh burst). Component advanced: **security**.
+
+Fix: the hub stamps a monotonic `seq` on register and `enforceConnCap` evicts a user's OLDEST sockets
+beyond `MaxConnsPerUser=10` (evict-oldest so a legit reconnect after a network blip always connects; only
+stale/abusive excess drops). Full Rule-15 cycle: reproduced (disabled the cap → 13 sockets all registered,
+count=13) → fixed → re-verified (count capped at 10) → confirmed legit use (newest 10 survive). Added
+`TestServeWSConnCapIntegration` + a `ConnCountForUser` hub introspection for deterministic assertion.
+
+**Loop-process note:** used a hub-goroutine round-trip (`ConnCountForUser`) as both the test's sync
+barrier AND its assertion — deterministic, zero read-timeout flakiness. Playbook: for hub/actor-model
+tests, prefer a round-trip introspection query over reading socket close-frames with deadlines (the
+round-trip guarantees all prior async ops on that goroutine are done, and gives an exact count).
+
+**Highest-value follow-up (logged, two items):**
+1. The reconnect-storm RATE bypass is only partially closed — the cap bounds *concurrent* sockets, but a
+   client can still reconnect serially to earn fresh rate buckets (each reconnect costs a full handshake +
+   auth + 2 DB queries, so it's naturally throttled, but not bucketed). A per-USER token bucket that
+   persists across connections (keyed in the hub, GC'd when the user's last socket closes) would fully
+   close it. Medium effort; log before building.
+2. Presence "Online" counts CONNECTIONS, not distinct users (`countInChannel`), so a user with 3 tabs
+   shows as Online=3 — a minor presence inaccuracy (Discord shows distinct users). Pre-existing; small fix.
+
+**QA-coverage note:** WS abuse surface now covers single-frame floods (rate-limit test), hostile frames,
+and the per-user conn cap. Least-covered: serial-reconnect rate bypass (follow-up 1).
+
+**Cadence:** shipped a real backend security fix (deploys) → ACTIVE (1800s).
