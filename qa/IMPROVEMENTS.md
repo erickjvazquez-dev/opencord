@@ -5811,3 +5811,34 @@ infra: one-command scale). These need specs + likely multi-tick plans. Next subs
 should spec one rather than continue small polish.
 
 **Cadence:** QA-coverage + doc fix (test-only, no deploy) but a real repo change → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 260) — GREEN maintaining tick: Discord-parity is feature-mature; frontier shifts to North-Star big-rocks (owner direction)
+
+First genuine green/no-op tick of this run, and recording it honestly rather than manufacturing work
+(Rule 10). Verified this tick: `go build`/`vet`/`test` green, live `/healthz` green, an AI-vision sweep
+of Settings, voice in-call, composer, and DM (all polished/Discord-faithful — no P0/P1), and the infra
+shutdown path (`cmd/server`: SIGTERM → `srv.Shutdown`; adequate — `Shutdown` doesn't block on hijacked
+WS, and clients auto-reconnect on exit, so an explicit WS-close-on-shutdown would be marginal gold-
+plating, not a real gap). No surgical, non-speculative, autonomously-verifiable improvement was available.
+
+**Strategic inflection (the real takeaway):** the Discord-parity surface this loop was driving (the
+owner's 2026-06-17 TOP PRIORITY) is essentially COMPLETE — accounts, servers/channels/categories, DMs +
+group DMs, the full emoji/composer line (custom+unicode, autocomplete, jumbo, reaction+composer pickers,
+per-channel drafts w/ reload persistence), reactions, replies, mentions, markdown, attachments, pins,
+search, threads, roles, moderation (kick/ban/timeout/read-only/slowmode), invites, presence+status,
+avatars, voice+screenshare (mesh + opt-in LiveKit SFU), mobile-responsive, plus hardened security
+(XSS-safe uploads, bidi stripping, per-conn rate limit + per-user conn cap). The product is mature.
+
+**The remaining North-Star frontier needs OWNER-LEVEL direction, not autonomous polish ticks:** the big
+differentiators left — **built-in free secure tunneling** (the "friends join without port-forwarding"
+promise; fundamentally requires an architecture/cost decision: a relay Opencord runs vs. bundling
+Tailscale/cloudflared vs. tying it to the paid Cloud tier — Rule 16 / cost-conscious), **Cloud Opencord**
+(the paid tier), **federation/multi-instance**, and **SFU-scale verification** (needs a live LiveKit).
+Each is a multi-tick initiative with product/cost tradeoffs that warrant the owner's call, not a
+unilateral autonomous spec. **Recommendation for the owner:** pick the next big-rock to greenlight; the
+loop will then spec-first + implement it in slices. Until then, ticks should stay light (health/QA/
+security watch + close any real gap that surfaces) and the cadence should widen toward the 3h cloud cron.
+
+**Cadence:** verified-green, nothing to ship → idle_streak→2 → 3600s ceiling (defer to the cloud cron).
