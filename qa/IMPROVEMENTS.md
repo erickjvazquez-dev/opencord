@@ -5689,3 +5689,31 @@ target. Also: presence "online" is per-CHANNEL (your active channel's distinct u
 online-member count (Discord's member-list "Online — N") is a separate, larger presence feature.
 
 **Cadence:** shipped a backend correctness fix (deploys) → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 256) — browser-QA sweep caught a real toolbar-clickability bug
+
+Ran the due browser QA (every-3rd-tick; last UI change was iter 252, ticks 253–255 were backend). It
+crashed at the message "edit" step: the hover-actions toolbar (`.msg-actions`, `position:absolute` with
+NO z-index) was paint-intercepted by the message-head's full-width box, so clicks meant for edit/delete
+landed on the head — a real dead-zone a user could hit too. The preceding jump-to-message step (which
+scrolls the target to the top) reliably triggered it (30s of persistent interception, not a transient).
+
+Fix (two parts, both verified by the now-green full QA): (1) **product** — `z-index: 2` on `.msg-actions`
+so the floating toolbar is always on top of the message content; (2) **QA** — `scrollIntoViewIfNeeded()`
+before the hover in the edit step so a freshly-scrolled message is settled before interacting. Component:
+**UI** (toolbar robustness). AI-vision confirmed the edit renders + the toolbar sits cleanly on top.
+
+**Loop-process win:** this is exactly why the every-3rd-tick browser-QA cadence exists — three backend
+ticks in a row meant 3 ticks since the UI was exercised, and a latent CSS stacking bug (clickability)
+that unit/integration Go tests can NEVER catch surfaced only here. Playbook reaffirmed: never let the
+browser QA lapse more than the cadence, even during a backend-heavy streak.
+
+**Known-flaky step (logged, NOT yet fixed — passed on re-run, so unreproducible right now):** the
+emoji-manager step's "close panel → wait for the server-channel composer" (browser.mjs:1592) timed out
+once then passed on re-run. Likely the same interception class on the panel "close" button, or a
+transition race. Next browser-QA tick: if it recurs, harden it (z-index/await the close, or assert the
+panel detached before waiting for the composer). Do NOT add an unverified fix while it's unreproducible.
+
+**Cadence:** shipped a real UI fix (deploys) → ACTIVE (1800s).

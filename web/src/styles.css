@@ -1411,6 +1411,10 @@ button:disabled {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   opacity: 0;
   pointer-events: none;
+  /* The toolbar floats over the top-right of the message and overlaps the message-head's
+     (full-width) box. Without an explicit stacking order the head can paint over it and
+     swallow clicks meant for edit/delete. z-index keeps the toolbar reliably on top. */
+  z-index: 2;
 }
 
 .message:hover .msg-actions {

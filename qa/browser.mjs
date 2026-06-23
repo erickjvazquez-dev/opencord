@@ -720,6 +720,9 @@ async function main() {
 
   // 4 — Edit the message (its reaction must survive the edit).
   step('hover message → edit → change → save')
+  // Settle the scroll first: the preceding jump-to-message step scrolled this message to the
+  // top, and clicking before that settles can let the message-head overlap the edit button.
+  await msg.scrollIntoViewIfNeeded()
   await msg.hover()
   await msg.getByRole('button', { name: 'edit' }).click()
   await page.locator('.edit-row input').fill('edited by the qa bot')
