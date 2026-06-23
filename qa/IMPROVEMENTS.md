@@ -3,6 +3,30 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 245) — on a mature backlog, the win is the small parity gap hiding as a mis-render
+
+Surveyed the whole GOAL.md: TOP PRIORITY is now all `[~]` epics (Group DMs, roles — actually FULLY
+complete, video) and the clean `[ ]` todos are large epics (tunneling, accounts, server discovery, bot
+API) or owner-gated (the header-icon redesign explicitly says "NOT an autonomous mid-loop redesign").
+Rather than force a medium feature with regression risk or log an empty green tick, I found a **small,
+real Discord-parity gap**: `__underline__`. The markdown list had every inline format EXCEPT underline,
+and `__text__` was actively MIS-rendering — the single-`_` italic rule matched at index 1, so `__x__`
+came out as `_<em>x</em>_` (literal underscores around an italic). Added one `__([^_\n]+)__` → `<u>` rule
+before the single-`_` rule; pure frontend, 4 vitest + browser QA + AI-vision, low regression risk.
+
+**Loop lesson #1 (logged):** on a mature product, the highest-value autonomous tick is often a
+SMALL parity gap that's silently mis-rendering, not a big new feature. Audit the existing feature's
+*completeness* (here: "markdown supports everything except X") — a one-rule fix to an 80%-done feature
+beats a risky new flow. "Find the gap in what exists" > "build something new."
+
+**Loop lesson #2 — stale-doc finding (acted):** the GOAL.md TOP PRIORITY intro (owner-set 2026-06-17)
+still says "there is no settings surface and the login page is a bare card" — but login redesign (iter
+128), the Settings surface (iter 129), and Voice&Video settings (iter 130) are all DONE, and the
+screenshot shows a polished branded login. The intro mis-describes the product, which could send a future
+tick chasing already-done work. The intro should be refreshed to point at what's actually next (the
+`[~]` epics + owner-gated icon pass); flagged here so the owner can re-steer rather than me rewriting
+their directive autonomously. Docs-sync (Rule 14) isn't just READMEs — priority/intro prose rots too.
+
 ## 2026-06-22 (iter 244) — the "flake" was a real bug; root-cause a flaky test before widening its timeout
 
 Picked up iter-243's logged QA-stability watch (history auto-load `✗ 50 → 50` once, `100 → 120` on
