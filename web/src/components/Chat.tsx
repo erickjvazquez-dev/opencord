@@ -93,6 +93,7 @@ import { RolesManagerModal } from './RolesManagerModal'
 import { dmTitle, dmIsGroup, dmOthers, dmMembersLabel } from '../dm'
 import { activeEmojiToken, matchEmojiNames, mergeEmojiCandidates, spliceEmoji } from '../emojiAutocomplete'
 import { UNICODE_EMOJI, searchUnicodeEmoji } from '../emojiData'
+import { parseStoredDrafts, serializeDrafts } from '../drafts'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -443,17 +444,35 @@ export function Chat({
     }
   }
 
-  // Per-channel drafts (Discord parity): on ANY channel switch (sidebar, DM, thread, or a
-  // fallback that changes channelId), stash the leaving channel's still-live draft and load the
-  // target's saved draft. Runs on channelId change; at that point `draftRef` still holds the
-  // leaving channel's text (switching doesn't reset `draft`), so we save it, then restore.
+  // localStorage key for this user's persisted drafts (survive a page reload). Keyed by user
+  // so a shared browser doesn't cross-leak drafts between accounts.
+  const draftsKey = `opencord.drafts.${user.id}`
+
+  // Rehydrate persisted drafts ONCE on mount (before the initial channel resolves, so the
+  // channel-switch effect below can restore the opening channel's draft). The stored value is
+  // untrusted → parseStoredDrafts bounds/validates it; localStorage access is guarded (it can
+  // throw in private mode / when disabled).
+  useEffect(() => {
+    try {
+      parseStoredDrafts(localStorage.getItem(draftsKey)).forEach((v, k) => draftsRef.current.set(k, v))
+    } catch {
+      /* localStorage unavailable → in-memory drafts only */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Per-channel drafts (Discord parity): on ANY channel switch (sidebar, DM, thread, a
+  // fallback that changes channelId, OR the initial load) stash the leaving channel's
+  // still-live draft and load the target's saved draft. Runs on channelId change; at that
+  // point `draftRef` still holds the leaving channel's text (switching doesn't reset `draft`).
   const prevChannelRef = useRef<number | null>(null)
   useEffect(() => {
     const prev = prevChannelRef.current
     prevChannelRef.current = channelId
-    if (prev == null || prev === channelId) return
-    draftsRef.current.set(prev, draftRef.current)
-    setDraft(draftsRef.current.get(channelId ?? -1) ?? '')
+    if (prev === channelId) return
+    if (prev != null) draftsRef.current.set(prev, draftRef.current)
+    if (channelId == null) return
+    setDraft(draftsRef.current.get(channelId) ?? '') // restore (incl. the opening channel from storage)
     // Resync the auto-grow textarea height to the restored value (a multi-line draft needs
     // its taller height; an empty one collapses back).
     requestAnimationFrame(() => {
@@ -464,6 +483,24 @@ export function Chat({
       }
     })
   }, [channelId])
+
+  // Persist drafts to localStorage, debounced, whenever the live draft or channel changes —
+  // so a reload keeps what you were typing (the in-memory map alone is lost on reload). Keeps
+  // the current channel's entry current (delete when emptied/sent), then writes the bounded map.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (channelId != null) {
+        if (draft) draftsRef.current.set(channelId, draft)
+        else draftsRef.current.delete(channelId)
+      }
+      try {
+        localStorage.setItem(draftsKey, serializeDrafts(draftsRef.current))
+      } catch {
+        /* quota / disabled → drafts stay in-memory only */
+      }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [draft, channelId, draftsKey])
 
   useEffect(() => {
     fetchChannels(token)

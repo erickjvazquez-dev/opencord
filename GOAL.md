@@ -445,7 +445,7 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   reset `draft`) and restores the target's, resyncing the auto-grow height; covers EVERY switch path
   (sidebar, DM, thread, fallbacks) since it keys off `channelId`. tsc + vitest 163/163; browser-QA `3f1b`
   (type in #general → switch to #pgseed shows empty composer → back to #general restores the draft) +
-  AI-vision; shipped + railway + rollout-verified.
+  AI-vision; shipped + railway + rollout-verified. **+ localStorage persistence (iter 258):** drafts now survive a page reload — a debounced write keys them by user id; rehydrated on mount via a pure, Rule-15-bounded `parseStoredDrafts` (untrusted storage: ignores corrupt JSON, caps per-draft length + channel count). vitest +8 (`drafts.test.ts`), browser-QA `3f1c` (type → reload → restored), AI-vision; shipped + rollout-verified.
 - [x] Reconnecting banner + faster offline detection DONE (iter 202) — a debounced "Reconnecting…"
   amber bar (under the header, Discord-style) shows only when the socket stays down past a 1.5s grace
   window (a channel-switch reconnect never flashes it); clears on recovery. Plus: the browser `offline`

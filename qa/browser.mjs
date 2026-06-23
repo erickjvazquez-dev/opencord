@@ -524,8 +524,19 @@ async function main() {
     await draftPgChan.click()
     const draftPgComposer = page.getByPlaceholder(/Message #pgseed/)
     await draftPgComposer.waitFor({ timeout: 8000 })
+    // The composer placeholder flips to #pgseed one render BEFORE the draft-restore setDraft('')
+    // applies, so poll for the SETTLED value rather than racing that 1-frame flash. A real leak
+    // would never settle to empty (the poll would time out → check fails); a flash settles fast.
+    let pgComposerEmpty = false
+    for (let i = 0; i < 20; i++) {
+      if ((await draftPgComposer.inputValue()) === '') {
+        pgComposerEmpty = true
+        break
+      }
+      await page.waitForTimeout(100)
+    }
     check(
-      (await draftPgComposer.inputValue()) === '',
+      pgComposerEmpty,
       'switching to #pgseed shows an empty composer (the #general draft did NOT leak across)',
     )
     await page.locator('.channel-item', { hasText: 'general' }).first().click()
@@ -540,6 +551,23 @@ async function main() {
   } else {
     check(false, 'pgseed channel present for the draft-persistence switch')
   }
+
+  // 3f1c — Drafts survive a page RELOAD (iter 258): persisted to localStorage, so an accidental
+  // refresh keeps what you were typing (Discord parity). Type → wait for the debounced persist →
+  // reload → the draft is restored from storage.
+  step('per-channel drafts: a #general draft survives a full page reload')
+  await page.getByPlaceholder(/Message #general/).fill('survives a reload')
+  await page.waitForTimeout(700) // let the 400ms debounced localStorage write flush
+  await page.reload()
+  const reloadedComposer = page.getByPlaceholder(/Message #general/)
+  await reloadedComposer.waitFor({ timeout: 12000 })
+  await shot('03f1c-draft-after-reload.png')
+  check(
+    (await reloadedComposer.inputValue()) === 'survives a reload',
+    'the #general draft is restored from localStorage after a page reload',
+  )
+  await reloadedComposer.fill('') // clear; the persist debounce will drop it from storage
+  await page.waitForTimeout(700)
 
   // 3f2b — History pagination (iter 204/205): the seeded `pgseed` channel has 120 messages, so
   // opening it loads the newest 50 and shows the "↑ Load older" button. Discord-style, scrolling near

@@ -5747,3 +5747,36 @@ them to localStorage so a refresh keeps them. A small enhancement: mirror `draft
 drafts. Least-covered composer behavior: draft survival across a page RELOAD (the localStorage follow-up).
 
 **Cadence:** shipped a real UI feature (deploys) → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 258) — drafts persist across page reload (localStorage); poll-fixed a flash-race in the QA
+
+Shipped the queued follow-up: per-channel drafts now survive a full page reload (localStorage), so an
+accidental refresh keeps what you were typing — Discord parity. Component: **UI / chat parity**.
+
+Design: a new pure `web/src/drafts.ts` (`parseStoredDrafts`/`serializeDrafts`) owns the untrusted-storage
+handling (Rule 15: ignore corrupt JSON, skip non-numeric keys / non-string-empty values, clamp per-draft
+length to 4000 + cap to 50 channels) with 8 unit tests; Chat.tsx rehydrates on mount, restores the opening
+channel's draft (the switch effect now also fires on the initial load), and persists debounced (400ms) on
+`[draft, channelId]`. localStorage access is try/catch-guarded (private mode / disabled).
+
+**Loop-process win (caught + fixed):** adding the persist + rehydrate effects shifted render timing and
+exposed a latent RACE in iter-257's `3f1b` check — it read the composer value the instant the placeholder
+flipped to #pgseed, one render BEFORE the draft-restore `setDraft('')` applied, catching the ~1-frame
+flash of the old draft. NOT a leak (the value settles to empty). Fixed by POLLING for the settled value
+(20×100ms) instead of a single immediate read — which correctly distinguishes a transient flash (settles)
+from a real leak (never settles → check fails). **Playbook: when asserting an input value right after a
+state-transition that resets it via an effect, poll for the settled value; a single immediate read races
+the 1-frame intermediate. (And: adding effects to a component can shift timing enough to expose latent
+races in OTHER steps — always run the full browser QA after touching shared component state.)**
+
+**Highest-value follow-up (logged):** the composer shows the leaving channel's draft for ~1 frame on
+switch (the effect-based restore lags the render by a frame). Cosmetic/sub-perceptible, but a fully
+synchronous restore (swap in the click handlers, or a useLayoutEffect) would remove the flash. Low
+priority; only if it ever looks janky in an AI-vision pass.
+
+**QA-coverage note:** drafts now covered for per-channel isolation, restore-on-return, AND reload
+persistence. The localStorage parse is unit-tested adversarially. Well-covered now.
+
+**Cadence:** shipped a real UI feature (deploys) → ACTIVE (1800s).
