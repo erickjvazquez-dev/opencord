@@ -277,7 +277,7 @@ async function main() {
 
   // 3c — Markdown renders to safe elements; raw HTML is escaped (XSS guard, Rule B/15).
   step('send a markdown + <script> + link message → bold/code/link render, script stays literal')
-  const md = '**bold** and `code` and <script>alert(1)</script> and http://example.com'
+  const md = '**bold** and __underlined__ and `code` and <script>alert(1)</script> and http://example.com'
   await page.getByPlaceholder(/Message #/).fill(md)
   await page.getByRole('button', { name: 'Send' }).click()
   const mdMsg = page.locator('.message', { hasText: 'bold' }).last()
@@ -286,6 +286,14 @@ async function main() {
   check(
     (await mdMsg.locator('.body strong').first().textContent())?.trim() === 'bold',
     'markdown **bold** renders as <strong>bold</strong>',
+  )
+  // __text__ → underline (<u>), Discord parity (single _ stays italic); the literal
+  // underscores must NOT survive (the old single-`_` rule left `_<em>x</em>_`).
+  const uEl = mdMsg.locator('.body u', { hasText: 'underlined' })
+  check(await uEl.isVisible(), 'markdown __underlined__ renders as <u>underlined</u>')
+  check(
+    !(await mdMsg.locator('.body').innerText()).includes('_underlined_'),
+    'no literal underscores leak around the underlined text',
   )
   check(await mdMsg.locator('.body code').first().isVisible(), 'inline `code` renders as <code>')
   const link = mdMsg.locator('.body a[href="http://example.com"]')

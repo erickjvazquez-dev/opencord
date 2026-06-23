@@ -5,7 +5,7 @@ import { EmojiImg } from './components/EmojiImg'
 // React elements (never an HTML string / dangerouslySetInnerHTML), so React
 // escapes all text and only a fixed set of safe tags/components is ever emitted:
 //
-//   ```fenced code```   `inline code`   **bold**   *italic*  _italic_
+//   ```fenced code```   `inline code`   **bold**   *italic*  _italic_  __underline__
 //   ~~strike~~   ||spoiler||   @mention   :custom_emoji:   and  > blockquote  lines
 //
 // Anything else — including raw HTML like <script>…</script> — renders as literal
@@ -55,6 +55,10 @@ const INLINE_RULES: InlineRule[] = [
   { re: /\*\*([^*\n]+)\*\*/, el: 'strong' },
   { re: /~~([^~\n]+)~~/, el: 'del' },
   { re: /\*([^*\n]+)\*/, el: 'em' },
+  // Discord maps DOUBLE underscore to UNDERLINE (single `_` stays italic below).
+  // Must precede the single-`_` rule: for `__x__` underline matches at an earlier
+  // index than the single-`_` rule (which would otherwise eat it as `_<em>x</em>_`).
+  { re: /__([^_\n]+)__/, el: 'u' },
   { re: /_([^_\n]+)_/, el: 'em' },
   { re: /@([A-Za-z0-9_]{2,32})/, kind: 'mention' },
   // Custom emoji `:slug:` — charset matches the backend's ValidEmojiName (lowercase

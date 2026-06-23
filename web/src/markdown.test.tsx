@@ -121,6 +121,44 @@ describe('renderMarkdown custom emoji (:name:)', () => {
   })
 })
 
+// Has at least one element of tag `tag` in the rendered tree.
+function hasTag(node: ReactNode, tag: string) {
+  return flatten(node).some((n) => isValidElement(n) && n.type === tag)
+}
+// The text content of the first element of tag `tag`.
+function tagText(node: ReactNode, tag: string) {
+  const el = flatten(node).find((n) => isValidElement(n) && n.type === tag)
+  return el ? allText(el) : null
+}
+
+describe('renderMarkdown underline (__text__, Discord parity)', () => {
+  it('renders __text__ as <u>, not literal underscores or <em>', () => {
+    const out = renderMarkdown('__underlined__')
+    expect(hasTag(out, 'u')).toBe(true)
+    expect(tagText(out, 'u')).toBe('underlined')
+    // It must NOT be the single-`_` italic fallback (which left literal underscores).
+    expect(hasTag(out, 'em')).toBe(false)
+    expect(allText(out)).not.toContain('_')
+  })
+  it('keeps SINGLE _text_ as italic (<em>), not underline', () => {
+    const out = renderMarkdown('_italic_')
+    expect(hasTag(out, 'em')).toBe(true)
+    expect(hasTag(out, 'u')).toBe(false)
+    expect(tagText(out, 'em')).toBe('italic')
+  })
+  it('renders __text__ inline among surrounding words', () => {
+    const out = renderMarkdown('a __mid__ b')
+    expect(tagText(out, 'u')).toBe('mid')
+    expect(allText(out)).toContain('a ')
+    expect(allText(out)).toContain(' b')
+  })
+  it('nests inline markdown inside underline (__**bold**__ → <u><strong>)', () => {
+    const out = renderMarkdown('__**bold**__')
+    expect(hasTag(out, 'u')).toBe(true)
+    expect(hasTag(out, 'strong')).toBe(true)
+  })
+})
+
 // Every <div> whose className contains `cls` (headers/subtext render as styled divs).
 function divsWithClass(node: ReactNode, cls: string) {
   return flatten(node).filter(
