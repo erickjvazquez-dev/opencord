@@ -209,20 +209,28 @@ func TestServerEmojiIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("non-image bytes are rejected", func(t *testing.T) {
+	t.Run("non-image and scriptable uploads are rejected (stored-XSS guard)", func(t *testing.T) {
 		before := emojiCount(t, hs, srv.ID)
-		// %PDF sniffs as application/pdf; plain text sniffs as text/plain — both 4xx.
+		// The emoji bytes are served INLINE (Content-Disposition: inline), so a scriptable
+		// upload that sniffed to a renderable+scriptable type (image/svg+xml, text/html) would
+		// be stored XSS executing in the instance origin. Rule 15: the actual exploit payloads
+		// — an SVG carrying <script> and an HTML doc — must be rejected at upload, alongside the
+		// generic non-images. http.DetectContentType sniffs SVG/HTML as text/xml | text/html,
+		// neither in the png/jpeg/gif/webp inline allowlist → 4xx, no row, nothing served inline.
 		for what, data := range map[string][]byte{
-			"pdf":  []byte("%PDF-1.7\nnot really an image"),
-			"text": []byte("just some text, not an image at all"),
+			"pdf":   []byte("%PDF-1.7\nnot really an image"),
+			"text":  []byte("just some text, not an image at all"),
+			"svg":   []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.cookie)</script></svg>`),
+			"html":  []byte("<html><body><script>alert(document.cookie)</script></body></html>"),
+			"xhtml": []byte(`<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><script>alert(1)</script></html>`),
 		} {
 			w := emojiReq(t, hs, ownerTok, srv.ID, "not_image", "x.png", data)
 			if w.Code/100 != 4 {
-				t.Fatalf("non-image (%s) status = %d, want 4xx", what, w.Code)
+				t.Fatalf("scriptable/non-image (%s) status = %d, want 4xx", what, w.Code)
 			}
 		}
 		if after := emojiCount(t, hs, srv.ID); after != before {
-			t.Fatalf("non-image upload created a row: %d → %d", before, after)
+			t.Fatalf("scriptable/non-image upload created a row: %d → %d", before, after)
 		}
 	})
 

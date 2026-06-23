@@ -5594,3 +5594,34 @@ grows to the full ~1800 set (the standing emojiData expansion follow-up).
 (3k, custom). Least-tested adjacent: emoji picker inside a DM (path identical to #general; no dedicated step).
 
 **Cadence:** shipped a real feature → ACTIVE (1800s).
+
+---
+
+## 2026-06-22 (iter 253) — security tick: encoded the actual stored-XSS payloads into upload-reject tests
+
+Rotated off the emoji-parity arc to the **security** component (hostile-input-proof north star). Audited
+the full file/image upload+serve surface (emoji, avatar, attachment) for the stored-XSS / content-type-
+sniffing class. Finding: the surface is genuinely well-hardened — `saveUpload` sniffs via
+`http.DetectContentType` (never the client claim), emoji+avatar enforce a png/jpeg/gif/webp inline
+allowlist, attachments force non-images to `Content-Disposition: attachment`, all serve with `nosniff`,
+and `inline_allowlist_test.go` guards the allowlist. No vuln to fix.
+
+**The real gap (closed):** the emoji + avatar upload-reject tests used GENERIC non-images (pdf/text),
+while only the attachment test encoded the actual exploit payload (`<script>`). Per Rule 15 ("add a
+regression test that encodes the exploit so it can never silently return"), strengthened the emoji +
+avatar reject tests with the ACTUAL stored-XSS vectors: SVG-carrying-`<script>`, HTML, and XHTML. Each
+sniffs outside the allowlist → 400, no row stored, nothing served inline. Verified against the real
+router + real Postgres (httptest = identical to the prod handler path); happy-path PNG still uploads.
+
+**Loop-process note:** this was a TEST-ONLY change (no binary/SPA delta) → committed + pushed to source
+control but deliberately NOT redeployed (the Docker build excludes `*_test.go`, so the artifact is
+byte-identical; `railway up` would be pure churn, Rule 10/16). Playbook: a coverage-only tick ships to
+git but skips the deploy + rollout-verify steps — those are for artifact-changing work. Component
+advanced: **security** (regression coverage now encodes the real exploit, not a generic stand-in).
+
+**Highest-value follow-up (logged):** the audit confirmed the upload surface is solid; the least-probed
+adversarial surface is now the **WebSocket ingest under reconnect/oversized-frame churn** (a hostile
+client spamming oversized/garbage frames across reconnects). `TestServeWSHostileFrameHandling` covers
+single-frame cases; a reconnect-storm + token-bucket-exhaustion probe is the next Rule-15 target.
+
+**Cadence:** shipped real regression coverage (a change, not a no-op) → ACTIVE (1800s).

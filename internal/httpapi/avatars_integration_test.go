@@ -77,12 +77,22 @@ func TestAvatarsIntegration(t *testing.T) {
 		wantStatus(t, w, http.StatusNotFound, "bob still has no avatar after alice uploaded")
 	})
 
-	t.Run("non-image is rejected", func(t *testing.T) {
-		w := avatarReq(t, hs, bobTok, "notes.txt", []byte("just some text, not an image at all"))
-		wantStatus(t, w, http.StatusBadRequest, "upload non-image avatar")
-		// Bob still has no avatar.
+	t.Run("non-image and scriptable uploads are rejected (stored-XSS guard)", func(t *testing.T) {
+		// Avatars serve inline like emoji, so a scriptable upload (SVG/HTML carrying <script>)
+		// that got stored would be XSS in the instance origin. Rule 15: the actual exploit
+		// payloads must be rejected at upload, not just generic text. Each sniffs outside the
+		// png/jpeg/gif/webp allowlist → 400, and Bob's avatar stays unset (nothing stored).
+		for what, data := range map[string][]byte{
+			"text": []byte("just some text, not an image at all"),
+			"svg":  []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.cookie)</script></svg>`),
+			"html": []byte("<html><body><script>alert(document.cookie)</script></body></html>"),
+		} {
+			w := avatarReq(t, hs, bobTok, "x.png", data)
+			wantStatus(t, w, http.StatusBadRequest, "upload scriptable/non-image avatar ("+what+")")
+		}
+		// Bob still has no avatar — none of the rejected uploads were stored.
 		g := hs.req(t, http.MethodGet, avatarURL(bob.ID), bobTok, "")
-		wantStatus(t, g, http.StatusNotFound, "bob avatar still unset after rejected upload")
+		wantStatus(t, g, http.StatusNotFound, "bob avatar still unset after rejected uploads")
 	})
 
 	t.Run("oversized avatar is rejected", func(t *testing.T) {
