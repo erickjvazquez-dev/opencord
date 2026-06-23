@@ -5869,3 +5869,30 @@ e.g. the per-connection text rate bucket edge (burst exhaustion → refill), the
 each POST, and the `validEmoji`/reaction-marker bounds (some covered, confirm the rest). One per tick.
 
 **Cadence:** closed a real (security) coverage gap → ACTIVE (1800s), back to gap-hunting.
+
+---
+
+## 2026-06-23 (iter 263) — guard-coverage audit COMPLETE: the security-bound surface is fully tested
+
+Closed out the enforced-but-untested-guard audit queued iter 262. Systematically cross-checked every
+size/shape/auth bound against the test suite — ALL are covered:
+- **WS text rate bucket** (burst 5 / +2|s) → `TestServeWSRateLimitIntegration` ✓
+- **WS voice token bucket** (burst 100 / +50|s, anti-amplification) → `TestServeWSVoiceFloodGuard` ✓
+- **WS voice signal/StreamID size + Kind whitelist** → `TestServeWSVoiceSignalGuardsIntegration` (iter 262) ✓
+- **HTTP body bounds** on every JSON/upload endpoint, incl. the UNAUTH register/login (64 KiB via
+  `decodeCreds`) → covered (avatar/attachment 413; status/presence/roles/group-DM 400;
+  `TestHandleRegisterRejectsBadInput` "oversized body" case 400) ✓
+- **validEmoji** reaction marker, **bidi-control stripping**, **ValidEmojiName**, **JWT** (expired/garbage
+  401), **channel access** (403) → all have integration tests ✓
+
+Conclusion: the iter-262 voice-signal-guards hole was the ONLY enforced-but-untested guard; the surface is
+now comprehensive. No code/test change this tick — the audit's value is ruling out the risk class and
+preventing future re-audits (don't re-investigate these; they're covered).
+
+**Loop-process note:** the guard-audit (iters 262→263) was a productive ~1.5-tick seam that the "feature-
+mature" framing (iters 260–261) had missed. With it now exhausted, the loop returns to maintenance
+(health/QA watch + the every-3rd-tick browser sweep) and widens the cadence again — UNLESS the owner
+greenlights a North-Star big-rock (tunneling/Cloud/federation/SFU-scale; see iter 260), which remains
+the only path to substantive new work.
+
+**Cadence:** audit found no new gap (no fix, no open P0) → idle_streak→1 → 2700s, re-widening.
