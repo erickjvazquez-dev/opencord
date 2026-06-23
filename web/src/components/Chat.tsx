@@ -91,7 +91,8 @@ import { ProfileCard } from './ProfileCard'
 import { NewGroupModal } from './NewGroupModal'
 import { RolesManagerModal } from './RolesManagerModal'
 import { dmTitle, dmIsGroup, dmOthers, dmMembersLabel } from '../dm'
-import { activeEmojiToken, matchEmojiNames, spliceEmoji } from '../emojiAutocomplete'
+import { activeEmojiToken, matchEmojiNames, mergeEmojiCandidates, spliceEmoji } from '../emojiAutocomplete'
+import { UNICODE_EMOJI } from '../emojiData'
 import * as voiceSettings from '../voiceSettings'
 import { VoiceSession, type VoicePeer, type VoiceTransport } from '../voice'
 import { SfuSession } from '../sfu'
@@ -898,14 +899,17 @@ export function Chat({
       return
     }
     clearMentionMenu()
-    // emoji `:partial`: candidates are this server's custom-emoji names (the same
-    // map already loaded for `:name:` rendering) starting with the partial.
+    // emoji `:partial`: candidates merge this server's custom-emoji names (precedence)
+    // with standard unicode shortcodes (emojiData.ts), so `:fir` lists both a custom
+    // `:fire:` and the unicode `:fire:`→🔥. Unicode works even in a channel/DM with NO
+    // custom emoji, so the menu is no longer gated on the custom map being non-empty.
     const emoji = activeEmojiToken(value, caret)
-    if (!emoji || !activeEmoji || activeEmoji.size === 0) {
+    if (!emoji) {
       clearEmojiMenu()
       return
     }
-    const names = matchEmojiNames(activeEmoji.keys(), emoji.query, 8)
+    const custom = activeEmoji ? matchEmojiNames(activeEmoji.keys(), emoji.query, 8) : []
+    const names = mergeEmojiCandidates(custom, UNICODE_EMOJI.keys(), emoji.query, 8)
     if (names.length === 0) {
       clearEmojiMenu()
       return
@@ -4035,6 +4039,9 @@ export function Chat({
           <div className="emoji-autocomplete" role="listbox" aria-label="emoji suggestions">
             {emojiMatches.map((name, i) => {
               const id = activeEmoji?.get(name)
+              // Custom emoji show their image (precedence); otherwise it's a standard
+              // unicode shortcode → show the character before `:name:`.
+              const uni = id == null ? UNICODE_EMOJI.get(name) : undefined
               return (
                 <button
                   type="button"
@@ -4049,7 +4056,11 @@ export function Chat({
                     acceptEmoji(name)
                   }}
                 >
-                  {id != null && <EmojiImg token={token} id={id} alt={`:${name}:`} />}
+                  {id != null ? (
+                    <EmojiImg token={token} id={id} alt={`:${name}:`} />
+                  ) : (
+                    uni && <span className="emoji-suggestion-uni">{uni}</span>
+                  )}
                   <span className="emoji-suggestion-name">:{name}:</span>
                 </button>
               )

@@ -5471,3 +5471,36 @@ two-client realtime relabel are slice 2. Group DMs after slice 2: create, render
 complete.
 
 **Cadence:** shipped a backend slice + migration → ACTIVE (1800s).
+
+---
+
+## 2026-06-22 (iter 248) — unicode `:emoji:` shortcodes shipped; emoji-data follow-up logged
+
+Shipped the queued unicode-emoji feature (`:joy:`→😂 in every channel/DM + merged into the
+`:`-autocomplete; custom server emoji keep precedence). Vendored a static curated `shortcode→char`
+map (`web/src/emojiData.ts`, ~300 common names, zero runtime dep, Rule A). QA grown: a new browser-QA
+step (`7j2`) sends `:joy:`/`:tada:` and asserts the `.emoji-unicode` chars render, drives the `:fir`
+autocomplete to the unicode `:fire:` row, accepts + sends; two new screenshots AI-vision-graded.
+
+**Loop-process note:** the new feature collided with a PRE-EXISTING markdown test that used `:smile:`
+as a stand-in for a "custom-only" emoji name — `smile` is now a real unicode shortcode, so the test's
+literal-text assertion correctly flipped to a rendered 😄. The blast-radius/vitest run caught it; fixed
+by renaming the example to a genuinely-non-standard `:customonly:`. Playbook add: **when a feature makes
+a previously-"unknown" token type now resolve, grep existing tests for placeholder names that assumed it
+stayed literal** (emoji/mention/link placeholders) — a green-to-red flip there is expected signal, not a
+regression, but the example must move to a name still outside the new set.
+
+**Highest-value follow-up (logged, deferred):** the curated map is ~300 of the ~1800 standard Unicode
+shortcodes — covers the overwhelming majority of real chat usage but not the long tail. No offline
+dataset was vendorable this tick. Next: a small OFFLINE generator script (`scripts/gen-emoji.mjs`) that
+reads a committed gemoji/CLDR JSON and emits the full `emojiData.ts`, run once, output committed (still
+zero runtime dep, Rule A). Lazy-load the full map only if the bundle delta warrants it (a 60KB map could
+move to a dynamic `import()` gated on the first `:` typed — but then the synchronous markdown render
+needs a "load → re-render" path, which the curated static map avoids).
+
+**QA-coverage note:** unicode-emoji render + autocomplete + custom-precedence now have vitest (16 cases)
++ a browser-QA flow + AI-vision. Least-tested adjacent area next: emoji in DM context (the render path
+is identical — `activeEmoji` undefined → unicode-only — but no browser-QA step exercises a unicode emoji
+inside a DM specifically).
+
+**Cadence:** shipped a real feature → ACTIVE (1800s).

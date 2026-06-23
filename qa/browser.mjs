@@ -1272,6 +1272,47 @@ async function main() {
   )
   await srvComposer.fill('') // leave the composer clean for the next step
 
+  // 7j2 — Unicode `:emoji:` shortcodes (Discord parity, iter 248): a STANDARD shortcode
+  // like `:joy:` renders the unicode CHARACTER (😂) in any channel/DM — not server-scoped,
+  // not an uploaded image — and the `:`-autocomplete now merges these with the custom
+  // server emoji. This is the regression guard for emojiData.ts + the merged candidate
+  // list + the unicode render branch in markdown.tsx.
+  step('unicode shortcodes: :joy: renders 😂, :fir autocomplete lists the unicode :fire:')
+  await srvComposer.click()
+  await srvComposer.fill('gg :joy: and :tada:')
+  await page.getByRole('button', { name: 'Send' }).click()
+  const uniMsg = page.locator('.message', { hasText: 'gg' }).last()
+  await uniMsg.locator('.body .emoji-unicode').first().waitFor({ timeout: 8000 })
+  await shot('03j2-unicode-emoji.png')
+  const uniChars = await uniMsg.locator('.body .emoji-unicode').allTextContents()
+  check(uniChars.includes('😂'), `:joy: renders as the unicode 😂 (got ${JSON.stringify(uniChars)})`)
+  check(uniChars.includes('🎉'), `:tada: renders as the unicode 🎉 (got ${JSON.stringify(uniChars)})`)
+  check(
+    !(await uniMsg.locator('.body').innerText()).includes(':joy:'),
+    'the literal `:joy:` shortcode does not leak into the rendered message',
+  )
+  // Autocomplete merges unicode shortcodes: `:fir` lists the standard :fire: (with its
+  // char in a .emoji-suggestion-uni span), even though no CUSTOM `fire` emoji exists.
+  await srvComposer.click()
+  await srvComposer.fill(':fir')
+  await emojiMenu.waitFor({ timeout: 4000 })
+  await shot('03j3-unicode-autocomplete.png')
+  const fireOpt = page.locator('.emoji-suggestion[data-emoji-option="fire"]')
+  check((await fireOpt.count()) === 1, 'the :fir autocomplete menu lists the unicode :fire: shortcode')
+  check(
+    (await fireOpt.locator('.emoji-suggestion-uni').textContent())?.trim() === '🔥',
+    'the unicode suggestion row shows the 🔥 character',
+  )
+  // Accept it → inserts `:fire: `, send → renders the 🔥 character inline.
+  await fireOpt.click()
+  await emojiMenu.waitFor({ state: 'detached', timeout: 4000 })
+  check((await srvComposer.inputValue()) === ':fire: ', 'accepting :fire: inserts the full shortcode + space')
+  await page.getByRole('button', { name: 'Send' }).click()
+  const fireMsg = page.locator('.message .body .emoji-unicode', { hasText: '🔥' }).last()
+  await fireMsg.waitFor({ timeout: 8000 })
+  check(await fireMsg.isVisible(), 'the autocompleted :fire: sends and renders as 🔥')
+  await srvComposer.fill('') // clean composer for the next step
+
   // 7d — Members panel: the server owner sees themselves with the owner role.
   step('open the server members panel')
   await page

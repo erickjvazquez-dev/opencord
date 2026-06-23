@@ -51,15 +51,21 @@ settings surface and the login page is a bare card. Spec: `SPEC.md` "User Settin
   path intact); AI-vision confirmed the menu renders cleanly above the composer. Shipped + railway up +
   rollout-verified.
 
-- [ ] **NEXT UP — unicode `:emoji:` shortcodes (SPEC READY, iter 247).** Standard emoji from shortcodes
-  (`:joy:`→😂, `:fire:`→🔥) in every channel/DM + in the `:`-autocomplete — currently only CUSTOM server
-  emoji resolve; a plain `:joy:` renders as literal text. The natural completion of the custom-emoji +
-  `:`-autocomplete line. Full implementable plan in `SPEC.md` "Unicode `:emoji:` shortcodes": vendor a
-  static shortcode→char map (Rule A, no runtime dep, lazy-loaded), render in markdown.tsx (custom emoji
-  take precedence), merge into the iter-243 autocomplete. Medium + a data dependency → spec'd for a
-  fresh-context tick. **On resume: implement this spec** (build → vitest + browser QA + AI-vision → ship
-  + railway + rollout-verify), OR the owner may instead steer the loop at a larger epic (audio SFU /
-  tunneling / accounts — see "Platform & hosting" + the component north stars).
+- [x] **unicode `:emoji:` shortcodes (DONE iter 248, Discord parity).** Standard emoji from shortcodes
+  (`:joy:`→😂, `:fire:`→🔥) now render in EVERY channel/DM (not server-scoped, unlike custom emoji) and
+  appear in the `:`-autocomplete merged with custom server emoji. Implemented per `SPEC.md`: new
+  `web/src/emojiData.ts` vendors a STATIC curated `shortcode→char` map (Rule A, zero runtime dep), and is
+  **static-imported** (not lazy — the curated common set is a few KB, and the markdown render is
+  synchronous so a lazy `import()` would flash literal `:joy:`; the spec's lazy-load was hedged on a 60KB
+  full map). `markdown.tsx` renders the unicode char in a `<span class="emoji-unicode">` when a `:name:`
+  is NOT a custom override (**custom server emoji keep precedence**, matching Discord); unknown names stay
+  literal. `Chat.tsx` `refreshAutocomplete` merges candidates via new `mergeEmojiCandidates` (custom
+  first, then unicode `startsWith`, deduped, capped 8) and the menu shows the char in `.emoji-suggestion-uni`;
+  the old "no custom map → no menu" guard was relaxed so unicode works in custom-less channels/DMs.
+  Verified: tsc + vitest 146/146 (16 new: unicode render precedence/literal/XSS + merge dedup/cap) +
+  go test green; browser QA `:joy:`+`:tada:`→😂🎉 inline, `:fir`→menu lists 🔥`:fire:`→accept→sends, plus
+  AI-vision of both render + menu screenshots. **Follow-up:** expand the curated ~300-name map toward the
+  full ~1800 Unicode set via an offline generator (logged in `qa/IMPROVEMENTS.md`).
 
 - [~] **Group DMs (Discord parity, highest-ROI per tick-159 plan)** — **slice 1 backend DONE (iter
   160):** generalized the 2-member DM model (`kind='dm'` channels) to N members with **no schema change**

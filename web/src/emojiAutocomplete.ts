@@ -2,8 +2,8 @@
 // the regression-delicate caret/splice logic is unit-testable in isolation — the
 // React wiring in Chat.tsx stays thin. Mirrors the `@`-mention system (activeMention
 // / acceptMention) one-for-one, with custom-emoji NAMES as the source instead of
-// usernames. v1 covers custom server emoji only (the map already loaded for `:name:`
-// rendering); a unicode-name table is a later enhancement.
+// usernames. Candidates merge the server's custom emoji (precedence) with the vendored
+// standard unicode shortcodes (emojiData.ts) via mergeEmojiCandidates.
 
 // If the caret sits inside a `:partial` emoji shortcode being typed, return the
 // partial `query` and the index where its `:` starts (so the token can be replaced
@@ -28,6 +28,30 @@ export function matchEmojiNames(names: Iterable<string>, query: string, cap = 8)
   const out: string[] = []
   for (const n of names) {
     if (n.toLowerCase().startsWith(q)) {
+      out.push(n)
+      if (out.length >= cap) break
+    }
+  }
+  return out
+}
+
+// Merge custom-emoji matches (already filtered, passed FIRST → they take precedence and
+// keep their order) with standard unicode-shortcode matches for the same query, deduped
+// by name and capped. Custom names win on a collision (a server `:fire:` shadows the
+// unicode `:fire:`), then unicode names fill the remaining slots. Mirrors the render
+// precedence in markdown.tsx so the menu and the rendered message agree.
+export function mergeEmojiCandidates(
+  customMatches: string[],
+  unicodeNames: Iterable<string>,
+  query: string,
+  cap = 8,
+): string[] {
+  const out = customMatches.slice(0, cap)
+  const seen = new Set(out)
+  if (out.length < cap) {
+    for (const n of matchEmojiNames(unicodeNames, query, cap)) {
+      if (seen.has(n)) continue
+      seen.add(n)
       out.push(n)
       if (out.length >= cap) break
     }

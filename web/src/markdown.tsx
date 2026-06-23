@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react'
 import { EmojiImg } from './components/EmojiImg'
+import { unicodeEmoji } from './emojiData'
 
 // A deliberately small, XSS-safe Markdown subset for chat messages. It returns
 // React elements (never an HTML string / dangerouslySetInnerHTML), so React
@@ -7,7 +8,7 @@ import { EmojiImg } from './components/EmojiImg'
 //
 //   ```fenced code```   `inline code`   **bold**   *italic*  _italic_  __underline__
 //   ***bold italic***
-//   ~~strike~~   ||spoiler||   @mention   :custom_emoji:   and  > blockquote  lines
+//   ~~strike~~   ||spoiler||   @mention   :custom_emoji:   :joy:→😂 (unicode)   > blockquote
 //
 // Anything else — including raw HTML like <script>…</script> — renders as literal
 // text (Rule B: treat message bodies as hostile; never inject markup from them).
@@ -134,15 +135,12 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
   } else if (rule.kind === 'emoji') {
     const name = m[1]
     const id = ctx.emoji?.get(name)
-    if (id == null) {
-      // Unknown name (or no map) → leave the literal `:name:` text untouched. Emitting
-      // it here (not via `before`) means a later `:known:` in `after` still resolves.
-      out.push(m[0])
-    } else {
-      // Auth-gated emoji bytes can't ride an <img src> (no Authorization header), so
-      // EmojiImg fetches them WITH the token and renders a blob URL. React-elements only
-      // (no innerHTML); the slug came from a strict [a-z0-9_] charset, so nothing is
-      // attacker-injectable.
+    if (id != null) {
+      // Custom server emoji take PRECEDENCE (a server may override `:fire:` with its own
+      // image — matches Discord). Auth-gated emoji bytes can't ride an <img src> (no
+      // Authorization header), so EmojiImg fetches them WITH the token and renders a blob
+      // URL. React-elements only (no innerHTML); the slug came from a strict [a-z0-9_]
+      // charset, so nothing is attacker-injectable.
       out.push(
         React.createElement(EmojiImg, {
           key: `md${ctx.n++}`,
@@ -151,6 +149,20 @@ function renderInline(text: string, ctx: Ctx): ReactNode[] {
           alt: `:${name}:`,
         }),
       )
+    } else {
+      // No custom override → a STANDARD unicode shortcode (`:joy:` → 😂) renders the
+      // character in EVERY channel/DM (not server-scoped), unlike custom emoji. The value
+      // is a plain unicode string, React-escaped — never injectable.
+      const uni = unicodeEmoji(name)
+      if (uni) {
+        out.push(
+          React.createElement('span', { key: `md${ctx.n++}`, className: 'emoji-unicode' }, uni),
+        )
+      } else {
+        // Unknown name (or no map) → leave the literal `:name:` text untouched. Emitting
+        // it here (not via `before`) means a later `:known:` in `after` still resolves.
+        out.push(m[0])
+      }
     }
   } else if (rule.kind === 'bolditalic') {
     // ***x*** → <strong><em>x</em></strong>. Emitted as nested elements (not a wrapper

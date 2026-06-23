@@ -36,6 +36,15 @@ function emojiImgs(node: ReactNode) {
   )
 }
 
+// Every standard-unicode-emoji span (`:joy:`→😂 renders as <span class="emoji-unicode">).
+function unicodeEmojis(node: ReactNode) {
+  return flatten(node).filter(
+    (n): n is React.ReactElement<{ className?: string; children?: ReactNode }> =>
+      isValidElement(n) &&
+      (n.props as { className?: string }).className === 'emoji-unicode',
+  )
+}
+
 // All raw string text in the tree, concatenated (lets us assert literals survive).
 function allText(node: ReactNode): string {
   return flatten(node)
@@ -62,12 +71,15 @@ describe('renderMarkdown custom emoji (:name:)', () => {
     expect(allText(out)).toContain(':nope:')
   })
 
-  it('leaves :name: literal when no map / empty map is given', () => {
-    expect(emojiImgs(renderMarkdown('a :smile: b'))).toHaveLength(0)
-    expect(allText(renderMarkdown('a :smile: b'))).toContain(':smile:')
-    const empty = renderMarkdown('a :smile: b', { emoji: new Map() })
+  it('leaves a custom-only :name: literal when no map / empty map is given', () => {
+    // `:customonly:` is not a standard unicode shortcode, so with no custom map it stays
+    // literal (a known unicode name like `:smile:` would now render its char instead —
+    // covered in the unicode-emoji describe block below).
+    expect(emojiImgs(renderMarkdown('a :customonly: b'))).toHaveLength(0)
+    expect(allText(renderMarkdown('a :customonly: b'))).toContain(':customonly:')
+    const empty = renderMarkdown('a :customonly: b', { emoji: new Map() })
     expect(emojiImgs(empty)).toHaveLength(0)
-    expect(allText(empty)).toContain(':smile:')
+    expect(allText(empty)).toContain(':customonly:')
   })
 
   it('does not match invalid slugs (space, uppercase) even if a same-named entry existed', () => {
@@ -118,6 +130,60 @@ describe('renderMarkdown custom emoji (:name:)', () => {
     expect(emojiImgs(out)).toHaveLength(1)
     const strong = flatten(out).find((n) => isValidElement(n) && n.type === 'strong')
     expect(strong).toBeTruthy()
+  })
+})
+
+describe('renderMarkdown unicode emoji shortcodes (:joy:→😂, Discord parity)', () => {
+  it('renders a standard shortcode as the unicode character (no custom map)', () => {
+    const out = renderMarkdown('lol :joy:')
+    const uni = unicodeEmojis(out)
+    expect(uni).toHaveLength(1)
+    expect((uni[0].props as { children?: unknown }).children).toBe('😂')
+    // It is NOT a custom EmojiImg, and the literal `:joy:` is gone.
+    expect(emojiImgs(out)).toHaveLength(0)
+    expect(allText(out)).not.toContain(':joy:')
+  })
+
+  it('works in a channel/DM with an EMPTY custom map (unicode is not server-scoped)', () => {
+    const out = renderMarkdown('gg :fire:', { emoji: new Map() })
+    const uni = unicodeEmojis(out)
+    expect(uni).toHaveLength(1)
+    expect((uni[0].props as { children?: unknown }).children).toBe('🔥')
+  })
+
+  it('a CUSTOM server emoji of the same name takes precedence over the unicode one', () => {
+    // Server uploaded its own `:fire:` (id 9) → image wins, no unicode span.
+    const out = renderMarkdown('hot :fire:', { emoji: new Map([['fire', 9]]), token: 'tok' })
+    expect(emojiImgs(out)).toHaveLength(1)
+    expect(unicodeEmojis(out)).toHaveLength(0)
+  })
+
+  it('an unknown shortcode stays literal (not every :word: is an emoji)', () => {
+    const out = renderMarkdown('a :definitelynotanemoji: b')
+    expect(unicodeEmojis(out)).toHaveLength(0)
+    expect(allText(out)).toContain(':definitelynotanemoji:')
+  })
+
+  it('resolves a unicode emoji after an unknown one in the same message', () => {
+    const out = renderMarkdown(':nope: then :tada:')
+    const uni = unicodeEmojis(out)
+    expect(uni).toHaveLength(1)
+    expect((uni[0].props as { children?: unknown }).children).toBe('🎉')
+    expect(allText(out)).toContain(':nope:')
+  })
+
+  it('renders multiple unicode emoji and keeps surrounding markdown', () => {
+    const out = renderMarkdown('**yay** :tada: :rocket:')
+    expect(unicodeEmojis(out)).toHaveLength(2)
+    expect(flatten(out).some((n) => isValidElement(n) && n.type === 'strong')).toBe(true)
+  })
+
+  it('is XSS-safe — a unicode value is a plain escaped string, never markup', () => {
+    const out = renderMarkdown(':skull:')
+    const uni = unicodeEmojis(out)
+    expect(uni).toHaveLength(1)
+    // children is a string node (React-escaped), not an element / innerHTML.
+    expect(typeof (uni[0].props as { children?: unknown }).children).toBe('string')
   })
 })
 

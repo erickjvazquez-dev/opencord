@@ -1345,6 +1345,25 @@ button:disabled {
   object-fit: contain;
   flex: 0 0 auto;
 }
+/* Standard unicode shortcode (`:joy:`→😂) rendered inline in a message — Discord shows
+   inline emoji a touch larger than body text. */
+.emoji-unicode {
+  font-size: 1.25em;
+  line-height: 1;
+  vertical-align: -0.1em;
+}
+/* The unicode char shown in an autocomplete row, sized to align with the 20px custom
+   emoji image it sits beside. */
+.emoji-suggestion-uni {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 18px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
 .emoji-suggestion.active,
 .emoji-suggestion:hover {
   background: var(--accent);

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { activeEmojiToken, matchEmojiNames, spliceEmoji } from './emojiAutocomplete'
+import {
+  activeEmojiToken,
+  matchEmojiNames,
+  mergeEmojiCandidates,
+  spliceEmoji,
+} from './emojiAutocomplete'
+import { UNICODE_EMOJI, unicodeEmoji } from './emojiData'
 
 describe('activeEmojiToken', () => {
   it('matches a :partial of >=2 chars at the start of the text', () => {
@@ -58,5 +64,51 @@ describe('spliceEmoji', () => {
       next: 'hi :smile:  there',
       caret: 11,
     })
+  })
+})
+
+describe('unicodeEmoji (vendored shortcode→char map)', () => {
+  it('resolves common standard shortcodes to their unicode char', () => {
+    expect(unicodeEmoji('joy')).toBe('😂')
+    expect(unicodeEmoji('fire')).toBe('🔥')
+    expect(unicodeEmoji('thumbsup')).toBe('👍')
+    expect(unicodeEmoji('tada')).toBe('🎉')
+  })
+  it('is case-insensitive (the :slug: regex lowercases, but be robust)', () => {
+    expect(unicodeEmoji('JOY')).toBe('😂')
+  })
+  it('returns undefined for an unknown name', () => {
+    expect(unicodeEmoji('definitelynotanemoji')).toBeUndefined()
+  })
+  it('every key is lowercase [a-z0-9_] so it is reachable by render + autocomplete', () => {
+    for (const key of UNICODE_EMOJI.keys()) {
+      expect(key).toMatch(/^[a-z0-9_]+$/)
+    }
+  })
+})
+
+describe('mergeEmojiCandidates (custom precedence + unicode fill)', () => {
+  it('lists custom matches first, then unicode matches for the query', () => {
+    // custom `fireball` + unicode `fire`/`fireworks…` for query "fir"
+    const merged = mergeEmojiCandidates(['fireball'], UNICODE_EMOJI.keys(), 'fir', 8)
+    expect(merged[0]).toBe('fireball')
+    expect(merged).toContain('fire')
+  })
+  it('dedupes a name present in BOTH (custom shadows unicode, keeps custom position)', () => {
+    const merged = mergeEmojiCandidates(['fire'], UNICODE_EMOJI.keys(), 'fire', 8)
+    expect(merged.filter((n) => n === 'fire')).toHaveLength(1)
+    expect(merged[0]).toBe('fire')
+  })
+  it('returns unicode-only matches when there are no custom emoji', () => {
+    const merged = mergeEmojiCandidates([], UNICODE_EMOJI.keys(), 'joy', 8)
+    expect(merged).toContain('joy')
+  })
+  it('respects the cap, custom taking the first slots', () => {
+    const merged = mergeEmojiCandidates(['a_custom_one', 'b_custom_two'], UNICODE_EMOJI.keys(), 's', 3)
+    expect(merged).toHaveLength(3)
+    expect(merged.slice(0, 2)).toEqual(['a_custom_one', 'b_custom_two'])
+  })
+  it('returns empty when nothing matches the query', () => {
+    expect(mergeEmojiCandidates([], UNICODE_EMOJI.keys(), 'zzzznope', 8)).toEqual([])
   })
 })
