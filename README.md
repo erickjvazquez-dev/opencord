@@ -18,7 +18,8 @@ run one command, and you have your own real-time chat server.
 > reactions** (react with any standard emoji via a searchable picker + custom server
 > emoji, live counts) · **replies** + **jump-to-message** · **@mentions** with
 > autocomplete · **markdown** · **emoji shortcodes** (`:joy:`→😂 unicode + custom
-> server `:name:`, with `:`-autocomplete; emoji-only messages render jumbo) ·
+> server `:name:`, with a `:`-autocomplete and a searchable composer picker;
+> emoji-only messages render jumbo) ·
 > **file & image attachments** (local-disk, access-gated,
 > inline images) · **grouped messages** (consecutive same-author) · **pinned messages** ·
 > **message search** (in-channel, with `from:` / `has:` / `before:` / `after:`

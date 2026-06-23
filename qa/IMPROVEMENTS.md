@@ -5562,3 +5562,35 @@ char / `:name:` into the composer). Now that `searchUnicodeEmoji` exists, it's a
 adjacent: the composer emoji-picker popover has no unicode path yet (the follow-up above).
 
 **Cadence:** shipped a real feature → ACTIVE (1800s).
+
+---
+
+## 2026-06-22 (iter 252) — composer emoji picker → all emoji + searchable; aria-label rename broke a sibling test
+
+Completed the emoji-picker parity arc: the composer 🙂 button is now ALWAYS present (was custom-only,
+so absent in #general/DMs) and searches the full unicode set, not just custom server emoji. Component
+advanced: **chat/UI**. The emoji-parity line (custom render → unicode shortcodes → `:`-autocomplete →
+jumbo → reaction picker → composer picker) is now complete.
+
+**Loop-process win (caught + FIXED this tick):** renaming the button's aria-label `insert custom emoji`
+→ `insert emoji` silently broke the EXISTING 03k server-channel test (it located the button by the old
+role-name → `locator.click` timed out 30s → a confusing "QA crashed" with no obvious cause). It took two
+diagnostic QA runs to localize because the crash line printed AFTER unrelated voice-suite narration in the
+combined log. Also broke 03k's "closes on select" assertion (my new handler didn't close). Fixes: close
+the picker on select (matches the established contract + clean UX) and update 03k's button name.
+**Playbook adds:** (1) **renaming an aria-label / role-name / data-attr is an API change — grep `qa/` for
+the old string BEFORE renaming** (a getByRole/getByText elsewhere will time out, not fail fast). (2) When
+a "QA crashed: Timeout" has no obvious culprit, the crashing step is the LAST browser `→` line before the
+suite handed off — filter the log to browser-suite step lines only (the voice/realtime suites interleave
+confusingly). Consider tagging each suite's lines with a prefix so failures localize instantly (logged as
+a candidate harness improvement).
+
+**Highest-value follow-up (logged):** the composer picker closes after ONE insert; Discord keeps it open
+for multi-insert (shift-click / click-to-keep). Minor UX; revisit if it annoys. Also: the picker has no
+emoji CATEGORY tabs (smileys/animals/food/…) — fine at ~416 emoji + search, reconsider only if the map
+grows to the full ~1800 set (the standing emojiData expansion follow-up).
+
+**QA-coverage note:** emoji insertion now covered in BOTH #general (3d2, unicode) and a server channel
+(3k, custom). Least-tested adjacent: emoji picker inside a DM (path identical to #general; no dedicated step).
+
+**Cadence:** shipped a real feature → ACTIVE (1800s).

@@ -265,6 +265,9 @@ export function Chat({
   // lists the active server's custom emoji and inserts `:name:` at the caret on click.
   // Separate from the per-message reaction palette (`pickerFor`) above.
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
+  // The composer emoji-picker's search query (Discord parity: insert ANY standard emoji).
+  // Empty → custom server emoji + a default unicode grid; non-empty → filtered.
+  const [composerEmojiQuery, setComposerEmojiQuery] = useState('')
   // Mobile: the sidebar is an off-canvas drawer toggled by the header menu button.
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // In-channel search: `results` non-null means the message list shows matches instead.
@@ -4158,46 +4161,96 @@ export function Chat({
           >
             📎
           </button>
-          {/* Custom-emoji picker — only when the active server has custom emoji. Inserts
-              `:name:` at the caret. Separate from the per-message reaction palette. */}
-          {activeEmoji && activeEmoji.size > 0 && (
-            <div className="emoji-picker-wrap" ref={emojiPickerRef}>
-              <button
-                type="button"
-                className="emoji-picker-btn"
-                aria-label="insert custom emoji"
-                aria-expanded={emojiPickerOpen}
-                title="Custom emoji"
-                disabled={!connected || !canPost}
-                onClick={() => setEmojiPickerOpen((o) => !o)}
-              >
-                🙂
-              </button>
-              {emojiPickerOpen && (
-                <div className="emoji-picker-popover" role="listbox" aria-label="custom emoji">
-                  {[...activeEmoji.entries()].map(([name, id]) => (
-                    <button
-                      type="button"
-                      key={id}
-                      role="option"
-                      aria-selected={false}
-                      className="emoji-picker-item"
-                      data-emoji-name={name}
-                      title={`:${name}:`}
-                      aria-label={`:${name}:`}
-                      // mousedown so the textarea keeps focus / caret for the splice.
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        insertEmojiShortcode(name)
+          {/* Emoji picker — insert standard unicode (`:joy:`→😂) + custom server `:name:` at
+              the caret. Always available (works in #general / DMs / custom-less servers too).
+              Separate from the per-message reaction palette. */}
+          <div className="emoji-picker-wrap" ref={emojiPickerRef}>
+            <button
+              type="button"
+              className="emoji-picker-btn"
+              aria-label="insert emoji"
+              aria-expanded={emojiPickerOpen}
+              title="Emoji"
+              disabled={!connected || !canPost}
+              onClick={() => {
+                setComposerEmojiQuery('') // fresh search each open
+                setEmojiPickerOpen((o) => !o)
+              }}
+            >
+              🙂
+            </button>
+            {emojiPickerOpen &&
+              (() => {
+                const q = composerEmojiQuery.trim().toLowerCase()
+                const customMatches = activeEmoji
+                  ? [...activeEmoji.entries()].filter(([n]) => q === '' || n.toLowerCase().includes(q))
+                  : []
+                const uni = searchUnicodeEmoji(composerEmojiQuery, 48)
+                return (
+                  <div className="emoji-picker-popover" role="dialog" aria-label="emoji picker">
+                    <input
+                      className="emoji-picker-search"
+                      autoFocus
+                      placeholder="Search emoji…"
+                      aria-label="search emoji"
+                      value={composerEmojiQuery}
+                      onChange={(e) => setComposerEmojiQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.stopPropagation()
+                          setEmojiPickerOpen(false)
+                        }
                       }}
-                    >
-                      <EmojiImg token={token} id={id} alt={`:${name}:`} />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    />
+                    <div className="emoji-picker-popover-grid" role="listbox" aria-label="emoji">
+                      {/* custom server emoji first (precedence), then standard unicode */}
+                      {customMatches.map(([name, id]) => (
+                        <button
+                          type="button"
+                          key={`custom:${id}`}
+                          role="option"
+                          aria-selected={false}
+                          className="emoji-picker-item"
+                          data-emoji-name={name}
+                          title={`:${name}:`}
+                          aria-label={`:${name}:`}
+                          // mousedown so the textarea keeps focus / caret for the splice.
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            insertEmojiShortcode(name)
+                            setEmojiPickerOpen(false)
+                          }}
+                        >
+                          <EmojiImg token={token} id={id} alt={`:${name}:`} />
+                        </button>
+                      ))}
+                      {uni.map(([name, char]) => (
+                        <button
+                          type="button"
+                          key={name}
+                          role="option"
+                          aria-selected={false}
+                          className="emoji-picker-item"
+                          data-emoji-name={name}
+                          title={`:${name}:`}
+                          aria-label={`:${name}:`}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            insertEmojiShortcode(name)
+                            setEmojiPickerOpen(false)
+                          }}
+                        >
+                          <span className="emoji-picker-uni">{char}</span>
+                        </button>
+                      ))}
+                      {customMatches.length === 0 && uni.length === 0 && (
+                        <div className="emoji-picker-empty">No emoji found</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+          </div>
           <textarea
             ref={composerRef}
             className="composer-input"

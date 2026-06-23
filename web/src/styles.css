@@ -1640,17 +1640,31 @@ button:disabled {
   bottom: calc(100% + 6px);
   left: 0;
   z-index: 20;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 2px;
-  max-height: 220px;
-  max-width: 280px;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 280px;
   padding: 6px;
   background: var(--bg-elevated);
   border: 1px solid var(--bg-input);
   border-radius: var(--radius);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+}
+/* The scrollable emoji grid below the composer picker's search box. */
+.emoji-picker-popover-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.emoji-picker-popover-grid .emoji-picker-empty {
+  grid-column: 1 / -1; /* span all 6 columns so the empty state centers, not one cell */
+}
+/* A standard unicode emoji shown in the composer picker grid. */
+.emoji-picker-uni {
+  font-size: 20px;
+  line-height: 1;
 }
 .emoji-picker-item {
   display: flex;

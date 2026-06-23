@@ -339,6 +339,40 @@ async function main() {
     'Shift+Enter did not send "line one" as its own message',
   )
 
+  // 3d2 — Composer emoji picker (Discord parity, iter 252): the 🙂 button is now ALWAYS present
+  // (was custom-emoji-only, so hidden in #general) and opens a SEARCHABLE picker over the full
+  // unicode set. Search "joy" → click → `:joy:` inserts → send → renders 😂. Regression guard
+  // for the always-on button + searchUnicodeEmoji wiring in the composer.
+  step('composer 🙂 picker: search "joy" → insert :joy: → send → renders 😂 (works in #general)')
+  await page.waitForTimeout(3000) // refill the WS token bucket before the send below
+  const emojiBtn = page.getByRole('button', { name: 'insert emoji' })
+  await emojiBtn.waitFor({ timeout: 4000 })
+  check(
+    await emojiBtn.isVisible(),
+    'the composer 🙂 emoji button is present in #general (a channel with NO custom emoji)',
+  )
+  await emojiBtn.click()
+  const composerSearch = page.locator('.emoji-picker-popover .emoji-picker-search')
+  await composerSearch.waitFor({ timeout: 4000 })
+  await composerSearch.fill('joy')
+  const joyOption = page.locator('.emoji-picker-popover-grid .emoji-picker-item[data-emoji-name="joy"]')
+  await joyOption.waitFor({ timeout: 4000 })
+  await shot('03d2-composer-emoji-picker.png')
+  check(await joyOption.isVisible(), 'searching "joy" surfaces the :joy: emoji in the composer picker')
+  await joyOption.click()
+  check(
+    (await composer.inputValue()).includes(':joy:'),
+    `clicking inserts :joy: into the composer (got "${await composer.inputValue()}")`,
+  )
+  // Click the composer (closes the picker via outside-click + focuses it), then send.
+  await composer.click()
+  await composer.press('Enter')
+  const joyMsg = page
+    .locator('.message .body', { has: page.locator('.emoji-unicode', { hasText: '😂' }) })
+    .last()
+  await joyMsg.waitFor({ timeout: 8000 })
+  check(await joyMsg.isVisible(), 'the picked :joy: sends and renders as the unicode 😂')
+
   // 3e — Blockquote (> ) renders; spoiler (||x||) is hidden until clicked.
   step('send a > blockquote + ||spoiler|| → blockquote renders, spoiler reveals on click')
   // Pace first: this is the ~5th WS frame from this client and the per-connection
@@ -1573,7 +1607,7 @@ async function main() {
   // renders as an inline image. Pure convenience over typing `:name:`. (The panel is
   // closed and we're focused on the server channel, with `ui_emoji` in the cache.)
   step('composer emoji picker: open → lists :ui_emoji: → click inserts the shortcode → renders')
-  const emojiPickerBtn = page.getByRole('button', { name: 'insert custom emoji' })
+  const emojiPickerBtn = page.getByRole('button', { name: 'insert emoji' })
   await emojiPickerBtn.waitFor({ timeout: 8000 })
   check(
     await emojiPickerBtn.isVisible(),

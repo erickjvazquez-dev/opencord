@@ -737,6 +737,13 @@ item from here as the structural milestones above land.
   now complete end-to-end** (backend + render + manager). **Picker DONE (iter 153, slice 3b):** a
   composer 🙂 popover lists the server's emoji and inserts `:name:` at the caret (browser E2E +
   AI-vision; reaction palette untouched). **Custom emoji is FULLY complete (backend+render+manager+picker).**
+  **+ composer picker upgraded to ALL emoji (DONE iter 252, Discord parity):** the 🙂 button is now
+  ALWAYS present (was custom-only → hidden in #general / DMs / custom-less servers) and the popover gained
+  a search box over the full ~416-name unicode set (`searchUnicodeEmoji`) — empty shows custom + a default
+  unicode grid, typing filters; clicking inserts `:name:` and closes. tsc + vitest 163/163 + go test green;
+  browser QA `3d2` (in #general: 🙂 present → search "joy" → insert → send → renders 😂) + existing `3k`
+  (server custom-emoji path, updated for the renamed button + close-on-select) + AI-vision; shipped +
+  railway + rollout-verified.
   · **`:`-autocomplete in the composer DONE (iter 243)** — typing `:partial` (≥2 chars) pops a suggestion
   menu of the server's custom emoji; ArrowUp/Down + Enter/Tab/click inserts `:name: `, Esc closes. Built
   by mirroring the `@`-mention system (pure `emojiAutocomplete.ts` + 16 vitest, mutually-exclusive menus,
