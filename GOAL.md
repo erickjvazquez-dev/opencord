@@ -614,10 +614,18 @@ component north stars. (Spec history: `SPEC.md` "User Settings + UI polish".)
   user-scoped, time-bounded, unforgeable-without-secret) + live E2E (`POST /voice/token` returns
   `username:"…:9", credential:"<hmac>"`); the static path + the no-TURN default are untouched (mesh QA
   green). TODO: TURN for higher-bitrate screen video + SFU; deploy a real coturn for symmetric-NAT E2E.
-- [ ] **Built-in secure tunneling (free, local)** — let friends on other computers reach a
+- [~] **Built-in secure tunneling (free, local)** — let friends on other computers reach a
   self-hosted server without manual port-forwarding: an optional, free, self-hostable
   relay/tunnel (e.g. bundled reverse-tunnel) — "creating local servers for you and your
   friends with secure tunneling, nothing behind a paywall." Must stay free + self-hostable.
+  **DESIGN SPEC DONE (iter 264, see `SPEC.md` "Built-in secure tunneling … DESIGN SPEC").**
+  Key finding: zero-config tunneling fundamentally needs a publicly-reachable endpoint, so it
+  reduces to an OWNER cost/architecture call — **Opencord-run relay (ongoing $$) vs opt-in
+  cloudflared / self-host frp / Tailscale ($0)**. Verified the app is ALREADY tunnel-transparent
+  (relative URLs + `location`-derived WS + CORS `*` + raw invite codes), so **Slice 0 = a
+  `docs/TUNNELING.md` of the free DIY paths, NO code change** (autonomous-safe, loop-shippable now).
+  **Slice 1+ (bundled opt-in relay via `docker compose --profile tunnel`) is BLOCKED on owner-
+  decision #1 + `stack-guardian` (Rule 16).**
 - [ ] **Real accounts with email** — add an email to accounts (register/login, unique,
   bcrypt unchanged). Unlocks **invite/DM by email** (the lookup is already identifier-based:
   username + user id work today; email is the one-line `WHERE email=$1` branch once stored)

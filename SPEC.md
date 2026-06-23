@@ -2983,3 +2983,56 @@ re-confirm a CUSTOM `:qa_emoji:` still renders/precedes. AI-vision the rendered 
 NEW `web/src/emojiData.ts` (the vendored map), `markdown.test.tsx`, `emojiAutocomplete.test.ts`,
 `qa/browser.mjs`, maybe `styles.css`. No backend. Reuses the iter-243 autocomplete + iters-150–155
 custom-emoji render infra.
+
+## Built-in secure tunneling (free, local) — DESIGN SPEC (iter 264, owner-decision required)
+
+**North-Star promise:** a friend on another computer can reach a self-hosted Opencord WITHOUT manual
+port-forwarding — "create local servers for you and your friends with secure tunneling, nothing behind a
+paywall." Must stay **free + self-hostable** and **degrade gracefully** when off (Rule A); adopting any
+new dependency/service runs **`stack-guardian` first** (Rule 16).
+
+### The fundamental constraint (why this needs an owner decision)
+Reaching a box behind NAT from the public internet REQUIRES a publicly-reachable endpoint somewhere —
+there is no purely-local way around it. So "zero-config free tunneling" reduces to *who hosts the public
+endpoint*, and each answer has a cost/architecture tradeoff only the owner can weigh:
+
+| Option | How | Free? | No 3rd-party? | Zero user setup? | Cost owner | Rule-A fit |
+|---|---|---|---|---|---|---|
+| **A. Opencord-run relay** (bundle `frps`/`zrok`/Piko-style relay we host) | client opens an outbound tunnel to our relay; we proxy `https://<sub>.opencord.<domain>` → their box | ✅ for users | ✅ | ✅ | **$$ bandwidth/host (ongoing)** | best UX; **owner cost call** — likely the Cloud-Opencord economics or a metered free tier |
+| **B. Opt-in Cloudflare Tunnel** (`cloudflared`) | user runs a bundled `cloudflared` w/ their free CF account | ✅ | ❌ (Cloudflare) | ⚠️ needs a CF login | $0 | opt-in only; default stays LAN/port-forward |
+| **C. User-self-hosted relay** (bundle `frps`, they run it on a VPS) | user deploys the relay on their own public host | ✅ | ✅ | ❌ needs a VPS+DNS | $0 | purest self-host; not "zero-config" |
+| **D. Mesh VPN** (Tailscale/self-host `headscale`) | friends install a Tailscale client; headscale coordinates | ✅ | ⚠️ (client app) | ❌ friends install an app | $0 (headscale needs a public host) | great for trusted friend-groups |
+
+Leading OSS building blocks (all Go, permissive licenses, self-hostable): **frp**, **zrok**, **Piko**,
+**Wireport**; **cloudflared** for opt-in; **headscale** for the mesh route.
+
+### Recommended phasing (so the loop can advance WITHOUT pre-committing the owner's cost call)
+- **Slice 0 (autonomous-safe, no new service) — and it's PURELY DOCS:** verified iter 264 that the app
+  is **already tunnel-transparent** — the client uses relative `/api` fetches, derives the WS URL from
+  `location.host`/`location.protocol` (https→wss), CORS defaults to `*`, and invites are raw codes (not
+  absolute URLs). So fronting Opencord with any tunnel Just Works with **ZERO code change**. Slice 0 is
+  therefore a one-page `docs/TUNNELING.md` documenting the three free DIY paths (cloudflared, frp-on-a-
+  VPS, Tailscale) with copy-paste configs pointed at the single origin (`:3000` prod / the server),
+  noting that invite *codes* are shared (not URLs) so they're tunnel-agnostic. ZERO dependency, ZERO
+  cost, full graceful degradation. **The loop can ship this now** (E2E across a real tunnel needs a
+  public endpoint, so the recipes are the standard documented ones, not CI-verified).
+- **Slice 1+ (needs owner greenlight + `stack-guardian`):** a bundled, opt-in relay client (Option A or
+  B) wired into `docker compose --profile tunnel` (mirrors the existing coturn `--profile turn` pattern),
+  off by default. Option A (Opencord-run relay) additionally needs the **cost/architecture decision**
+  (who pays the bandwidth; is it the free tier or Cloud-Opencord?).
+
+### Owner-decision points (please pick before Slice 1)
+1. **Does the free local tier get Opencord-run relay infra (Option A, ongoing $$), or stay DIY/opt-in
+   (B/C/D, $0)?** This is the core call — it defines the "nothing behind a paywall" promise's economics.
+2. If opt-in: **which integration is the documented default** — cloudflared (easiest, 3rd-party) vs
+   frp/zrok (purest self-host) vs Tailscale (friend-group mesh)?
+
+### Verify (when implemented)
+Slice 0: a self-hoster behind NAT follows `docs/TUNNELING.md`, a second machine reaches the instance over
+the tunnel, registers, and exchanges a live message (the existing two-client realtime check, but across
+the tunnel); invite links + WS connect use the public URL. Slice 1: `docker compose --profile tunnel up`
+brings the relay client up off-by-default-elsewhere; `stack-guardian` APPROVE on the chosen tech first.
+
+**Status:** design-only; **blocked on owner-decision #1**. Slice 0 (docs + tunnel-aware URLs) is
+autonomous-safe and is the recommended next implementation step if the owner wants tunneling progress
+before deciding the relay-infra question.

@@ -5896,3 +5896,32 @@ greenlights a North-Star big-rock (tunneling/Cloud/federation/SFU-scale; see ite
 the only path to substantive new work.
 
 **Cadence:** audit found no new gap (no fix, no open P0) → idle_streak→1 → 2700s, re-widening.
+
+---
+
+## 2026-06-23 (iter 264) — forward groundwork: design spec for the #1 North-Star differentiator (built-in tunneling)
+
+The owner kept actively re-firing the loop ("continue") with the parity surface complete, so rather than
+another maintenance watch I made autonomous-SAFE forward progress: researched and wrote a decision-
+oriented DESIGN SPEC for **built-in secure tunneling** (`SPEC.md`). A spec is the mandated spec-first step
+for a big change and is safe to do solo — it's analysis + options, NOT a unilateral adoption (Rule 16
+defers the actual service-adoption + cost decision to the owner). Component: **infra / North Star**.
+
+Key findings (grounded by web research + a code check):
+- Zero-config tunneling FUNDAMENTALLY needs a publicly-reachable endpoint → it reduces to an owner
+  cost/architecture call: Opencord-run relay (ongoing $$) vs opt-in cloudflared / self-host frp / Tailscale ($0).
+  Surveyed the OSS building blocks (frp, zrok, Piko, Wireport, cloudflared, headscale).
+- **Verified the app is already tunnel-transparent** (relative `/api`, `location`-derived WS, CORS `*`,
+  raw invite codes) — so the DIY free paths work TODAY with zero code change. That makes **Slice 0 a
+  pure `docs/TUNNELING.md`** (autonomous-safe, loop-shippable next tick); Slice 1+ (bundled opt-in relay)
+  is owner-blocked.
+
+**Loop-process note:** a maintenance streak + an engaged owner is the right moment for spec-first
+groundwork on the blocked frontier — it converts "needs owner direction" (vague) into a concrete
+decision (2 numbered questions) + a ready autonomous Slice 0, so the loop keeps advancing without
+over-reaching into a cost/architecture commit it shouldn't make.
+
+**Next (ready, autonomous-safe):** Slice 0 — write `docs/TUNNELING.md` (the three free DIY tunnel paths,
+copy-paste configs, invite-codes-are-tunnel-agnostic note). No code, no dependency, no cost.
+
+**Cadence:** opened a concrete ready slice (Slice 0) → ACTIVE (1800s) to implement it next.
