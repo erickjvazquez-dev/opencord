@@ -711,7 +711,8 @@ item from here as the structural milestones above land.
   token); fixed via a new `EmojiImg` fetch+blob component (mirrors `Avatar`), wired into every emoji
   render site. Caught by a new `naturalWidth>0` QA assertion (element-existence checks had missed it for
   4 ticks). QA lesson logged: assert auth-gated images LOAD, not just exist.
-- [x] Markdown — bold/italic/strikethrough, **`__underline__` (Discord parity, iter 245)**, inline &
+- [x] Markdown — bold/italic/strikethrough, **`__underline__` (iter 245) + `***bold italic***` (iter 246)
+  (Discord parity)**, inline &
   fenced code, `> ` blockquotes, `||spoilers||` (click to reveal), `- `/`1. ` lists, autolinked URLs,
   **and `#`/`##`/`###` headers + `-#` subtext (Discord parity, iter 221)** — styled visual hierarchy
   (h1 1.5em → h3, bold; subtext small+muted), inline markdown still works inside a header, `#channel`/
@@ -719,6 +720,9 @@ item from here as the structural milestones above land.
   through the same `renderInline`); vitest + browser QA + AI-vision verified. Underline: a new
   `__([^_\n]+)__` inline rule placed before the single-`_` italic rule (double underscore = underline,
   single = italic, matching Discord); single `_italic_` unaffected; 4 vitest cases + browser QA + `<u>` CSS.
+  Bold-italic: a `***x***` rule (`kind:'bolditalic'`) before the `**` bold rule, emitting nested
+  `<strong><em>` directly (was mis-rendering as `*<strong>x</strong>*` — literal asterisks); `**bold**`
+  and `*italic*` unaffected; 4 vitest cases + browser QA + AI-vision.
 - [x] **Masked links `[text](url)` — DONE (iter 222, Rule 15).** Discord-style `[label](url)` linkified,
   secure by construction: the URL group is `https?://` IN THE REGEX, so `[x](javascript:…)`/`[x](data:…)`
   never form an `<a>` (stay inert literal text); the `<a>` gets `target=_blank` + `rel=noopener noreferrer`

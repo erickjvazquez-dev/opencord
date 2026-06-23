@@ -3,6 +3,24 @@
 One entry per self-improve tick (newest first): what the loop learned about its own
 QA, coverage, or process. Appended by `/self-improve-opencord` step 6.5 ("Reflect").
 
+## 2026-06-22 (iter 246) — ***bold italic***; make the impl match the test's observation model
+
+Continued closing the markdown emphasis set after underline (245): `***text***` was mis-rendering
+as `*<strong>text</strong>*` (literal asterisks — the `**` bold rule matched at index 1, same class as
+the underline bug). Added a `***x***` rule before `**`. Fully verified: vitest 130/130, browser QA +
+AI-vision (the word renders bold AND italic, distinct from bold/underline/code/link).
+
+**Loop lesson (logged) — test/impl observation-model mismatch.** My FIRST implementation wrapped the
+nested tags in a `BoldItalic` React component (`el: BoldItalic` → `<strong><em>…`). It works in the
+browser (React renders the component), but the markdown VITEST deliberately walks the UN-rendered element
+tree (no DOM library) — so it saw `<BoldItalic>` (a function `type`), NOT `<strong>`/`<em>`, and 2 tests
+failed. The catch was good (the tests did their job); the fix was to make the impl match how the tests
+observe: emit the nested `<strong><em>` elements DIRECTLY (a `kind:'bolditalic'` branch) so the tree is
+transparent. Rule: when a test inspects structure rather than rendered output, the code must EXPOSE that
+structure — don't hide the semantic tags inside a wrapper component the test can't see through. (The
+existing component-based rules like `Spoiler` are only checked via browser QA, not tree-walking vitest —
+consistent with this.) Caught by running vitest before shipping, exactly as intended.
+
 ## 2026-06-22 (iter 245) — on a mature backlog, the win is the small parity gap hiding as a mis-render
 
 Surveyed the whole GOAL.md: TOP PRIORITY is now all `[~]` epics (Group DMs, roles — actually FULLY
