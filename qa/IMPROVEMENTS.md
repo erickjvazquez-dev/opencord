@@ -6080,3 +6080,37 @@ then pivot to `web/src` vitest modules. Both run forever with zero stack. Will f
 Track-0 step text once one frontend tick confirms the vein (avatar.ts next).
 
 **Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 270) — shipped: first FRONTEND coverage tick (avatar.ts) — vein confirmed
+
+Docker down (6th tick). Executed last tick's pivot: covered `web/src/avatar.ts` (deterministic
+fallback color + initials, rendered on every message/member row) — the first untested frontend pure
+module. `web/src/avatar.test.ts`, 7 tests, ran under vitest with ZERO docker. The high-value one:
+`avatarTextColor`'s readability claim is verified by an INDEPENDENT hsl→sRGB→WCAG-luminance oracle
+(separate impl, not self-agreement) asserting it always picks the higher-contrast of black/white over
+its own generated background — so a future tweak to the threshold that hurts contrast fails CI. Full
+frontend suite 178/178 green (+7). No bug found (impl matches the oracle across the sample).
+
+**Component:** UI → polished/accessible (avatar legibility is now a pinned WCAG contract).
+
+**Rule promotion — NOW evidence-backed (2 surfaces proven):** the docker-down Track-0 rule
+("cover an untested PURE module on a hostile-input or user-rendered surface; exhaust Go `internal/`
+helpers, then pivot to `web/src` vitest modules") has now produced 4 Go ticks (266–269) + 1 frontend
+tick (270), all green, all zero-stack. The vein is confirmed on BOTH sides. This is ready to fold into
+the loop's Track-0 step text. NOT editing the live skill file autonomously mid-loop (Rule 10 — don't
+churn the loop definition without owner awareness); leaving it documented here as the
+ready-to-promote rule for the owner / a `meta-improve` pass.
+
+**Remaining frontend pure-module gap:** `emojiData.ts` (emoji dataset + search/lookup) is the last
+untested `web/src` pure module — next tick's target. After that, BOTH pure-module veins (Go helpers +
+frontend modules) are exhausted, and Track-0 will need either docker back (browser QA + DB integration,
+6 ticks overdue) or the bigger lift of WS-hub-level tests (the in-process `ws.Hub` is testable without
+a DB — `hub_test.go` already does some; reconnect/eviction/fan-out edge cases are extendable).
+
+**Docker-down debt (now 6 ticks):** browser QA + DB integration remain unrunnable. The coverage work is
+real and valuable but structurally cannot catch UI-render or DB-path regressions. This is the single
+biggest blind spot; flagged again so it's not normalized.
+
+**Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
