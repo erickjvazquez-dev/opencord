@@ -6048,3 +6048,35 @@ Logging this as the rule refinement; will draft the store-stub harness next tick
 `inviteCode`.
 
 **Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 269) — shipped: invite-code generator coverage; corrected the docker-down plan
+
+Docker down (5th tick). Shipped the LAST pure-helper-backlog item: `inviteCode` (internal/chat/chat.go)
+had no test. Added `internal/chat/invite_code_test.go` — format (exactly 8 RawURLEncoding chars over the
+URL-safe alphabet, no `+`/`/`/`=`, decodes to 6 bytes = 48 bits) + a 5000-code uniqueness batch that
+fails loudly if the CSPRNG is ever swapped for a constant/weak/sequential generator (a guessable invite
+code = forgeable invite, Rule 15). go build/vet/test green; test-only → no deploy.
+
+**Component:** security → hostile-input-proof (Go pure-helper hostile-input sweep is now COMPLETE:
+sanitizeFilename, sanitizeHeaderFilename, parseSearchQuery, parseSearchDate, validateRole, inviteCode).
+
+**Course-correction on last tick's "store-stub harness" idea (honest):** investigated it — `chat.Store`
+is a CONCRETE struct over a pgxpool, and handlers take `*chat.Store`, so stubbing the DB would require
+extracting a Store interface across many call sites = a refactor that's spec-first + non-surgical
+(Rules 6/10), NOT a quick autonomous win. Dropping it as the docker-down move.
+
+**Better docker-down vein (concrete, plentiful, zero-docker): the FRONTEND vitest suite.** `web/` runs
+`vitest run` with no docker/DB. Most pure TS modules are already tested (blocking, dates, dm, drafts,
+emojiAutocomplete, notify, sfu, voice, voiceSettings) — but **`avatar.ts` and `emojiData.ts` have NO
+test**. `avatar.ts` (initials + deterministic color from a username) is rendered on every message/member
+row and is pure → next tick's target. This vein keeps Track-0 productive for many ticks without docker
+and finally covers the CLIENT, which the Go-only sweep never touched.
+
+**Standing rule (now evidence-backed, ready to promote):** when docker is down, Track-0 = "cover an
+untested PURE module on a hostile-input or user-rendered surface" — exhaust Go's `internal/` helpers,
+then pivot to `web/src` vitest modules. Both run forever with zero stack. Will fold this into the loop's
+Track-0 step text once one frontend tick confirms the vein (avatar.ts next).
+
+**Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
