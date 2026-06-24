@@ -5983,3 +5983,35 @@ high-ROI Track-0 move when docker is down — it needs no stack, runs forever, a
 the inputs Rule B calls hostile. Worth making a standing fallback when browser QA can't run.
 
 **Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 267) — shipped: hostile-query coverage for the search-operator parser
+
+Docker still down → continued the Track-0 "untested pure helper on a security surface" sweep flagged
+last tick. `parseSearchQuery`/`parseSearchDate` (internal/chat/chat.go) parse attacker-controlled
+search input into the filters that build `SearchMessages`' dynamic SQL, and had zero unit tests.
+Added `internal/chat/search_query_test.go` — 23 cases. The security core: every malformed/hostile
+token must degrade to inert free text, never parse or error. Encoded `before:'; DROP TABLE`,
+impossible dates (`2026-13-99`, non-leap `2025-02-29`), unknown `has:value`, and bare operator keys
+all falling through to text; `parseSearchDate` proven strict (only padded `YYYY-MM-DD` at UTC
+midnight; datetime/wrong-separator/injection rejected). Operator recognition pinned too (keys
+case-insensitive; `from:` value case preserved; `after:` excludes the named day). go build/vet/test
+green; test-only so no deploy (binary byte-identical, Rule 10/16). Pushed to source control.
+
+**Component advanced:** security → hostile-input-proof (the search surface's parser is now a pinned
+contract; a regression that makes a hostile operator "active" instead of inert will fail CI).
+
+**Coverage note (next-tick target):** remaining untested pure helpers — `validateRole` (role
+name/color validation, an input surface) and `inviteCode` (entropy/charset of minted invite codes).
+`validateRole` is the higher-value pick (validates user-supplied role name + hex color). Continue the
+sweep next tick while docker is down; switch to browser QA the moment docker is back up (it's been
+down 3 ticks — the every-3rd-tick UI sweep is overdue and can't run without it).
+
+**Loop-process note (standing rule candidate):** two ticks running, "pick the untested pure helper on
+a hostile-input surface" has been the right Track-0 move under docker-down. Promoting it to a named
+fallback in the loop's Track-0 step would remove the per-tick rediscovery. Logged here; will propose
+the rule edit once the helper backlog (validateRole, inviteCode) is exhausted so the rule ships with
+evidence.
+
+**Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
