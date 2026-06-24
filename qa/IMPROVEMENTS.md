@@ -5954,3 +5954,32 @@ documented for self-hosters without waiting on the owner's relay-infra call.
 
 **Cadence:** shipped a real user-facing doc/feature (the tunneling guide) → ACTIVE (1800s) this once,
 then widen if the next tick finds only owner-blocked/maintenance work.
+
+---
+
+## 2026-06-23 (iter 266) — shipped: adversarial unit coverage for upload filename sanitizers
+
+Docker down this tick (no browser QA / DB integration) → Track-0 coverage. Audited the pure
+helpers for untested Rule-15 surface: `sanitizeFilename` (path-traversal/control-char scrub on the
+echoed upload name) and `sanitizeHeaderFilename` (Content-Disposition quoted-string defense) both
+had ZERO unit tests despite being the file-upload attack surface. Added
+`internal/httpapi/sanitize_filename_test.go` — 28 cases encoding real payloads (posix/windows/mixed
+traversal → base name; NUL/CRLF/DEL/control stripped; bare `..`/`.` → "file"; length cap keeps the
+extension; quote/backslash/CRLF that break the quoted header → `_`), plus invariant assertions (no
+separator/control byte survives; no header-breaking char survives) so a future regression can't
+silently re-open the hole. Legit unicode preserved (no collateral). go build/vet/test green.
+
+**Honest verification (Rule 14):** pure-function tests, fully exercised in-process (28/28 pass) — no
+deploy needed: Go excludes `_test.go` from the build, so the served binary is byte-identical;
+redeploying would be churn (Rule 10/16). Pushed to source control only.
+
+**Coverage note (next-tick target):** the other untested pure helpers found this tick —
+`parseSearchQuery`/`parseSearchDate` (search-operator parsing), `validateRole`, `inviteCode` — are
+the next thin, always-runnable coverage wins while docker stays down. `parseSearchQuery` is the
+highest-value (parses attacker-supplied `from:`/`has:` operators) and is the planned next gap.
+
+**Loop-process note:** "pick the untested pure helper on a security surface" is a reliably
+high-ROI Track-0 move when docker is down — it needs no stack, runs forever, and hardens exactly
+the inputs Rule B calls hostile. Worth making a standing fallback when browser QA can't run.
+
+**Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
