@@ -469,8 +469,19 @@ component north stars. (Spec history: `SPEC.md` "User Settings + UI polish".)
   tooltip, so a long name never overflows the fixed 220px sidebar. Browser QA creates a
   long-named server and asserts the name element clips + stays within the sidebar; AI-vision
   verified (tick-114, closing the tick-113 finding).
-- [ ] **P1 (UI parity design pass, found iter 219 via AI-vision): header action icons are colorful
-  emoji, not monochrome line icons.** The chat-header controls (pin 📌, threads 🧵, notify 🔔, search 🔍,
+- [x] **P1 DONE (iter 273): header/DM action icons are now monochrome line icons.** Shipped the
+  owner-greenlit redesign — a shared `<Icon>` (web/src/components/Icon.tsx, hand-authored inline SVG,
+  no new dependency) replaces every colorful emoji in the chat-header / DM control bar (pin, threads,
+  mute bell/bell-off, search, topic pencil, slowmode clock, read-only lock/unlock, add-member
+  user-plus, leave log-out, rename pencil, voice-join phone [stays green = "join"], voice-presence
+  volume, sidebar mic/headphones) PLUS the read-only + slowmode header badges. Icons stroke with
+  currentColor so they inherit each control's hover/active/danger state (mute+deafen go red); decorative
+  + aria-hidden so the QA accessible-name matchers stayed green (verified: all 5 suites + a new svg-child
+  assertion). tsc/vite/go green, full browser QA green, AI-vision verified the single-row monochrome
+  header; shipped + railway up + rollout-verified (live bundle carries the icon paths). DM-header
+  single-row wrapping (the old iter-188 P2) is resolved by the narrower icon-only buttons — overflow ⋯
+  menu only if a future DM still wraps. (Original finding for history:) header action icons were colorful
+  emoji, not monochrome line icons. The chat-header controls (pin 📌, threads 🧵, notify 🔔, search 🔍,
   plus the server row 🔒 read-only, 🐌 slowmode, 📝 topic, …) render as mismatched colorful emoji, which
   reads less "native chat app" than Discord's clean monochrome line-icon row. A genuine parity gap, but a
   whole-app visual decision (sourcing/creating ~10 consistent SVG line icons + a shared `<Icon>`) that the

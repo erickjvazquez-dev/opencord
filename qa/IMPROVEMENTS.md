@@ -6189,3 +6189,40 @@ replace the Chat.tsx header/DM control glyphs + full browser QA (matchers must s
 verify the single-row monochrome header. Docker is up, so it's fully E2E-verifiable (Rule 14).
 
 **Cadence:** shipped real changes (spec + owner unblock) and a greenlit P1 is now in-flight → ACTIVE (1800s).
+
+---
+
+## 2026-06-24 (iter 273) — shipped: monochrome line-icon header/DM control bar (owner-greenlit redesign)
+
+Implemented Slice 1 of the iter-272 owner-greenlit icon redesign — the flagged iter-219 P1 is now DONE.
+New `web/src/components/Icon.tsx`: a shared `<Icon>` rendering hand-authored inline-SVG line icons (NO
+new dependency, Rule A/16). Replaced every colorful emoji in the chat-header / DM control bar (14 controls
++ the sidebar mic/headphones + the read-only & slowmode header badges) with monochrome icons that stroke
+`currentColor` — so they inherit hover/active/danger state automatically (mute+deafen go red; voice-join
+stays green = "join"). Decorative + `aria-hidden`, so the existing aria-label accessible names are
+unchanged.
+
+**Verification (Rule 14, full):** the iter-272 de-risking held — the browser QA matches these controls by
+accessible name, not emoji text, so ALL matchers stayed green across two QA cycles (header buttons +
+read-only badge text). Added a `browser.mjs` assertion that the search control renders an `<svg.icon>`
+child (regression-guards a slip back to emoji). tsc clean, vite build ok, full QA green (browser=0
+realtime=0 voice=0 search=0 compose=0), AI-vision verified the single-row monochrome header on both the
+global channel and a server channel (read-only + slowmode badges now iconified too). Shipped + `railway
+up` + **rollout-verified** (live bundle `index-Cz8PtLI4.js` carries the search-icon SVG path; health 200).
+
+**Component:** UI → polished (the header now reads as a native Discord-style monochrome icon row instead
+of mismatched colorful emoji; resolves the iter-188 DM-header single-row wrap via narrower icon buttons).
+
+**Loop-process win:** spec-first (iter 272) → clean mechanical implementation (iter 273) made this a
+low-risk one-tick ship despite touching a high-traffic component — because the spec captured the
+accessible-name/blast-radius finding up front, the 14-control swap had zero matcher breakage. The
+"verify how the QA locates a thing BEFORE a mass-rename" step is worth keeping as a pre-flight for any
+future bulk UI swap.
+
+**Next:** Slice 2 (overflow ⋯ menu) is only needed if a DM header still wraps — the line-count QA
+assertion stayed green, so likely unnecessary; confirm opportunistically. Otherwise the loop returns to
+the parity backlog / per-component north stars (audio mesh→SFU path is the furthest-from-northstar
+component, but adopting an SFU needs stack-guardian + owner per Rule 16). Pull the next autonomous-safe
+parity item next tick.
+
+**Cadence:** shipped + deployed a real user-facing feature → ACTIVE (1800s).
