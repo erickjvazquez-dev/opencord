@@ -6114,3 +6114,42 @@ real and valuable but structurally cannot catch UI-render or DB-path regressions
 biggest blind spot; flagged again so it's not normalized.
 
 **Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
+
+---
+
+## 2026-06-24 (iter 271) — BIG: self-healed docker (colima), cleared 7-tick browser-QA debt; + emojiData coverage
+
+Three things this tick:
+
+1. **Shipped `web/src/emojiData.test.ts`** (12 tests) — the LAST untested frontend pure module. Pins
+   lookup (case-insensitive, unknown→undefined), `searchUnicodeEmoji` (substring not prefix, trimmed,
+   cap, empty=grid, stable order), and the map-integrity invariant the file claims (every key is
+   lowercase `[a-z0-9_]` so `:slug:` render + composer autocomplete can reach it; no blank values).
+   Frontend suite 190/190 green. BOTH pure-module veins (Go helpers + frontend modules) now exhausted.
+
+2. **Root-caused & fixed the 7-tick "docker=DOWN" — the loop's biggest process miss.** docker was down
+   only because **colima** (the daemon provider here — NO Docker Desktop on this machine) wasn't
+   running. The gate logged "docker=DOWN" for ticks 264–270 and fell back to coverage WITHOUT ever
+   trying to start the runtime. Fixed for real (not just noted): ran `colima start` (≈30s → docker up)
+   AND patched the loop's own health-gate rule (`.claude/commands/self-improve-opencord.md`) to
+   `colima start` once + re-check before declaring browser QA blocked. The loop is now **self-healing**
+   on this failure mode. THIS is the standing-rule lesson: a recurring "X is unavailable" log that the
+   loop routes around for many ticks is itself a P1 — challenge the cause, don't normalize the
+   workaround.
+
+3. **Cleared the debt: full browser QA ran, all 5 suites GREEN** (browser/realtime/voice/search/
+   compose = 0). AI-vision pass over the screenshots: auth (polished, branded, focus ring), chat
+   layout (faithful Discord sidebar/composer/user-footer), rich markdown render, and — Rule 15 win —
+   `<script>alert(1)</script>` and `[evil](javascript:alert(1))` both render as LITERAL text
+   (React-escaped, not executed/linked); reaction chips, hover toolbar, mention chips, jumbo emoji,
+   voice mute/deafen strike state all render clean, nothing clipped. **No new P0/P1.** Only standing
+   item: the known owner-gated colorful header emoji icons (iter 219) — unchanged, not re-opened.
+
+**Component:** infra (restored the QA runtime + made the loop self-healing) + UI (emoji-data contract
+pinned; full UI re-verified after 7 dark ticks).
+
+**Next tick:** docker is UP and left running — resume the NORMAL rhythm: Track-1/2 feature work from
+GOAL.md "## Now/Next" (now E2E-verifiable again per Rule 14), with browser QA every 3rd tick. The
+coverage-sweep era is complete; pivot back to advancing Discord parity.
+
+**Cadence:** shipped real changes (coverage + loop self-heal + cleared QA debt) → ACTIVE (1800s).
