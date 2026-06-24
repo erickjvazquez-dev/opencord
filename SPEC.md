@@ -3036,3 +3036,69 @@ brings the relay client up off-by-default-elsewhere; `stack-guardian` APPROVE on
 **Status:** design-only; **blocked on owner-decision #1**. Slice 0 (docs + tunnel-aware URLs) is
 autonomous-safe and is the recommended next implementation step if the owner wants tunneling progress
 before deciding the relay-infra question.
+
+---
+
+# Header / DM control-bar icon redesign (owner-greenlit iter 272)
+
+**Owner decision (2026-06-24):** greenlit the iter-219 P1 — replace the colorful **emoji** header/DM
+controls with a consistent **monochrome line-icon** set + a shared `<Icon>` component, matching
+Discord's clean icon row. Also addresses the DM-header single-row wrapping (P2, iter 188): icon-only
+buttons are narrow enough to keep the row single-line; an overflow `⋯` menu is a follow-up only if a
+DM still wraps after iconification.
+
+## Why this is LOWER blast-radius than the iter-190 note feared
+The iter-190 scope note worried the browser QA matches header buttons "by TEXT" across ~10 call
+sites. **Verified iter 272 it does NOT:** every header control already carries an `aria-label`
+(+`title`); the QA locates them by **accessible name** (`getByRole('button',{name:'Threads'})`,
+`getByText('read-only')`, etc.) — there are **zero** `getByText(<emoji>)` matchers on the header
+glyphs. So swapping each emoji *child* for an `<Icon>` while keeping the `aria-label`/`title`
+**keeps every existing matcher green**. The emoji is decorative content, not the accessible name.
+
+## Scope — the controls (all in `web/src/components/Chat.tsx`, `button.link.icon-btn`)
+| control | current glyph | aria-label (UNCHANGED) | icon name |
+|---|---|---|---|
+| pinned messages | 📌 | "Pinned messages" | `pin` |
+| threads | 🧵 | "Threads" | `thread` |
+| channel mute / unmute | 🔔/🔕 | "Mute/Unmute this channel" | `bell` / `bell-off` |
+| search messages | 🔍 | "Search messages" | `search` |
+| edit channel topic | 📝 | "Edit channel topic" | `pencil` |
+| set slow mode | 🐌 | "Set slow mode" | `clock` |
+| read-only badge | 🔒 | "read-only — only admins can post" | `lock` |
+| add to group DM | ➕ | "Add someone to this group DM" | `person-plus` |
+| leave group DM | 🚪 | "Leave this group DM" | `door-exit` |
+| voice mute / deafen (footer + bar) | mic/headphone | "toggle mute/deafen" | `mic`/`mic-off`, `headphones`/`headphones-off` |
+| camera on/off | 📷 | (existing) | `camera`/`camera-off` |
+
+(Final list reconciled against the live file at implement time; any control found with an emoji child
+and an aria-label is in scope. The composer 📎/🙂 and reaction pickers are OUT of scope this pass —
+header/DM control bar only, per the owner's framing.)
+
+## Design — shared `<Icon>` component (`web/src/components/Icon.tsx`)
+- `<Icon name="pin" />` renders an inline `<svg>` with `fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`, `width/height: 1em`,
+  `aria-hidden="true"` (the *button* owns the accessible name, the icon is decorative — never
+  double-announce). Icons are simple geometric line paths (Feather/Lucide-style, MIT — but
+  hand-authored inline so there's **no new dependency**, Rule A / Rule 16: nothing to install).
+- A single `Record<IconName, JSX.Element>` map; `name` is a TS union so a typo fails `tsc`.
+- Sizing/color via CSS `currentColor` so each icon inherits the button's hover/active/accent state
+  automatically — no per-icon color (Rule 3 analogue: adapts to theme).
+
+## Slices
+- **Slice 1:** add `Icon.tsx` with the full icon set; replace the header/DM control emoji children in
+  `Chat.tsx` with `<Icon>`; minimal CSS (`.icon-btn svg{display:block}` vertical-centering). tsc +
+  vitest + go build/vet/test; **full browser QA (must stay green — proves the aria-label matchers
+  survive)** + **AI-vision verify the monochrome row looks native/Discord-like and single-row**.
+- **Slice 2 (only if a DM header still wraps):** an overflow `⋯` menu collapsing the less-common DM
+  controls. Skipped if Slice 1's narrower buttons already fit one row (verify via the existing
+  header-line-count QA assertion).
+
+## Verify (Rule 14)
+Browser QA green end-to-end (the matchers are the regression guard for "didn't break the controls");
+AI-vision confirms emoji→line-icon on pin/thread/search/topic/slowmode/read-only/leave/add and a
+single-row header; a new `qa/browser.mjs` assertion checks a header control renders an `svg` child
+(not an emoji text node) so a regression back to emoji is caught. Ship + `railway up` +
+rollout-verify the live bundle carries `Icon`.
+
+**Status:** spec-complete, owner-greenlit; **Slice 1 is the next implementation step** (autonomous —
+no owner gate remaining, no new dependency).

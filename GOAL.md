@@ -474,8 +474,12 @@ component north stars. (Spec history: `SPEC.md` "User Settings + UI polish".)
   plus the server row 🔒 read-only, 🐌 slowmode, 📝 topic, …) render as mismatched colorful emoji, which
   reads less "native chat app" than Discord's clean monochrome line-icon row. A genuine parity gap, but a
   whole-app visual decision (sourcing/creating ~10 consistent SVG line icons + a shared `<Icon>`) that the
-  owner should steer — NOT an autonomous mid-loop redesign. Deferred until owner-confirmed; if greenlit,
-  do it as one focused design pass with a shared icon set so the look stays consistent.
+  owner should steer — NOT an autonomous mid-loop redesign. **OWNER-GREENLIT iter 272** (2026-06-24) +
+  **spec-complete** (SPEC.md "Header / DM control-bar icon redesign"). De-risked: verified the browser QA
+  matches these controls by `aria-label`/accessible-name, NOT by the emoji text, so swapping each emoji
+  child for a shared monochrome `<Icon>` (hand-authored inline SVG, no new dependency) keeps every matcher
+  green. **Slice 1 (Icon.tsx + replace the Chat.tsx control glyphs + browser-QA/vision verify) is the next
+  implementation step — no owner gate remaining.**
 
 ## Later
 
