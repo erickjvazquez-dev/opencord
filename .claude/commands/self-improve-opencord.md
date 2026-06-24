@@ -31,6 +31,13 @@ from ContextForge's, which stays off-limits.
    - If `CCF_LIVE_URL` is non-empty, curl `"${CCF_LIVE_URL}${CCF_HEALTH_PATH}"`
      (blank here → skip live health).
    - Any red = a P0. Fix it THIS tick before doing anything else.
+   - **Self-heal docker before declaring it "down" (iter 271).** This machine has
+     NO Docker Desktop — the daemon is provided by **colima**. If `docker info`
+     fails, run **`colima start`** ONCE (the runtime is installed; it takes ~30–90s)
+     and re-check, BEFORE concluding browser QA / DB integration is blocked. Leave
+     colima running for subsequent ticks. Only after a failed `colima start` is
+     docker genuinely "down" for the tick — then fall back to zero-stack Track-0
+     (the pure-module coverage veins). Don't let "docker=DOWN" stand unchallenged.
 
 2. **Track 0 — QA (do this MOST): coverage + real-UI QA + AI manual test.** The
    loop must exercise the product the way a *user* does, not just `go test`.
