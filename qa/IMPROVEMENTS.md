@@ -6015,3 +6015,36 @@ the rule edit once the helper backlog (validateRole, inviteCode) is exhausted so
 evidence.
 
 **Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
+
+---
+
+## 2026-06-23 (iter 268) — shipped: validateRole name/color contract coverage
+
+Docker down (4th tick) → continued the hostile-input pure-helper sweep. `validateRole`
+(internal/chat/chat.go) sanitizes the attacker-controlled, member-rendered role name + hex color and
+had no unit tests. Added `internal/chat/validate_role_test.go` — 25 cases pinning: name trimmed +
+bidi-stripped + bounded by RUNES (32 multibyte runes pass, 33 reject), a name that is ONLY
+Trojan-Source controls collapses to empty and is rejected (never stored blank/invisible), color must
+be anchored `#RGB`/`#RRGGBB` hex (trailing/leading space, wrong length, non-hex, `rgb(...)`,
+injection suffix all rejected), valid unicode preserved. go build/vet/test green; test-only → no
+deploy (binary byte-identical, Rule 10/16). Pushed to source control.
+
+**Component advanced:** security → hostile-input-proof (role-input contract now regression-pinned).
+
+**Helper-sweep backlog status:** of the untested hostile-input pure helpers found iter 266,
+`sanitizeFilename`/`sanitizeHeaderFilename` (266), `parseSearchQuery`/`parseSearchDate` (267) and now
+`validateRole` (268) are DONE. **Remaining: `inviteCode`** (entropy/charset/length of minted invite
+codes — a weak generator = guessable invites). That's next tick's target and the LAST item in this
+backlog, after which the docker-down Track-0 sweep should rotate to a different surface (WS frame
+edge cases via the in-process hub test, or HTTP handler-level table tests that stub the store).
+
+**Loop-process — docker-down debt is now structural (4 ticks):** browser QA + DB integration have
+been unrunnable for 4 consecutive ticks; the coverage sweep is good Track-0 work but it CANNOT catch
+UI regressions or DB-path bugs, and the backlog of always-runnable security helpers is nearly
+exhausted. Action for the loop: when docker has been down ≥3 ticks AND the pure-helper backlog is
+empty, the highest-value move flips to **building store-stubbed handler tests** (exercise the HTTP
+layer's auth/validation branches without a live DB) rather than mining ever-thinner pure helpers.
+Logging this as the rule refinement; will draft the store-stub harness next tick alongside
+`inviteCode`.
+
+**Cadence:** shipped a real regression-hardening change → ACTIVE (1800s).
