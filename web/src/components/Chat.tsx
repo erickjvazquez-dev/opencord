@@ -86,6 +86,7 @@ import { dayLabel, shortTime, messageTimestamp } from '../dates'
 import { AttachmentList } from './Attachment'
 import { Avatar } from './Avatar'
 import { EmojiImg } from './EmojiImg'
+import { Icon } from './Icon'
 import { Settings } from './Settings'
 import { ProfileCard } from './ProfileCard'
 import { NewGroupModal } from './NewGroupModal'
@@ -2780,7 +2781,7 @@ export function Chat({
               }
               onClick={toggleMute}
             >
-              🎤
+              <Icon name="mic" />
             </button>
             <button
               type="button"
@@ -2791,7 +2792,7 @@ export function Chat({
               title={deafened ? 'Undeafen' : 'Deafen — silence everyone and mute your mic'}
               onClick={toggleDeafen}
             >
-              🎧
+              <Icon name="headphones" />
             </button>
           </div>
           <div className="sidebar-user-foot">
@@ -2831,7 +2832,7 @@ export function Chat({
             </span>
             {activeIsReadOnly && (
               <span className="readonly-badge" title="read-only — only admins can post">
-                🔒 read-only
+                <Icon name="lock" /> read-only
               </span>
             )}
             {activeServerChannel?.topic && (
@@ -2844,7 +2845,7 @@ export function Chat({
                 className="slowmode-badge"
                 title={`slowmode — ${activeServerChannel?.slowmodeSeconds}s between messages`}
               >
-                🐌 {activeServerChannel?.slowmodeSeconds}s
+                <Icon name="clock" /> {activeServerChannel?.slowmodeSeconds}s
               </span>
             )}
           </div>
@@ -2857,7 +2858,7 @@ export function Chat({
               aria-label={activeIsReadOnly ? 'Allow everyone to post' : 'Make channel read-only'}
               title={activeIsReadOnly ? 'Allow everyone to post' : 'Make channel read-only'}
             >
-              {activeIsReadOnly ? '🔓' : '🔒'}
+              <Icon name={activeIsReadOnly ? 'unlock' : 'lock'} />
             </button>
           )}
           {activeServerChannel && canModerate && !activeChannelIsVoice && (
@@ -2867,7 +2868,7 @@ export function Chat({
               aria-label="Set slow mode"
               title="Set slow mode"
             >
-              🐌
+              <Icon name="clock" />
             </button>
           )}
           {activeServerChannel && canModerate && !activeChannelIsVoice && (
@@ -2877,7 +2878,7 @@ export function Chat({
               aria-label="Edit channel topic"
               title="Edit channel topic"
             >
-              📝
+              <Icon name="pencil" />
             </button>
           )}
           {channelId != null && !activeChannelIsVoice && (
@@ -2887,7 +2888,7 @@ export function Chat({
               aria-label="Pinned messages"
               title="Pinned messages"
             >
-              📌
+              <Icon name="pin" />
             </button>
           )}
           {channelId != null && !activeDM && !inThread && !activeChannelIsVoice && (
@@ -2897,7 +2898,7 @@ export function Chat({
               aria-label="Threads"
               title="Threads"
             >
-              🧵
+              <Icon name="thread" />
             </button>
           )}
           {channelId != null && (
@@ -2912,7 +2913,7 @@ export function Chat({
               }
               data-muted={mutedChannels.has(channelId)}
             >
-              {mutedChannels.has(channelId) ? '🔕' : '🔔'}
+              <Icon name={mutedChannels.has(channelId) ? 'bell-off' : 'bell'} />
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
@@ -2922,7 +2923,7 @@ export function Chat({
               aria-label="Add someone to this group DM"
               title="Add someone to this group DM"
             >
-              ➕
+              <Icon name="user-plus" />
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
@@ -2932,7 +2933,7 @@ export function Chat({
               aria-label="Name this group DM"
               title="Name this group DM"
             >
-              ✏️
+              <Icon name="pencil" />
             </button>
           )}
           {activeDM && dmIsGroup(activeDM) && (
@@ -2942,7 +2943,7 @@ export function Chat({
               aria-label="Leave this group DM"
               title="Leave this group DM"
             >
-              🚪
+              <Icon name="log-out" />
             </button>
           )}
           {/* In a voice channel the main view carries its own Join/roster, so the header's
@@ -2955,7 +2956,7 @@ export function Chat({
               aria-label="Start a voice call in this channel"
               title={connected ? 'Start a voice call in this channel' : 'Connecting…'}
             >
-              🎙
+              <Icon name="phone" />
             </button>
           )}
           {channelId != null && voicePresence.length > 0 && !activeChannelIsVoice && (
@@ -2966,7 +2967,7 @@ export function Chat({
               title={inCall ? `${voicePresence.length} in this voice call` : 'Join this voice call'}
               data-count={voicePresence.length}
             >
-              🔊 {voicePresence.length}
+              <Icon name="volume" /> {voicePresence.length}
             </button>
           )}
           {!activeChannelIsVoice &&
@@ -2995,7 +2996,7 @@ export function Chat({
                 aria-label="Search messages"
                 title="Search messages"
               >
-                🔍
+                <Icon name="search" />
               </button>
             ))}
         </header>

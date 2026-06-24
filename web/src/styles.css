@@ -695,6 +695,23 @@ button:disabled {
   opacity: 0.5;
   cursor: default;
 }
+/* Monochrome line icons in the header / DM control bar (Icon.tsx, iter 273). The svg
+   is decorative and strokes with currentColor, so it inherits each button's hover /
+   active / danger state with no per-icon color. Sized a touch above the 16px button
+   font so the line icons read clearly; nudged onto the text baseline (the voice-
+   presence button carries a trailing participant count beside its icon). */
+.icon {
+  vertical-align: -0.125em;
+  flex: none;
+}
+.chat-header .icon-btn .icon {
+  width: 18px;
+  height: 18px;
+}
+.sidebar-voice-btn .icon {
+  width: 18px;
+  height: 18px;
+}
 
 /* Discord-style user panel pinned to the bottom of the sidebar (iter 206): identity (self-chip)
    on top, then a presence + log-out foot row. `margin-top: auto` pins it below the scrolling

@@ -1189,6 +1189,16 @@ async function main() {
     if (await toggle.count()) await toggle.click()
     await searchBox.waitFor({ timeout: 4000 })
   }
+  // iter 273: header/DM controls are monochrome <Icon> SVGs, not emoji. Assert the
+  // search toggle renders an <svg class="icon"> child (checked while still collapsed)
+  // so a regression back to an emoji glyph is caught by the gate.
+  const searchToggleBtn = page.locator('.chat-header .search-toggle')
+  if (await searchToggleBtn.count()) {
+    check(
+      (await searchToggleBtn.locator('svg.icon').count()) > 0,
+      'header search control renders a monochrome <Icon> svg (not an emoji)',
+    )
+  }
   await openSearch()
   await searchBox.fill('server')
   await searchBox.press('Enter')
