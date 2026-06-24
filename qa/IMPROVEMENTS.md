@@ -6153,3 +6153,39 @@ GOAL.md "## Now/Next" (now E2E-verifiable again per Rule 14), with browser QA ev
 coverage-sweep era is complete; pivot back to advancing Discord parity.
 
 **Cadence:** shipped real changes (coverage + loop self-heal + cleared QA debt) → ACTIVE (1800s).
+
+---
+
+## 2026-06-24 (iter 272) — full integration suite restored; owner unblocked the parity frontier; icon-redesign spec'd
+
+**Health:** docker stayed up from last tick's colima self-heal → the FULL integration suite (chat 20s,
+db, httpapi, ws) ran GREEN for the first time in 7 ticks (it had been skipping unit-only). The
+self-heal rule (iter 271) is paying off.
+
+**Strategic:** confirmed the autonomous Discord-parity frontier is owner-gated — the remaining
+unchecked GOAL items are all either owner-gated (header icons, DM-header single-row) or large
+(federation, plugin API, email accounts, per-server nicknames); security surfaces (invites + expiry,
+WS guards, bidi, role/filename/search/invite-code input) are all already well-tested. Rather than
+manufacture churn or half-start a big rock, I ASKED the owner which to unblock (a genuine fork only
+they can decide, and they were present). **Owner greenlit the header/DM icon redesign.**
+
+**Shipped:** spec'd the redesign (SPEC.md) + flipped the GOAL P1 from owner-deferred to greenlit. The
+high-value finding that de-risks it: the browser QA matches header controls by **aria-label /
+accessible name, not emoji text** (zero `getByText(<emoji>)` matchers), so swapping each emoji child
+for an inline-SVG `<Icon>` keeps every matcher green — the iter-190 "huge blast radius" fear was
+unfounded. Inline hand-authored SVG = no new dependency (Rule A/16).
+
+**Component:** infra (integration suite restored) + UI (next: the icon redesign toward Discord polish).
+
+**Loop-process note (worth promoting):** when the autonomous frontier is genuinely owner-gated AND
+the owner is in-session, a single well-formed `AskUserQuestion` to pick the next big rock is higher
+value than either a no-op tick or over-reaching — it converts "loop idling on gated work" into
+"loop directed for many ticks." Pair it with a ready spec so implementation starts immediately next
+tick. (Contrast: when the owner is NOT present, fall back to the iter-264 pattern — log the decision
+points in GOAL/SPEC and ship an autonomous-safe slice.)
+
+**Next tick:** implement Slice 1 — `web/src/components/Icon.tsx` (the monochrome line-icon set) +
+replace the Chat.tsx header/DM control glyphs + full browser QA (matchers must stay green) + AI-vision
+verify the single-row monochrome header. Docker is up, so it's fully E2E-verifiable (Rule 14).
+
+**Cadence:** shipped real changes (spec + owner unblock) and a greenlit P1 is now in-flight → ACTIVE (1800s).
