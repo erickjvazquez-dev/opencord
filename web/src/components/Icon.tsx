@@ -25,6 +25,8 @@ export type IconName =
   | 'headphones'
   | 'phone'
   | 'volume'
+  | 'paperclip'
+  | 'smile'
 
 // viewBox 0 0 24 24, stroke geometry only (fill none). Kept as raw JSX children so
 // a typo in `name` fails tsc (IconName union) rather than rendering blank.
@@ -116,6 +118,17 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
       <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+    </>
+  ),
+  paperclip: (
+    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  ),
+  smile: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <line x1="9" y1="9" x2="9.01" y2="9" />
+      <line x1="15" y1="9" x2="15.01" y2="9" />
     </>
   ),
 }

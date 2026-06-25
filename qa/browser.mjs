@@ -351,6 +351,11 @@ async function main() {
     await emojiBtn.isVisible(),
     'the composer 🙂 emoji button is present in #general (a channel with NO custom emoji)',
   )
+  // iter 274: the composer chrome (attach + emoji) is monochrome <Icon> SVGs, not emoji.
+  check(
+    (await emojiBtn.locator('svg.icon').count()) > 0,
+    'composer emoji button renders a monochrome <Icon> svg (not an emoji)',
+  )
   await emojiBtn.click()
   const composerSearch = page.locator('.emoji-picker-popover .emoji-picker-search')
   await composerSearch.waitFor({ timeout: 4000 })

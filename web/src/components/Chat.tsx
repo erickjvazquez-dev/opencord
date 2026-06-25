@@ -4226,7 +4226,7 @@ export function Chat({
             disabled={!connected || !canPost || uploading}
             onClick={() => fileInputRef.current?.click()}
           >
-            📎
+            <Icon name="paperclip" />
           </button>
           {/* Emoji picker — insert standard unicode (`:joy:`→😂) + custom server `:name:` at
               the caret. Always available (works in #general / DMs / custom-less servers too).
@@ -4244,7 +4244,7 @@ export function Chat({
                 setEmojiPickerOpen((o) => !o)
               }}
             >
-              🙂
+              <Icon name="smile" />
             </button>
             {emojiPickerOpen &&
               (() => {

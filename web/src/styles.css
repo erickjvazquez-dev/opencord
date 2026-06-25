@@ -1655,6 +1655,14 @@ button:disabled {
   background: var(--bg-input);
   color: var(--text);
 }
+/* Composer chrome icons (attach / emoji) — monochrome <Icon> (iter 274), muted by
+   default and brightening on hover via currentColor, matching the header treatment. */
+.composer .attach-btn .icon,
+.composer .emoji-picker-btn .icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+}
 /* Popover floats above the button; a scrolling grid of emoji images. */
 .emoji-picker-popover {
   position: absolute;
