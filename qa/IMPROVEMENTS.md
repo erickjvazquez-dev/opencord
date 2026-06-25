@@ -6226,3 +6226,38 @@ component, but adopting an SFU needs stack-guardian + owner per Rule 16). Pull t
 parity item next tick.
 
 **Cadence:** shipped + deployed a real user-facing feature → ACTIVE (1800s).
+
+---
+
+## 2026-06-24 (iter 274) — shipped: monochrome composer chrome icons (parity follow-on to iter 273)
+
+Extended the iter-273 `<Icon>` set to the composer — the last colorful-emoji chrome on the chat
+surface. `📎 attach → paperclip`, `🙂 emoji → smile` (added both to Icon.tsx). Now the entire chat
+surface chrome (header control bar + composer) is consistent monochrome line icons that inherit the
+buttons' muted→bright `currentColor` on hover, while user-content emoji stay colorful. Both buttons
+keep their aria-labels, so the QA matchers (the file input + `getByRole('button',{name:'insert
+emoji'})`) stayed green; added a `browser.mjs` svg-child assertion on the emoji button. tsc/vite green,
+full QA green (browser=0 realtime=0 voice=0 search=0 compose=0), AI-vision verified the composer
+(paperclip + smile, picker still works), shipped + `railway up` + rollout-verified (live bundle
+`index-HO7HWMP2.js` carries the paperclip SVG path; health 200).
+
+**Component:** UI → polished (chat-surface chrome is now uniformly Discord-style monochrome; the
+emoji-vs-icon inconsistency between header and composer is gone).
+
+**Loop-process note:** the `<Icon>` component from iter 273 paid compounding dividends — this follow-on
+was ~3 small edits + 2 new icon paths, fully verified, because the shared component + the
+"controls are matched by accessible-name not glyph" finding were already established. A shared
+primitive plus a documented blast-radius fact turns each subsequent UI-chrome swap into a near-trivial,
+low-risk tick. Worth remembering: when a redesign introduces a reusable primitive, sweep the remaining
+instances in follow-on ticks while the pattern is fresh, rather than leaving a half-converted surface.
+
+**Remaining emoji-as-chrome (lower priority, noted for a future opportunistic sweep):** the sidebar
+self-chip gear (⚙), the menu-toggle (☰), the thread-back arrow (←), and the sidebar voice-channel
+glyph. These are peripheral nav affordances, not the high-traffic chat surface, so they're a "nice to
+unify eventually" rather than a parity gap. Not doing them speculatively.
+
+**Next:** chat-surface chrome is done. Return to the parity backlog / per-component north stars next
+tick (audio mesh→SFU is furthest from its north star but Rule-16-gated on stack-guardian + owner). Pull
+the next autonomous-safe item.
+
+**Cadence:** shipped + deployed a real user-facing UI change → ACTIVE (1800s).
