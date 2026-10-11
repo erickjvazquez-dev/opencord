@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "selfimprove-kit": {
+      "source": {
+        "source": "github",
+        "repo": "erickjvazquez-dev/claude-code-framework"
+      },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "selfimprove-kit@selfimprove-kit": true
+  }
+}
